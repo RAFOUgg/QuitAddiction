@@ -1,0 +1,12 @@
+# Librairie principale pour Discord
+discord.py
+
+# Pour charger les variables depuis le fichier .env
+python-dotenv
+
+# Pour la base de données (ORM) et les tâches en arrière-plan
+SQLAlchemy
+apscheduler
+
+# Pour les futures requêtes API (GitHub)
+aiohttp

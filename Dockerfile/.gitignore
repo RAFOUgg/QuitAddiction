@@ -1,0 +1,23 @@
+# Fichiers de configuration sensibles
+config.py
+.env
+
+# Fichiers de base de données locaux
+*.db
+*.sqlite3
+
+# Dépendances et caches Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.eggs/
+
+# Fichiers de l'IDE
+.idea/
+.vscode/
