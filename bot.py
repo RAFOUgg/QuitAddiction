@@ -6,7 +6,7 @@ import logging
 
 # Importe notre configuration
 from config import BOT_TOKEN, GUILD_ID
-from core.database import init_db # On importera la fonction pour initialiser la DB
+from db.database import init_db # On importera la fonction pour initialiser la DB
 
 # Configure le logging pour avoir des infos claires dans la console
 logging.basicConfig(level=logging.INFO)
@@ -43,13 +43,13 @@ class QuitAddictionBot(commands.Bot):
 
         # Charge tous les fichiers .py dans le dossier cogs/
         for filename in os.listdir(f'./{COGS_DIR}'):
-            if filename.endswith('.py'):
+            if filename.endswith('.py') and filename != '__init__.py': # Ignorer __init__.py
                 try:
                     await self.load_extension(f'{COGS_DIR}.{filename[:-3]}')
                     logging.info(f'✅ Cog chargé : {filename}')
                 except Exception as e:
                     logging.error(f'❌ Erreur de chargement du cog {filename}: {type(e).__name__} - {e}')
-
+        
         # Synchronise les commandes slash avec le serveur de test (plus rapide)
         # ou avec tous les serveurs si aucun serveur de test n'est défini
         if self.test_guild:

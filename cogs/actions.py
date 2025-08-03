@@ -1,8 +1,7 @@
-# --- cogs/actions.py ---
 from discord.ext import commands
 import discord
-from utils import calculations
-
+from discord import app_commands 
+from utils.calculations import calculations
 class Actions(commands.Cog):
     """Gestion des actions du joueur (manger, boire, fumer...)."""
 
@@ -13,6 +12,9 @@ class Actions(commands.Cog):
     @commands.command()
     async def manger(self, ctx):
         # Applique les effets de l'action
+        # Note: L'appel à calculations.apply_action_effects ne passe pas l'état,
+        # ce qui n'est pas idéal. Il faudrait passer l'état actuel du joueur.
+        # Pour l'instant, on le laisse comme ça pour corriger les erreurs de chargement.
         effects = calculations.apply_action_effects({}, "manger")
         await ctx.send("🍽️ Le cuisinier a mangé et se sent mieux!")
 

@@ -9,6 +9,9 @@ class ServerState(Base):
     __tablename__ = "server_state"
     id = Column(Integer, primary_key=True)
     guild_id = Column(String, unique=True)
+    admin_role_id = Column(String, nullable=True) # Ajouter cette ligne
+    game_channel_id = Column(String, nullable=True) # Ajouter cette ligne
+    game_started = Column(Boolean, default=False) # Ajouter cette ligne
     phys = Column(Float, default=100)
     ment = Column(Float, default=100)
     happy = Column(Float, default=80)

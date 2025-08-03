@@ -2,7 +2,7 @@
 # Contient la logique des effets différés et des interactions entre variables
 
 def apply_action_effects(state, action_type):
-    """Applique les effets immédiats d'une action sur l'état du cuisinier."""
+    """Applique les effets immédiats d'action sur l'état du cuisinier."""
     effects = {
         "manger": {"FOOD": +50, "HAPPY": +10, "STRESS": -5},
         "boire": {"WATER": +50, "PHYS": +5, "BLADDER": +20},

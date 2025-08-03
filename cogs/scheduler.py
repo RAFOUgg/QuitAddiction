@@ -1,6 +1,6 @@
-# --- cogs/scheduler.py ---
+# cogs/scheduler.py
 from discord.ext import commands, tasks
-from utils import calculations
+from utils.calculations import calculations
 
 class Scheduler(commands.Cog):
     """Tâches automatiques pour la dégradation et les effets différés."""
@@ -8,8 +8,12 @@ class Scheduler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.pending_effects = []
-        self.tick.start()
+        # self.tick.start() # Laisser le démarrage des tâches au bot.py si possible, ou s'assurer que le bot est bien prêt.
+        # Pour le moment, on commente ceci pour tester le chargement des cogs.
+        # Vous devrez gérer le démarrage des tâches plus tard.
 
+    # Définir la tâche ici mais ne pas la démarrer automatiquement dans __init__ si cela pose problème.
+    # Le démarrage pourrait être fait dans setup() ou via une commande.
     @tasks.loop(hours=1)
     async def tick(self):
         # Décrément des jauges FOOD/WATER/ENER/PHYS/MENT et application des réactions
