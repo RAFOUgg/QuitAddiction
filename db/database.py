@@ -1,32 +1,39 @@
-# db/database.py
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, MetaData, Table
+from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
-# --- Configuration de la base de données ---
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bot.db") # Par défaut, utilise un fichier SQLite
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Construct the database URL
+# It's good practice to define the DB file path relative to your project root
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, 'quit_addiction.db')
+DATABASE_URL = f"sqlite:///{DB_FILE}"
 
+# Create the SQLAlchemy engine
+engine = create_engine(DATABASE_URL)
+
+# Create a base class for declarative models
 Base = declarative_base()
 
-# --- Fonctions pour la base de données ---
+# Create a configured "Session" class
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Function to create all tables
 def init_db():
-    """
-    Cette fonction est responsable de la création des tables de la base de données
-    si elles n'existent pas. Elle est appelée une seule fois au démarrage du bot.
-    """
-    # Ici, vous devrez importer tous vos modèles SQLAlchemy
-    # par exemple : from .models import ServerState, PlayerProfile, ActionLog
-    # L'importation doit être faite pour que Base.metadata.create_all fonctionne.
-    # Si vos modèles sont dans db/models.py, vous pouvez les importer comme ceci :
-    from . import models
+    try:
+        # Import your models here so they are registered with Base
+        # For example:
+        from db.models import ServerState, PlayerProfile, ActionLog # Ensure all your models are imported
 
-    # Crée toutes les tables définies dans vos modèles SQLAlchemy
-    Base.metadata.create_all(bind=engine)
-    print("Tables de la base de données créées (ou déjà existantes).")
+        # This command will create tables for all models that inherit from Base
+        Base.metadata.create_all(bind=engine)
+        print("Tables de la base de données créées (ou déjà existantes).")
+    except Exception as e:
+        print(f"Erreur lors de l'initialisation de la base de données : {e}")
 
-# Si vous avez d'autres fonctions utilitaires pour la DB, elles iraient ici.
+# Helper function to get a database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

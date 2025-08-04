@@ -1,6 +1,6 @@
 # cogs/scheduler.py
 from discord.ext import commands, tasks
-from utils.calculations import calculations
+from utils.calculations import apply_delayed_effects, chain_reactions
 
 class Scheduler(commands.Cog):
     """Tâches automatiques pour la dégradation et les effets différés."""
@@ -33,7 +33,7 @@ class Scheduler(commands.Cog):
             "TRIP": 0,
             "TOX": 0
         }
-        calculations.chain_reactions(state)
+        chain_reactions(state)
 
 async def setup(bot):
     await bot.add_cog(Scheduler(bot))
