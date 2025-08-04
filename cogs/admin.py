@@ -198,25 +198,30 @@ class AdminCog(commands.Cog):
 
     def generate_game_settings_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        # Utilisation de TextInput pour permettre la modification des valeurs
-        view.add_item(self.GameSettingButton("⏰ Intervalle Tick", guild_id, "game_tick_interval_minutes", "number"))
-        view.add_item(self.GameSettingButton("💧 Taux Faim", guild_id, "degradation_rate_hunger", "number"))
-        view.add_item(self.GameSettingButton("🥤 Taux Soif", guild_id, "degradation_rate_thirst", "number"))
-        view.add_item(self.GameSettingButton("💨 Taux Vessie", guild_id, "degradation_rate_bladder", "number"))
-        view.add_item(self.GameSettingButton("⚡ Taux Énergie", guild_id, "degradation_rate_energy", "number"))
-        view.add_item(self.GameSettingButton("😥 Taux Stress", guild_id, "degradation_rate_stress", "number"))
-        view.add_item(self.GameSettingButton("😴 Taux Ennui", guild_id, "degradation_rate_boredom", "number"))
         
-        view.add_item(self.BackButton("⬅ Retour au Menu Principal", guild_id, discord.ButtonStyle.secondary))
+        # Premier ligne de paramètres
+        view.add_item(self.GameSettingButton("⏰ Intervalle Tick", guild_id, "game_tick_interval_minutes", "number", row=0))
+        view.add_item(self.GameSettingButton("💧 Taux Faim", guild_id, "degradation_rate_hunger", "number", row=0))
+        view.add_item(self.GameSettingButton("🥤 Taux Soif", guild_id, "degradation_rate_thirst", "number", row=0))
+        view.add_item(self.GameSettingButton("💨 Taux Vessie", guild_id, "degradation_rate_bladder", "number", row=0))
+        view.add_item(self.GameSettingButton("⚡ Taux Énergie", guild_id, "degradation_rate_energy", "number", row=0)) # 5ème item sur row 0
+
+        # Deuxième ligne de paramètres
+        view.add_item(self.GameSettingButton("😥 Taux Stress", guild_id, "degradation_rate_stress", "number", row=1))
+        view.add_item(self.GameSettingButton("😴 Taux Ennui", guild_id, "degradation_rate_boredom", "number", row=1)) # Et donc c'est le 2ème item sur row 1
+
+        # Ligne pour le bouton retour (mettre sur une nouvelle ligne)
+        view.add_item(self.BackButton("⬅ Retour au Menu Principal", guild_id, discord.ButtonStyle.secondary, row=2))
+        
         return view
 
     # --- Bouton pour lancer le modal de modification ---
     class GameSettingButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, setting_key: str, input_type: str, style: discord.ButtonStyle = discord.ButtonStyle.grey, row: int = 0):
-            super().__init__(label=label, style=style, row=row)
+        def __init__(self, label: str, guild_id: str, setting_key: str, input_type: str, style: discord.ButtonStyle = discord.ButtonStyle.grey, row: int = 0): # Added row param
+            super().__init__(label=label, style=style, row=row) # Use the passed row
             self.guild_id = guild_id
             self.setting_key = setting_key
-            self.input_type = input_type # 'number', 'text', etc.
+            self.input_type = input_type
 
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()

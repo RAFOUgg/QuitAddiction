@@ -1,57 +1,33 @@
-# --- db/models.py ---
-import sqlalchemy # Imports sqlalchemy comme ceci si Base vient d'un autre fichier
-import datetime
-# --- Astuce pour l'IDE : Permet l'autocomplétion sans créer de cycle d'import runtime --
 try:
-    # Ceci EST L'IMPORT CLÉ QUI EST SUSPECT. Assurez-vous qu'il fonctionne.
-    from db.database import Base
+    from db.database import Base 
 except ImportError:
-    # Ce bloc est pour les IDEs seulement, le code réel doit s'appuyer sur l'import qui est juste au dessus.
-    print("AVERTISSEMENT: Le bloc try-except dans models.py est actif, potentiellement à cause d'un problème d'importation avec Base.")
-    class MockBase: # Classe mock pour l'autocomplétion si l'import échoue.
-        metadata = type('MockMetaData', (object,), {'create_all': lambda x: None})
-    Base = MockBase()
+    print("ERREUR DANS MODELS.PY: IMPOSSIBLE D'IMPORTER Base DE db.database.py ! Le chemin est-il correct depuis ce dossier?")
+    raise # Ce bloc doit normalement laisser le chemin tel quel, ou utiliser le mock SEULEMENT pour les IDEs. Le problème runtime vient du chemin.
+
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, ForeignKey, UniqueConstraint # <-- Assurez-vous que TOUT ceci est importé ICI
+import datetime
+
 class ServerState(Base):
     __tablename__ = "server_state"
-    id = Column(Integer, primary_key=True)
-    guild_id = Column(String, unique=True, nullable=False)
-    admin_role_id = Column(String, nullable=True)
+    id = Column(Integer, primary_key=True) 
+    guild_id = Column(String, unique=True, nullable=False) 
+    admin_role_id = Column(String, nullable=True) 
     game_channel_id = Column(String, nullable=True)
     game_started = Column(Boolean, default=False)
+    # Les champs que vous venez d'ajouter
+    game_mode = Column(String, default="medium")
+    game_tick_interval_minutes = Column(Integer, default=30) 
     game_start_time = Column(DateTime, nullable=True)
-
-    # --- NOUVEAUX PARAMÈTRES DE JEU CONFIGURES PAR LE SERVEUR ---
-
-    # Intervalle des "ticks" de simulation (en minutes). C'est la durée d'une "unité de temps" du jeu.
-    # Chaque tick, les statistiques de base se dégradent.
-    game_tick_interval_minutes = Column(Integer, default=30) # Par défaut, une unité de temps dure 30 minutes
-
-    # --- TAUX DE DÉGRADATION PAR TICK (ajuster ces valeurs pour la difficulté du jeu) ---
-    # Ces valeurs sont par tick d'intervalle. S'ils sont pour 30min, la dégradation est donc X / 30 par minute.
-
-    # Besoins primaires
-    degradation_rate_hunger = Column(Float, default=10.0)   # Augmente la faim de 10 unités par tick (soit ~0.33/min)
-    degradation_rate_thirst = Column(Float, default=8.0)    # Augmente la soif de 8 unités par tick (~0.26/min)
-    degradation_rate_bladder = Column(Float, default=15.0)  # Augmente la vessie de 15 unités par tick (0.5/min)
-
-    # Statut mentaux/physiques (dégradation naturelle)
-    degradation_rate_energy = Column(Float, default=5.0)    # Diminue l'énergie de 5 unités par tick (~0.17/min)
-    degradation_rate_stress = Column(Float, default=3.0)    # Augmente le stress de 3 unités par tick (~0.1/min)
-    degradation_rate_boredom = Column(Float, default=7.0)   # Augmente l'ennui de 7 unités par tick (~0.23/min)
-
-    # Taux d'addiction/toxines
-    # Les taux d'addiction et toxines peuvent être influencés par les actions du joueur,
-    # mais aussi par des taux "naturels" si on veut simuler une exposition lente.
-    # Pour l'instant, je laisse ceux-là bas pour le début.
-    degradation_rate_addiction_base = Column(Float, default=0.1) # Légère augmentation naturelle d'addiction ? Ou pas du tout ?
-    degradation_rate_toxins_base = Column(Float, default=0.5)  # Légère augmentation naturelle de toxines ?
-
-    # Note: les autres statistiques (health, sanity, happy, etc.) sont plutôt des _conséquences_
-    # de la dégradation des autres besoins ou des réactions en chaîne,
-    # donc ils ne sont pas nécessairement directement "dégradés" par un taux temporel.
-    # Leur dégradation naturelle viendra de chain_reactions.
-    # Statistiques de base du cuisinier
-    phys = Column(Float, default=100.0) # Mettre .0 pour clarifier que ce sont des flottants
+    degradation_rate_hunger = Column(Float, default=10.0)
+    degradation_rate_thirst = Column(Float, default=8.0)
+    degradation_rate_bladder = Column(Float, default=15.0)
+    degradation_rate_energy = Column(Float, default=5.0)
+    degradation_rate_stress = Column(Float, default=3.0)
+    degradation_rate_boredom = Column(Float, default=7.0)
+    degradation_rate_addiction_base = Column(Float, default=0.1)
+    degradation_rate_toxins_base = Column(Float, default=0.5)
+    # Et les autres champs (phys, ment, happy, etc.) qui étaient déjà là
+    phys = Column(Float, default=100.0) 
     ment = Column(Float, default=100.0)
     happy = Column(Float, default=80.0)
     stress = Column(Float, default=20.0)
@@ -63,13 +39,11 @@ class ServerState(Base):
     bladder = Column(Float, default=0.0)
     trip = Column(Float, default=0.0)
     tox = Column(Float, default=0.0)
-
-    # Statistiques de progression
     wallet = Column(Integer, default=0)
     last_update = Column(DateTime, default=datetime.datetime.utcnow)
-    
+
     __table_args__ = (
-        UniqueConstraint('guild_id', name='uq_guild_server_state'), # Ensure guild_id is unique here
+        UniqueConstraint('guild_id', name='uq_guild_server_state'),
     )
 
 
