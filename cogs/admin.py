@@ -229,9 +229,13 @@ class AdminCog(commands.Cog):
             # On doit passer le cog pour accéder à GAME_DURATIONS
             # On le fera dans le callback pour être sûr qu'il est chargé.
             
-            options = []
+            options = [
+                discord.SelectOption(label=duration["label"], description=f"Partie de {duration['days']} jours", value=key)
+                for key, duration in AdminCog.GAME_DURATIONS.items()
+            ]
+
             # Custom_id unique est bonne pratique pour Discord's UI handling
-            super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=1) # row=1 pour la 2ème ligne
+            super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=1)
             self.guild_id = guild_id
 
         async def callback(self, interaction: discord.Interaction):
