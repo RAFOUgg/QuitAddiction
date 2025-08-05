@@ -1,24 +1,24 @@
 # --- cogs/scheduler.py ---
 
 from discord.ext import commands, tasks
-from db.database import SessionLocal # Assurez-vous que c'est le bon import
-from db.models import ServerState, PlayerProfile # Nécessaire pour accéder aux données des joueurs et serveurs
+from db.database import SessionLocal
+from db.models import ServerState, PlayerProfile # Assurez-vous que ces imports sont corrects
 import datetime
-import math # Pour les calculs de temps
+import math
 
-# Importer les utilitaires de calcul qui seront utilisés par le scheduler
-from utils.calculations import apply_action_effects, chain_reactions # Supposons que ces fonctions existent
+# Importez vos fonctions de calcul
+from utils.calculations import apply_action_effects, chain_reactions 
 
 class Scheduler(commands.Cog):
     """Tâches automatiques pour la dégradation des statistiques et les effets différés."""
 
     def __init__(self, bot):
         self.bot = bot
-        self.pending_effects = [] # Peut-être utile pour des effets différés plus complexes
+        self.pending_effects = [] # Peut être utilisé pour des effets différés spécifiques à un joueur/serveur
 
     async def cog_load(self):
         """Se lance quand le cog est chargé."""
-        # Démarre la tâche de tick si elle n'est pas déjà en cours
+        # Démarrer la tâche loopée si elle n'est pas déjà en cours
         if not self.tick.is_running():
             self.tick.start()
         print("Scheduler tick started.")
@@ -29,66 +29,79 @@ class Scheduler(commands.Cog):
             self.tick.cancel()
         print("Scheduler tick cancelled.")
 
-    # La tâche principale qui s'exécute périodiquement
-    @tasks.loop(minutes=1) # On vérifie chaque minute, mais la logique interne déterminera quand agir
+    # La boucle s'exécute toutes les minutes. La logique interne décide quand appliquer les dégradations.
+    @tasks.loop(minutes=1) 
     async def tick(self):
         current_time = datetime.datetime.utcnow()
         db = SessionLocal()
         try:
-            # 1. Récupérer tous les états de serveurs où le jeu est lancé
+            # 1. Chercher tous les 'ServerState' où une partie est activement lancée
             server_states = db.query(ServerState).filter(ServerState.game_started == True).all()
             
             for server_state in server_states:
-                # Si le dernier_update n'est pas défini (première partie), on l'initialise à current_time
-                # pour éviter une dégradation massive au tout premier tick.
+                # S'assurer que last_update est défini, sinon initialiser pour éviter des dégradations massives au premier démarrage
                 if not server_state.last_update:
                     server_state.last_update = current_time
 
-                # Calculer le temps écoulé depuis la dernière mise à jour pour ce serveur
+                # Calculer le temps écoulé depuis la dernière mise à jour de ce serveur (en minutes)
                 time_since_last_update = current_time - server_state.last_update
                 
                 # Déterminer combien d'intervalles de 'game_tick_interval_minutes' se sont écoulés
                 interval_minutes = server_state.game_tick_interval_minutes
-                # S'assurer qu'on a un intervalle valide, sinon utiliser une valeur par défaut
                 if not interval_minutes or interval_minutes <= 0:
                     interval_minutes = 30 # Valeur par défaut si elle est manquante ou invalide
 
-                # Calculer le nombre de ticks de dégradation à appliquer
-                # Ex: si intervalle=30min, et il s'est passé 95min, on applique 95/30 = 3.16 ticks. On prend floor pour les ticks entiers.
+                # Calculer le nombre de "ticks" de dégradation complets à appliquer
+                # Ex: si intervalle=30min, et il s'est passé 95min, on applique floor(95/30) = 3 ticks.
                 num_ticks_to_apply = math.floor(time_since_last_update.total_seconds() / 60 / interval_minutes)
                 
                 if num_ticks_to_apply > 0:
-                    # Charger tous les joueurs actifs de ce serveur
+                    # Charger tous les joueurs de ce serveur
                     player_profiles = db.query(PlayerProfile).filter_by(guild_id=server_state.guild_id).all()
                     
                     for player in player_profiles:
-                        # Pour chaque tick, appliquer les dégradations et les conséquences
-                        # On répète la logique pour chaque tick calculé pour être plus précis sur les effets cumulés
+                        # On applique la dégradation pour CHAQUE tick calculé
                         for _ in range(num_ticks_to_apply):
                             # --- Appliquer les dégradations de base ---
-                            player.hunger = min(100.0, player.hunger + (server_state.degradation_rate_hunger / interval_minutes * 60)) # Taux par minute, pas par tick.
-                            player.thirst = min(100.0, player.thirst + (server_state.degradation_rate_thirst / interval_minutes * 60))
-                            player.bladder = min(100.0, player.bladder + (server_state.degradation_rate_bladder / interval_minutes * 60))
-                            player.energy = max(0.0, player.energy - (server_state.degradation_rate_energy / interval_minutes * 60))
-                            player.stress = min(100.0, player.stress + (server_state.degradation_rate_stress / interval_minutes * 60))
-                            player.boredom = min(100.0, player.boredom + (server_state.degradation_rate_boredom / interval_minutes * 60))
+                            # Les taux sont par TICK. Pour les appliquer sur une période plus courte (comme chaque minute),
+                            # il faut diviser le taux par le nombre de minutes dans un tick.
+                            # Ex: Si TauxHunger = 10/tick et intervalle=30min, alors par minute c'est 10/30.
                             
-                            # Effets de sevrage (simplifié : si addiction > seuil et sevrage actif)
-                            if player.substance_addiction_level > 10 and player.withdrawal_severity > 0:
-                                # Ces effets dépendent de player.withdrawal_severity, qui lui-même pourrait augmenter avec l'addiction ou les manques.
-                                player.stress = min(100.0, player.stress + player.withdrawal_severity * 0.5) 
-                                player.sanity = max(0.0, min(100.0, player.sanity - player.withdrawal_severity * 0.2)) 
-                                player.pain = max(0.0, min(100.0, player.pain + player.withdrawal_severity * 0.3))
-                                player.energy = max(0.0, player.energy - player.withdrawal_severity * 0.4)
-                                player.happiness = max(-100.0, player.happiness - player.withdrawal_severity * 0.6) # Humeur négative
+                            hunger_change = server_state.degradation_rate_hunger / interval_minutes
+                            thirst_change = server_state.degradation_rate_thirst / interval_minutes
+                            bladder_change = server_state.degradation_rate_bladder / interval_minutes
+                            energy_change = -(server_state.degradation_rate_energy / interval_minutes)
+                            stress_change = server_state.degradation_rate_stress / interval_minutes
+                            boredom_change = server_state.degradation_rate_boredom / interval_minutes
+                            
+                            # Appliquer les changements aux attributs du joueur, en clampant les valeurs
+                            player.hunger = self.clamp(player.hunger + hunger_change, 0.0, 100.0)
+                            player.thirst = self.clamp(player.thirst + thirst_change, 0.0, 100.0)
+                            player.bladder = self.clamp(player.bladder + bladder_change, 0.0, 100.0)
+                            player.energy = self.clamp(player.energy + energy_change, 0.0, 100.0)
+                            player.stress = self.clamp(player.stress + stress_change, 0.0, 100.0)
+                            player.boredom = self.clamp(player.boredom + boredom_change, 0.0, 100.0)
 
-                            # Application des taux de dégradation de base pour addiction et toxines (peut-être liés aux actions plutôt qu'au temps)
-                            # Pour l'instant, on peut garder une petite dégradation si nécessaire
-                            # player.substance_addiction_level = min(100.0, player.substance_addiction_level + server_state.degradation_rate_addiction_base)
-                            # player.intoxication_level = min(100.0, player.intoxication_level + server_state.degradation_rate_toxins_base)
+                            # --- Effets de Sevrage (si addiction > 0 et sevrage actif) ---
+                            # Ceci doit être calculé en fonction de player.substance_addiction_level et player.withdrawal_severity
+                            # et potentiellement de la dernière consommation.
+                            # Simplification : si sevrage actif, appliquer malus.
+                            if player.withdrawal_severity > 0: # Ceci sera peut-être mis à jour par d'autres logiques
+                                player.stress = self.clamp(player.stress + player.withdrawal_severity * 0.5, 0.0, 100.0) 
+                                player.sanity = self.clamp(player.sanity - player.withdrawal_severity * 0.2, 0.0, 100.0) 
+                                player.pain = self.clamp(player.pain + player.withdrawal_severity * 0.3, 0.0, 100.0)
+                                player.energy = self.clamp(player.energy - player.withdrawal_severity * 0.4, 0.0, 100.0)
+                                player.happiness = self.clamp(player.happiness - player.withdrawal_severity * 0.6, -100.0, 100.0) # Humeur négative
 
-                            # --- Utiliser chain_reactions pour les effets complexes ---
-                            # Préparer un dictionnaire d'état pour les calculs. LES NOMS DES CLÉS DOIVENT ÊTRE CEUX ATTENDUS PAR chain_reactions
+                            # --- Taux de dégradation base Addiction/Toxines ---
+                            # Ces taux sont souvent plus liés aux actions (consommation) qu'au temps pur,
+                            # mais si on veut une lente dégradation naturelle, on l'applique ici.
+                            # player.substance_addiction_level = self.clamp(player.substance_addiction_level + server_state.degradation_rate_addiction_base, 0.0, 100.0)
+                            # player.intoxication_level = self.clamp(player.intoxication_level + server_state.degradation_rate_toxins_base, 0.0, 100.0)
+                            
+                            # --- Appliquer les réactions en chaîne via les utilitaires ---
+                            # Construire le dictionnaire d'état pour les calculs externes.
+                            # Les CLÉS doivent correspondre à ce qu'attend la fonction chain_reactions.
                             state_for_calc = {
                                 "HEALTH": player.health,
                                 "HUNGER": player.hunger,
@@ -99,53 +112,55 @@ class Scheduler(commands.Cog):
                                 "STRESS": player.stress,
                                 "MENT": player.sanity, # Mapper player.sanity à MENT
                                 "HAPPY": player.happiness,
+                                "BORDEOM": player.boredom,
                                 "ADDICTION": player.substance_addiction_level,
                                 "TOX": player.intoxication_level, # Mapper player.intoxication_level à TOX
-                                "TRIP": player.intoxication_level, # mapper player.intoxication_level à TRIP
-                                "BORDEOM": player.boredom,
-                                # Assurez-vous que toutes les clés utilisées dans chain_reactions correspondent à ce dictionnaire
+                                "TRIP": player.intoxication_level, # Mapper player.intoxication_level à TRIP
+                                # Assurez-vous que toutes les clés utilisées dans chain_reactions sont présentes ici.
                             }
+                            
+                            # Appel de la fonction qui calcule les conséquences (et modifie state_for_calc)
+                            chain_reactions(state_for_calc) 
 
-                            chain_reactions(state_for_calc) # Applique les réactions en chaîne au dictionnaire
-
-                            # --- MAJ les attributs du PlayerProfile AVEC les valeurs calculées ---
-                            # Appliquer les changements retournés par chain_reactions, en clampant les valeurs
-                            player.health = max(0.0, min(100.0, state_for_calc.get("HEALTH", player.health)))
-                            player.pain = max(0.0, min(100.0, state_for_calc.get("PAIN", player.pain)))
-                            player.stress = max(0.0, min(100.0, state_for_calc.get("STRESS", player.stress)))
-                            player.sanity = max(0.0, min(100.0, state_for_calc.get("MENT", player.sanity))) # Mapper MENT ici
-                            player.happiness = max(-100.0, min(100.0, state_for_calc.get("HAPPY", player.happiness)))
-                            player.boredom = max(0.0, min(100.0, state_for_calc.get("BORDEOM", player.boredom)))
-                            player.intoxication_level = max(0.0, min(100.0, state_for_calc.get("TRIP", player.intoxication_level))) # Mapper TRIP et TOX
-
+                            # --- MAJ les attributs du PlayerProfile AVEC les résultats de chain_reactions ---
+                            player.health = self.clamp(state_for_calc.get("HEALTH", player.health), 0.0, 100.0)
+                            player.pain = self.clamp(state_for_calc.get("PAIN", player.pain), 0.0, 100.0)
+                            player.stress = self.clamp(state_for_calc.get("STRESS", player.stress), 0.0, 100.0)
+                            player.sanity = self.clamp(state_for_calc.get("MENT", player.sanity), 0.0, 100.0)
+                            player.happiness = self.clamp(state_for_calc.get("HAPPY", player.happiness), -100.0, 100.0)
+                            player.boredom = self.clamp(state_for_calc.get("BORDEOM", player.boredom), 0.0, 100.0)
+                            player.intoxication_level = self.clamp(state_for_calc.get("TRIP", player.intoxication_level), 0.0, 100.0)
+                            # Ne pas oublier de mettre à jour les champs affectés par TOX et ADDICTION si elles sont dans state_for_calc
+                            
                             # Mettre à jour le last_update du joueur pour le prochain calcul
                             player.last_update = current_time
                         
-                    # Après avoir traité tous les joueurs pour ce serveur, mettre à jour last_update du serveur
-                    # pour refléter le moment où le dernier tick a été appliqué.
+                    # Après avoir traité tous les joueurs pour ce serveur, MAJ le last_update du serveur
+                    # Cela permet de savoir quand la prochaine évaluation globale doit commencer.
                     server_state.last_update = current_time
 
-            db.commit() # Sauvegarde des changements pour tous les serveurs/joueurs
+            db.commit() # Sauvegarder les changements globaux
 
         except ImportError as ie:
-            print(f"Scheduler Error: ImportError during cog load/tick - {ie}")
-            # Si un cog ou une bibliothèque essentielle n'est pas trouvé, on peut arrêter la tâche
-            if self.tick.is_running():
-                self.tick.cancel()
+            print(f"Scheduler Error: ImportError - {ie}. Assurez-vous que les imports de cogs/scheduler.py sont corrects.")
+            if self.tick.is_running(): self.tick.cancel()
         except NameError as ne:
-            print(f"Scheduler Error: NameError - {ne}")
-            # Problème avec des variables non définies, peut-être dans les modèles ou les utilitaires
-            if self.tick.is_running():
-                self.tick.cancel()
+            print(f"Scheduler Error: NameError - {ne}. Vérifiez que toutes les variables et fonctions sont définies.")
+            if self.tick.is_running(): self.tick.cancel()
         except Exception as e:
             print(f"Erreur critique dans Scheduler.tick : {e}")
             db.rollback() # Annuler les transactions en cours en cas d'erreur
         finally:
             db.close() # Toujours fermer la session DB
 
+    # Fonction d'aide pour le clampage des valeurs
+    def clamp(self, value, min_val, max_val):
+        return max(min_val, min(max_val, value))
+
+    # La méthode `before_loop` est essentielle
     @tick.before_loop
     async def before_tick(self):
-        """Attend que le bot soit prêt avant de démarrer la boucle."""
+        """Attend que le bot soit prêt avant de démarrer la boucle de tick."""
         await self.bot.wait_until_ready()
         print("Scheduler prêt pour le tick.")
 
