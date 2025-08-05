@@ -87,6 +87,7 @@ class Scheduler(commands.Cog):
                             # et potentiellement de la dernière consommation.
                             # Simplification : si sevrage actif, appliquer malus.
                             if player.withdrawal_severity > 0: # Ceci sera peut-être mis à jour par d'autres logiques
+                                # Utiliser player.sanity pour MENT et player.stress pour STRESS
                                 player.stress = self.clamp(player.stress + player.withdrawal_severity * 0.5, 0.0, 100.0) 
                                 player.sanity = self.clamp(player.sanity - player.withdrawal_severity * 0.2, 0.0, 100.0) 
                                 player.pain = self.clamp(player.pain + player.withdrawal_severity * 0.3, 0.0, 100.0)
@@ -123,6 +124,7 @@ class Scheduler(commands.Cog):
                             chain_reactions(state_for_calc) 
 
                             # --- MAJ les attributs du PlayerProfile AVEC les résultats de chain_reactions ---
+                            # Assurez-vous que les clés utilisées dans chain_reactions correspondent aux attributs du joueur
                             player.health = self.clamp(state_for_calc.get("HEALTH", player.health), 0.0, 100.0)
                             player.pain = self.clamp(state_for_calc.get("PAIN", player.pain), 0.0, 100.0)
                             player.stress = self.clamp(state_for_calc.get("STRESS", player.stress), 0.0, 100.0)
@@ -130,7 +132,9 @@ class Scheduler(commands.Cog):
                             player.happiness = self.clamp(state_for_calc.get("HAPPY", player.happiness), -100.0, 100.0)
                             player.boredom = self.clamp(state_for_calc.get("BORDEOM", player.boredom), 0.0, 100.0)
                             player.intoxication_level = self.clamp(state_for_calc.get("TRIP", player.intoxication_level), 0.0, 100.0)
-                            # Ne pas oublier de mettre à jour les champs affectés par TOX et ADDICTION si elles sont dans state_for_calc
+                            # Mettre à jour TOX et ADDICTION si elles sont modifiées par chain_reactions
+                            player.tox = self.clamp(state_for_calc.get("TOX", player.tox), 0.0, 100.0)
+                            player.substance_addiction_level = self.clamp(state_for_calc.get("ADDICTION", player.substance_addiction_level), 0.0, 100.0)
                             
                             # Mettre à jour le last_update du joueur pour le prochain calcul
                             player.last_update = current_time

@@ -1,5 +1,6 @@
+# --- db/models.py ---
 try:
-    from db.database import Base 
+    from db.database import Base
 except ImportError:
     print("ERREUR CRITIQUE DANS MODELS.PY: IMPOSSIBLE D'IMPORTER Base DE db.database.py !")
     print("--> Vérifiez le chemin de l'importation dans db/models.py et assurez-vous que db/database.py exporte 'Base'.")
@@ -17,7 +18,8 @@ class ServerState(Base):
     # Configuration du Bot
     admin_role_id = Column(String, nullable=True)       # ID du rôle admin
     game_channel_id = Column(String, nullable=True)     # ID du salon où le bot affiche les infos du jeu
-    
+    notification_role_id = Column(String, nullable=True) # ID du rôle pour les notifications (AJOUTÉ)
+
     # Statut du jeu
     game_started = Column(Boolean, default=False)       # Indique si une partie est en cours
     game_start_time = Column(DateTime, nullable=True)   # Timestamp du début de la partie pour le calcul de durée
