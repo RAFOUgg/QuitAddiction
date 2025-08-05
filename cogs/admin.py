@@ -92,7 +92,8 @@ class AdminCog(commands.Cog):
         # Informations sur la configuration du Bot
         admin_role_mention = f"<@&{state.admin_role_id}>" if state.admin_role_id else "Non défini"
         game_channel_mention = f"<#{state.game_channel_id}>" if state.game_channel_id else "Non défini"
-        notification_role_mention = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Non défini"
+        # Vérifier si notification_role_id existe avant de l'utiliser
+        notification_role_mention = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
         game_status = "En cours" if state.game_started else "Non lancée"
 
         embed.add_field(name="👑 Rôle Admin", value=admin_role_mention, inline=False)
@@ -129,8 +130,9 @@ class AdminCog(commands.Cog):
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
         view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
         view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
-        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
+        # Correctif : Utiliser AdminCog.ConfigButton pour accéder à la classe imbriquée
+        view.add_item(AdminCog.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
+        view.add_item(AdminCog.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
         # Bouton retour à la configuration principale
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
@@ -219,8 +221,7 @@ class AdminCog(commands.Cog):
     class GameDurationSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
             options = []
-            # On doit récupérer le cog ici pour accéder à GAME_DURATIONS
-            # On va le faire dans le callback pour s'assurer qu'il est chargé.
+            # On doit récupérer le cog pour accéder à GAME_DURATIONS. On le fera dans le callback.
             
             super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=1)
             self.guild_id = guild_id
@@ -317,6 +318,7 @@ class AdminCog(commands.Cog):
                 await interaction.followup.send("Affichage des statistiques...", ephemeral=True)
 
             elif self.label == "🔔 Notifications":
+                # Le bouton "Notifications" devrait mener à une vue spécifique pour configurer les rôles de notification.
                 await interaction.response.edit_message(
                     embed=cog.generate_notifications_embed(self.guild_id),
                     view=cog.generate_notifications_view(self.guild_id)
@@ -334,21 +336,24 @@ class AdminCog(commands.Cog):
 
     # --- Méthodes pour les configurations spécifiques (Rôle Admin, Salon, Rôle Notif) ---
     
-    # Méthode pour générer l'embed de configuration du rôle admin
-    def generate_role_config_embed(self, state: ServerState) -> discord.Embed:
+    # Méthode pour générer l'embed de configuration du rôle admin et du salon de jeu
+    def generate_role_and_channel_config_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(
-            title="⚙️ Configuration des Rôles",
-            description="Sélectionnez un rôle dans le menu déroulant pour le définir.",
+            title="⚙️ Configuration Générale",
+            description="Utilisez les menus déroulants pour sélectionner les rôles et salons.",
             color=discord.Color.purple()
         )
         current_admin_role = f"<@&{state.admin_role_id}>" if state.admin_role_id else "Non défini"
-        current_notif_role = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Non défini"
+        current_notif_role = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
+        current_game_channel = f"<#{state.game_channel_id}>" if state.game_channel_id else "Non défini"
+
         embed.add_field(name="👑 Rôle Admin actuel", value=current_admin_role, inline=False)
         embed.add_field(name="🔔 Rôle de Notification actuel", value=current_notif_role, inline=False)
+        embed.add_field(name="🎮 Salon de Jeu actuel", value=current_game_channel, inline=False)
         return embed
 
-    # Classe pour le bouton qui va ouvrir la configuration des rôles
-    class RoleConfigButton(ui.Button):
+    # Classe pour le bouton qui va ouvrir la configuration des rôles et salons
+    class GeneralConfigButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle):
             super().__init__(label=label, style=style, row=0)
             self.guild_id = guild_id
@@ -363,26 +368,25 @@ class AdminCog(commands.Cog):
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
             await interaction.response.edit_message(
-                embed=cog.generate_role_config_embed(state),
-                view=cog.generate_role_config_view(self.guild_id)
+                embed=cog.generate_role_and_channel_config_embed(state),
+                view=cog.generate_general_config_view(self.guild_id)
             )
             db.close()
 
-    # Vue pour la sélection du rôle admin et du rôle de notification
-    def generate_role_config_view(self, guild_id: str) -> discord.ui.View:
+    # Vue pour la sélection des rôles et du salon
+    def generate_general_config_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         view.add_item(self.RoleSelect(guild_id, "admin_role"))
         view.add_item(self.RoleSelect(guild_id, "notification_role"))
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=2))
+        view.add_item(self.ChannelSelect(guild_id, "game_channel"))
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
     # Classe de Menu: Sélection de Rôle
     class RoleSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
-            options = []
-            # On doit accéder au guild depuis l'interaction pour obtenir les rôles
-            # Donc on le fait dans le callback.
-            super().__init__(placeholder=f"Sélectionnez un rôle pour {select_type.replace('_', ' ')}...", options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=0 if select_type == "admin_role" else 1)
+            placeholder = f"Sélectionnez un rôle pour {'Admin' if select_type == 'admin_role' else 'Notifications' if select_type == 'notification_role' else 'Rôle'}..."
+            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_role_{select_type}_{guild_id}", row=0 if select_type == "admin_role" else 1)
             self.guild_id = guild_id
             self.select_type = select_type
 
@@ -396,65 +400,33 @@ class AdminCog(commands.Cog):
                 if self.select_type == "admin_role":
                     state.admin_role_id = selected_role_id
                 elif self.select_type == "notification_role":
-                    state.notification_role_id = selected_role_id
+                    # Assurez-vous que l'attribut notification_role_id existe dans ServerState
+                    # Si ce n'est pas le cas, vous devrez l'ajouter dans db/models.py
+                    if hasattr(state, 'notification_role_id'):
+                        state.notification_role_id = selected_role_id
+                    else:
+                        # Gérez le cas où l'attribut n'existe pas (par exemple, en l'ajoutant dynamiquement ou en informant l'utilisateur)
+                        # Pour l'instant, on va simplement ignorer et informer.
+                        await interaction.response.send_message("Erreur: L'attribut 'notification_role_id' n'est pas défini dans la base de données.", ephemeral=True)
+                        db.close()
+                        return
                 
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
                 await interaction.response.edit_message(
-                    embed=cog.generate_role_config_embed(state),
-                    view=cog.generate_role_config_view(self.guild_id)
+                    embed=cog.generate_role_and_channel_config_embed(state),
+                    view=cog.generate_general_config_view(self.guild_id)
                 )
-                await interaction.followup.send(f"Rôle {self.select_type.replace('_', ' ')} mis à jour.", ephemeral=True)
+                await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications' if self.select_type == 'notification_role' else 'ce rôle'} mis à jour.", ephemeral=True)
             
             db.close()
-
-    # Méthode pour générer l'embed de configuration du salon du jeu
-    def generate_channel_config_embed(self, state: ServerState) -> discord.Embed:
-        embed = discord.Embed(
-            title="⚙️ Configuration du Salon de Jeu",
-            description="Sélectionnez un salon pour définir le salon principal du jeu.",
-            color=discord.Color.blue()
-        )
-        current_game_channel = f"<#{state.game_channel_id}>" if state.game_channel_id else "Non défini"
-        embed.add_field(name="🎮 Salon de Jeu actuel", value=current_game_channel, inline=False)
-        return embed
-
-    # Classe pour le bouton qui va ouvrir la configuration du salon
-    class ChannelConfigButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle):
-            super().__init__(label=label, style=style, row=0)
-            self.guild_id = guild_id
-
-        async def callback(self, interaction: discord.Interaction):
-            cog = interaction.client.get_cog("AdminCog")
-            if not cog:
-                await interaction.response.send_message("Erreur: Le cog Admin n'est pas chargé.", ephemeral=True)
-                return
-            
-            db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-
-            await interaction.response.edit_message(
-                embed=cog.generate_channel_config_embed(state),
-                view=cog.generate_channel_config_view(self.guild_id)
-            )
-            db.close()
-
-    # Vue pour la sélection du salon du jeu
-    def generate_channel_config_view(self, guild_id: str) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
-        view.add_item(self.ChannelSelect(guild_id, "game_channel"))
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=1))
-        return view
 
     # Classe de Menu: Sélection de Salon
     class ChannelSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
-            options = []
-            # On doit accéder au guild depuis l'interaction pour obtenir les salons
-            # Donc on le fait dans le callback.
-            super().__init__(placeholder=f"Sélectionnez un salon pour {select_type.replace('_', ' ')}...", options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=0)
+            placeholder = f"Sélectionnez un salon pour le jeu..."
+            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_channel_{select_type}_{guild_id}", row=2)
             self.guild_id = guild_id
             self.select_type = select_type
 
@@ -472,14 +444,14 @@ class AdminCog(commands.Cog):
 
                 cog = interaction.client.get_cog("AdminCog")
                 await interaction.response.edit_message(
-                    embed=cog.generate_channel_config_embed(state),
-                    view=cog.generate_channel_config_view(self.guild_id)
+                    embed=cog.generate_role_and_channel_config_embed(state),
+                    view=cog.generate_general_config_view(self.guild_id)
                 )
-                await interaction.followup.send(f"Salon {self.select_type.replace('_', ' ')} mis à jour.", ephemeral=True)
+                await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
             
             db.close()
 
-    # --- Placeholder pour les autres méthodes de génération d'embeds/vues ---
+    # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
     def generate_stats_embed(self, guild_id: str) -> discord.Embed:
         embed = discord.Embed(title="📊 Statistiques du Serveur", description="Fonctionnalité en développement.", color=discord.Color.purple())
         return embed
@@ -491,13 +463,10 @@ class AdminCog(commands.Cog):
 
     def generate_notifications_embed(self, guild_id: str) -> discord.Embed:
         embed = discord.Embed(title="🔔 Paramètres de Notifications", description="Configurez les rôles pour les notifications du jeu.", color=discord.Color.green())
-        # Ajouter des options pour configurer les notifications ici
         return embed
     
     def generate_notifications_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        # Ajouter des boutons pour configurer les notifications, par exemple pour choisir quels événements notifier
-        # Pour l'instant, on ajoute juste un bouton de retour
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
@@ -508,6 +477,27 @@ class AdminCog(commands.Cog):
     def generate_advanced_options_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3))
+        return view
+
+    # Remplacement de l'ancienne méthode generate_config_menu_view pour intégrer les nouveaux boutons
+    def generate_config_menu_view(self, guild_id: str) -> discord.ui.View:
+        view = discord.ui.View(timeout=None)
+        
+        # Bouton pour lancer la sélection du mode et de la durée
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary))
+        
+        # Boutons pour les autres configurations
+        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
+        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
+        # Ajout du bouton pour configurer les rôles et salons
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) # Changé pour intégrer les rôles/salons
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2))
+        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
+        
+        # Bouton retour à la configuration principale
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
+        
         return view
 
 
