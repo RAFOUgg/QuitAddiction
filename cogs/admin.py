@@ -352,8 +352,10 @@ class AdminCog(commands.Cog):
         embed.add_field(name="🎮 Salon de Jeu", value=current_game_channel, inline=False)
         return embed
 
+    MAX_OPTION_LENGTH = 25 # Limite pour le label des options
+    MIN_OPTION_LENGTH = 1  # Limite minimale (Discord impose 1)
+    
     # Vue pour la sélection des rôles et du salon
-    # On reçoit maintenant le guild en paramètre
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         
@@ -365,18 +367,18 @@ class AdminCog(commands.Cog):
             # Ignorer le rôle "@everyone" et les rôles dont le nom est invalide ou vide.
             role_options = [
                 discord.SelectOption(
-                    label=role.name[:self.MAX_OPTION_LENGTH], # Tronquer le label à 25 caractères
+                    label=role.name[:self.MAX_OPTION_LENGTH], # TRONQUE LE LABEL ici
                     value=str(role.id),
                     description=f"ID: {role.id}" # Optionnel: ajouter une description si besoin
                 )
                 for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) 
                 if role.name != "@everyone" and 
-                   self.MIN_OPTION_LENGTH <= len(role.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial
+                   self.MIN_OPTION_LENGTH <= len(role.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial, mais le label sera tronqué
                    role.id is not None # S'assurer que l'ID du rôle est valide
             ]
             # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
             if not role_options:
-                role_options.append(discord.SelectOption(label="Aucun rôle valide trouvé", value="no_roles", description="Impossible de trouver des rôles pour la sélection.", default=True))
+                role_options.append(discord.SelectOption(label="Aucun rôle valide", value="no_roles", description="Aucun rôle trouvé.", default=True))
                 
         else: # Si guild est None, on ajoute une option d'erreur.
             role_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
@@ -388,24 +390,23 @@ class AdminCog(commands.Cog):
             # Label et Value doivent être entre MIN_OPTION_LENGTH et MAX_OPTION_LENGTH caractères.
             channel_options = [
                 discord.SelectOption(
-                    label=channel.name[:self.MAX_OPTION_LENGTH], # Tronquer le label à 25 caractères
+                    label=channel.name[:self.MAX_OPTION_LENGTH], # TRONQUE LE LABEL ici
                     value=str(channel.id),
                     description=f"ID: {channel.id}" # Optionnel: ajouter une description si besoin
                 )
                 for channel in sorted(guild.text_channels, key=lambda c: c.position)
-                if self.MIN_OPTION_LENGTH <= len(channel.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial
+                if self.MIN_OPTION_LENGTH <= len(channel.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial, mais le label sera tronqué
                    channel.id is not None # S'assurer que l'ID du canal est valide
             ]
             # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
             if not channel_options:
-                channel_options.append(discord.SelectOption(label="Aucun salon trouvé", value="no_channels", description="Impossible de trouver des salons textuels.", default=True))
+                channel_options.append(discord.SelectOption(label="Aucun salon trouvé", value="no_channels", description="Aucun salon textuel trouvé.", default=True))
         
         else: # Si guild est None, on ajoute une option d'erreur.
             channel_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
 
-        # ... (le reste de la méthode generate_general_config_view)
-        # Les logs de débogage restent les mêmes.
-
+        # Ajout des SelectMenus à la vue, en utilisant les options préparées
+        # On s'assure que les options sont bien créées pour chaque SelectMenu
         view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
         view.add_item(self.RoleSelect(guild_id, "notification_role", row=1, options=role_options))
         view.add_item(self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options))
@@ -413,10 +414,14 @@ class AdminCog(commands.Cog):
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
-    # Classe de Menu: Sélection de Rôle
+    # --- Classe de Menu: Sélection de Rôle ---
     class RoleSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
-            placeholder = f"Sélectionnez le rôle pour {'l\'administration' if select_type == 'admin_role' else 'les notifications'}..."
+            # Le placeholder doit aussi être court si jamais
+            placeholder = f"Sélectionnez le rôle pour {'l\'admin' if select_type == 'admin_role' else 'les notifications'}..."
+            # On tronque le placeholder si nécessaire, bien que ce soit moins fréquent
+            placeholder = placeholder[:self.MAX_OPTION_LENGTH] 
+            
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
@@ -467,7 +472,10 @@ class AdminCog(commands.Cog):
     # Classe de Menu: Sélection de Salon
     class ChannelSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
+            # Le placeholder doit aussi être court si jamais
             placeholder = f"Sélectionnez le salon pour le jeu..."
+            placeholder = placeholder[:self.MAX_OPTION_LENGTH] 
+            
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row) 
             self.guild_id = guild_id
             self.select_type = select_type
