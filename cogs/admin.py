@@ -354,7 +354,7 @@ class AdminCog(commands.Cog):
 
     MAX_OPTION_LENGTH = 25 # Limite pour le label des options
     MIN_OPTION_LENGTH = 1  # Limite minimale (Discord impose 1)
-    
+
     # Vue pour la sélection des rôles et du salon
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
@@ -420,7 +420,7 @@ class AdminCog(commands.Cog):
             # Le placeholder doit aussi être court si jamais
             placeholder = f"Sélectionnez le rôle pour {'l\'admin' if select_type == 'admin_role' else 'les notifications'}..."
             # On tronque le placeholder si nécessaire, bien que ce soit moins fréquent
-            placeholder = placeholder[:self.MAX_OPTION_LENGTH] 
+            placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
             
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
@@ -474,7 +474,7 @@ class AdminCog(commands.Cog):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
             # Le placeholder doit aussi être court si jamais
             placeholder = f"Sélectionnez le salon pour le jeu..."
-            placeholder = placeholder[:self.MAX_OPTION_LENGTH] 
+            placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
             
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row) 
             self.guild_id = guild_id
