@@ -359,17 +359,21 @@ class AdminCog(commands.Cog):
         # Helper function to create options and a mapping
         def create_options_and_mapping(items, item_type):
             options = []
-            id_mapping = {}
+            id_mapping = {} # This mapping is local to this function call
+
             if guild:
-                for item in sorted(items, key=lambda x: x.position): # Use position for sorting
+                # Use a consistent sorting key that's available for both roles and channels
+                # For roles, position is good. For channels, position is also good.
+                sorted_items = sorted(items, key=lambda x: getattr(x, 'position', x.id)) # Fallback to id if position not present
+
+                for item in sorted_items:
+                    # Basic validation for name and ID
                     if item.name != "@everyone" and \
                        self.MIN_OPTION_LENGTH <= len(item.name) <= 100 and \
                        item.id is not None:
 
-                        # Truncate label to Discord's max label length
                         label = item.name[:self.MAX_OPTION_LENGTH]
-                        # Hash and truncate the value to Discord's max value length
-                        # Use a short hash or truncation if MAX_OPTION_LENGTH is too restrictive for a good hash
+                        # Hash and truncate the value to Discord's max value length (25 chars)
                         hashed_value = hashlib.sha256(str(item.id).encode()).hexdigest()
                         value = hashed_value[:self.MAX_OPTION_LENGTH]
 
@@ -384,39 +388,32 @@ class AdminCog(commands.Cog):
 
         # Generate role options and mapping
         role_options, role_id_mapping = create_options_and_mapping(guild.roles if guild else [], "role")
-        # Store the mapping in the view or pass it to the callback somehow
-        # A simple way is to attach it to the view itself or the select items if possible.
-        # For simplicity here, we'll create a lambda in the callback to access the mapping.
 
         # Generate channel options and mapping
         channel_options, channel_id_mapping = create_options_and_mapping(guild.text_channels if guild else [], "channel")
 
-        # Add SelectMenus to the view
-        role_select_admin = self.RoleSelect(guild_id, "admin_role", row=0, options=role_options)
-        role_select_admin.id_mapping = role_id_mapping # Attach mapping to the item
+        # Create Select instances and pass the mapping to them directly
+        # We'll modify the Select classes to accept and store this mapping.
+        role_select_admin = self.RoleSelect(guild_id, "admin_role", row=0, options=role_options, id_mapping=role_id_mapping)
         view.add_item(role_select_admin)
 
-        role_select_notif = self.RoleSelect(guild_id, "notification_role", row=1, options=role_options)
-        role_select_notif.id_mapping = role_id_mapping # Attach mapping to the item
+        role_select_notif = self.RoleSelect(guild_id, "notification_role", row=1, options=role_options, id_mapping=role_id_mapping)
         view.add_item(role_select_notif)
 
-        channel_select_game = self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options)
-        channel_select_game.id_mapping = channel_id_mapping # Attach mapping to the item
+        channel_select_game = self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options, id_mapping=channel_id_mapping)
         view.add_item(channel_select_game)
 
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
-    # ... (Modify RoleSelect and ChannelSelect callbacks to use the mapping) ...
-
     class RoleSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
+        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict): # Add id_mapping parameter
             placeholder = f"Sélectionnez le rôle pour {'l\'admin' if select_type == 'admin_role' else 'les notifications'}..."
             placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
-            self.id_mapping = {} # Placeholder for the mapping
+            self.id_mapping = id_mapping # Store the mapping
 
         async def callback(self, interaction: discord.Interaction):
             if not interaction.guild:
@@ -428,13 +425,14 @@ class AdminCog(commands.Cog):
                 return
 
             selected_short_id = self.values[0]
-            # Retrieve the original ID using the mapping
-            selected_role_id = self.id_mapping.get(selected_short_id)
+            # Retrieve the original ID using the stored mapping
+            selected_role_id = self.id_mapping.get(selected_short_id) # Use self.id_mapping
 
             if not selected_role_id:
                 await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du rôle.", ephemeral=True)
                 return
 
+            # ... rest of your callback logic ...
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -448,10 +446,12 @@ class AdminCog(commands.Cog):
                         await interaction.response.send_message("Erreur de configuration: L'attribut de rôle de notification n'est pas défini.", ephemeral=True)
                         db.close()
                         return
+                
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
-                # Re-generate the view to ensure mappings are fresh if needed, or pass them correctly
+                # Re-generating the view ensures mappings are correctly passed if they were complex.
+                # For this approach, the mapping is stored, so it should be fine.
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
                     view=cog.generate_general_config_view(self.guild_id, interaction.guild)
@@ -459,17 +459,18 @@ class AdminCog(commands.Cog):
                 await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications'} mis à jour.", ephemeral=True)
             else:
                 await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
+            
             db.close()
 
-
+    # Inside AdminCog class, in ChannelSelect:
     class ChannelSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
+        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict): # Add id_mapping parameter
             placeholder = f"Sélectionnez le salon pour le jeu..."
             placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
-            self.id_mapping = {} # Placeholder for the mapping
+            self.id_mapping = id_mapping # Store the mapping
 
         async def callback(self, interaction: discord.Interaction):
             if not interaction.guild:
@@ -481,20 +482,21 @@ class AdminCog(commands.Cog):
                 return
 
             selected_short_id = self.values[0]
-            # Retrieve the original ID using the mapping
-            selected_channel_id = self.id_mapping.get(selected_short_id)
+            # Retrieve the original ID using the stored mapping
+            selected_channel_id = self.id_mapping.get(selected_short_id) # Use self.id_mapping
 
             if not selected_channel_id:
                 await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du salon.", ephemeral=True)
                 return
 
+            # ... rest of your callback logic ...
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
             if state:
                 if self.select_type == "game_channel":
                     state.game_channel_id = selected_channel_id
-
+                
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
@@ -505,6 +507,7 @@ class AdminCog(commands.Cog):
                 await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
             else:
                 await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
+            
             db.close()
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
