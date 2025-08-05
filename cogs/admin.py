@@ -352,7 +352,7 @@ class AdminCog(commands.Cog):
         embed.add_field(name="🎮 Salon de Jeu", value=current_game_channel, inline=False)
         return embed
 
-    # Vue pour la sélection des rôles et du salon
+
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
 
@@ -362,38 +362,52 @@ class AdminCog(commands.Cog):
             id_mapping = {} # This mapping is local to this function call
 
             if guild:
-                # Use a consistent sorting key that's available for both roles and channels
-                # For roles, position is good. For channels, position is also good.
-                sorted_items = sorted(items, key=lambda x: getattr(x, 'position', x.id)) # Fallback to id if position not present
+                # Utilisez une clé de tri cohérente
+                sorted_items = sorted(items, key=lambda x: getattr(x, 'position', x.id))
 
                 for item in sorted_items:
-                    # Basic validation for name and ID
-                    if item.name != "@everyone" and \
-                       self.MIN_OPTION_LENGTH <= len(item.name) <= 100 and \
-                       item.id is not None:
+                    item_id = str(item.id)
+                    item_name = item.name
 
-                        label = item.name[:self.MAX_OPTION_LENGTH]
-                        # Hash and truncate the value to Discord's max value length (25 chars)
-                        hashed_value = hashlib.sha256(str(item.id).encode()).hexdigest()
-                        value = hashed_value[:self.MAX_OPTION_LENGTH]
+                    # 1. Vérifier que l'ID n'est pas nul et que le nom est une chaîne non vide
+                    if item_id is None or not isinstance(item_name, str) or not item_name:
+                        continue # Ignorer cet item s'il manque des informations essentielles
 
-                        options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item.id}"))
-                        id_mapping[value] = str(item.id) # Map the short value to the original ID
+                    # 2. Préparer le label : tronquer si nécessaire et s'assurer qu'il a au moins 1 caractère.
+                    # Si le nom tronqué est vide, on utilise le début de l'ID comme fallback pour le label.
+                    label = item_name[:self.MAX_OPTION_LENGTH]
+                    if not label: # Si le nom était trop court et tronqué à une chaîne vide
+                        label = item_id[:self.MAX_OPTION_LENGTH] # Utiliser l'ID tronqué comme label
+                        if not label: # Si même l'ID tronqué est vide (très peu probable mais sécurité)
+                           continue # Ignorer si aucun label valide ne peut être généré
 
+                    # 3. Préparer la valeur : Hacher et tronquer l'ID, et s'assurer qu'elle a au moins 1 caractère.
+                    # Le SHA256 donne une chaîne de 64 caractères. On tronque à MAX_OPTION_LENGTH (25).
+                    hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
+                    value = hashed_id[:self.MAX_OPTION_LENGTH]
+                    if not value: # Si la valeur tronquée est vide (très peu probable avec SHA256)
+                        continue # Ignorer si aucune valeur valide ne peut être générée
+
+                    # Ajouter l'option et stocker le mapping ID original -> valeur tronquée (ou ID tronqué si label=ID)
+                    # Le mapping doit être valeur tronquée -> ID original
+                    options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
+                    id_mapping[value] = item_id # Le mapping va de la value (potentiellement tronquée et hashée) à l'ID original.
+
+                # Ajouter une option par défaut si aucune n'a été trouvée
                 if not options:
                     options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun item trouvé.", default=True))
             else:
                 options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
+            
             return options, id_mapping
 
-        # Generate role options and mapping
+        # Générer les options et le mapping pour les rôles
         role_options, role_id_mapping = create_options_and_mapping(guild.roles if guild else [], "role")
 
-        # Generate channel options and mapping
+        # Générer les options et le mapping pour les canaux
         channel_options, channel_id_mapping = create_options_and_mapping(guild.text_channels if guild else [], "channel")
 
-        # Create Select instances and pass the mapping to them directly
-        # We'll modify the Select classes to accept and store this mapping.
+        # Créer les instances de Select et passer le mapping
         role_select_admin = self.RoleSelect(guild_id, "admin_role", row=0, options=role_options, id_mapping=role_id_mapping)
         view.add_item(role_select_admin)
 
@@ -409,7 +423,8 @@ class AdminCog(commands.Cog):
     class RoleSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict): # Add id_mapping parameter
             placeholder = f"Sélectionnez le rôle pour {'l\'admin' if select_type == 'admin_role' else 'les notifications'}..."
-            placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
+            # Assurer que le placeholder ne dépasse pas 100 caractères (limite Discord)
+            placeholder = placeholder[:100] 
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
@@ -432,7 +447,6 @@ class AdminCog(commands.Cog):
                 await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du rôle.", ephemeral=True)
                 return
 
-            # ... rest of your callback logic ...
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -440,33 +454,33 @@ class AdminCog(commands.Cog):
                 if self.select_type == "admin_role":
                     state.admin_role_id = selected_role_id
                 elif self.select_type == "notification_role":
-                    if hasattr(state, 'notification_role_id'):
-                        state.notification_role_id = selected_role_id
-                    else:
-                        await interaction.response.send_message("Erreur de configuration: L'attribut de rôle de notification n'est pas défini.", ephemeral=True)
-                        db.close()
-                        return
+                    # Assurez-vous que l'attribut existe avant de l'assigner.
+                    # Si vous utilisez SQLAlchemy, les attributs sont créés lors de la définition du modèle.
+                    state.notification_role_id = selected_role_id
                 
-                db.commit()
+                try:
+                    db.commit()
+                    # Recharger l'état pour s'assurer que les changements sont bien pris en compte
+                    db.refresh(state) 
 
-                cog = interaction.client.get_cog("AdminCog")
-                # Re-generating the view ensures mappings are correctly passed if they were complex.
-                # For this approach, the mapping is stored, so it should be fine.
-                await interaction.response.edit_message(
-                    embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id, interaction.guild)
-                )
-                await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications'} mis à jour.", ephemeral=True)
+                    cog = interaction.client.get_cog("AdminCog")
+                    await interaction.response.edit_message(
+                        embed=cog.generate_role_and_channel_config_embed(state),
+                        view=cog.generate_general_config_view(self.guild_id, interaction.guild)
+                    )
+                    await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications'} mis à jour.", ephemeral=True)
+                except Exception as e:
+                    db.rollback() # Annuler les changements en cas d'erreur
+                    await interaction.response.send_message(f"Erreur lors de la sauvegarde : {e}", ephemeral=True)
             else:
                 await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
             
             db.close()
 
-    # Inside AdminCog class, in ChannelSelect:
     class ChannelSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict): # Add id_mapping parameter
             placeholder = f"Sélectionnez le salon pour le jeu..."
-            placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
+            placeholder = placeholder[:100] # Limite de 100 pour le placeholder
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
@@ -489,7 +503,6 @@ class AdminCog(commands.Cog):
                 await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du salon.", ephemeral=True)
                 return
 
-            # ... rest of your callback logic ...
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -497,14 +510,19 @@ class AdminCog(commands.Cog):
                 if self.select_type == "game_channel":
                     state.game_channel_id = selected_channel_id
                 
-                db.commit()
+                try:
+                    db.commit()
+                    db.refresh(state) # Recharger l'état
 
-                cog = interaction.client.get_cog("AdminCog")
-                await interaction.response.edit_message(
-                    embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id, interaction.guild)
-                )
-                await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
+                    cog = interaction.client.get_cog("AdminCog")
+                    await interaction.response.edit_message(
+                        embed=cog.generate_role_and_channel_config_embed(state),
+                        view=cog.generate_general_config_view(self.guild_id, interaction.guild)
+                    )
+                    await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
+                except Exception as e:
+                    db.rollback()
+                    await interaction.response.send_message(f"Erreur lors de la sauvegarde : {e}", ephemeral=True)
             else:
                 await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
             
