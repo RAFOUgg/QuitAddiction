@@ -97,17 +97,17 @@ class AdminCog(commands.Cog):
         game_status = "En cours" if state.game_started else "Non lancée"
 
         # Sections de configuration générale
-        # Ici, chaque information est sur sa propre ligne avec inline=False pour plus de clarté.
-        embed.add_field(name="▶️ Statut du Jeu", value=f"{game_status}", inline=False)
-        embed.add_field(name="👑 Rôle Admin", value=admin_role_mention, inline=False) # Chaque champ sur sa propre ligne
-        embed.add_field(name="🔔 Rôle de Notification", value=notification_role_mention, inline=False)
-        embed.add_field(name="🎮 Salon de Jeu Principal", value=game_channel_mention, inline=False) 
+        embed.add_field(name="▶️ Statut du Jeu", value=f"`{game_status}`", inline=False) # Le statut sur sa propre ligne
+        
+        embed.add_field(name="👑 Rôle Admin", value=f"`{admin_role_mention}`", inline=True)
+        embed.add_field(name="🔔 Rôle de Notification", value=f"`{notification_role_mention}`", inline=True)
+        embed.add_field(name="🎮 Salon de Jeu Principal", value=f"`{game_channel_mention}`", inline=False) # Salon sur une nouvelle ligne
         
         # Section Mode et Durée
         embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
-        embed.add_field(name="✨ Mode de Difficulté", value=state.game_mode.capitalize() if state.game_mode else "Medium (Standard)", inline=True) # Essayer de mettre côte à côte si possible
-        embed.add_field(name="⏱️ Durée de Partie", value=self.GAME_DURATIONS.get(state.duration_key, {}).get("label", "Moyen (31 jours)") if state.duration_key else "Moyen (31 jours)", inline=True)
-        embed.add_field(name="⏰ Intervalle Tick (min)", value=f"`{state.game_tick_interval_minutes}`" if state.game_tick_interval_minutes is not None else "`30 (Défaut)`", inline=False) # Forcer retour à la ligne
+        embed.add_field(name="✨ Mode de Difficulté", value=f"`{state.game_mode.capitalize() if state.game_mode else 'Medium (Standard)'}`", inline=True)
+        embed.add_field(name="⏱️ Durée de Partie", value=f"`{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Moyen (31 jours)') if state.duration_key else 'Moyen (31 jours)'}`", inline=True)
+        embed.add_field(name="⏰ Intervalle Tick (min)", value=f"`{state.game_tick_interval_minutes}`" if state.game_tick_interval_minutes is not None else "`30 (Défaut)`", inline=False) # Force retour à la ligne
         
         # Section Dégradations par Tick (en deux colonnes)
         embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
