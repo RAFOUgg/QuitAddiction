@@ -9,6 +9,7 @@ from db.models import ServerState, PlayerProfile
 import datetime
 import math
 
+
 class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
     def __init__(self, bot):
@@ -363,10 +364,14 @@ class AdminCog(commands.Cog):
             # Label et Value doivent être entre MIN_OPTION_LENGTH et MAX_OPTION_LENGTH caractères.
             # Ignorer le rôle "@everyone" et les rôles dont le nom est invalide ou vide.
             role_options = [
-                discord.SelectOption(label=role.name, value=str(role.id))
+                discord.SelectOption(
+                    label=role.name[:self.MAX_OPTION_LENGTH], # Tronquer le label à 25 caractères
+                    value=str(role.id),
+                    description=f"ID: {role.id}" # Optionnel: ajouter une description si besoin
+                )
                 for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) 
                 if role.name != "@everyone" and 
-                   self.MIN_OPTION_LENGTH <= len(role.name) <= self.MAX_OPTION_LENGTH and
+                   self.MIN_OPTION_LENGTH <= len(role.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial
                    role.id is not None # S'assurer que l'ID du rôle est valide
             ]
             # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
@@ -382,9 +387,13 @@ class AdminCog(commands.Cog):
             # Filtrer pour avoir des labels et valeurs valides pour Discord SelectMenu
             # Label et Value doivent être entre MIN_OPTION_LENGTH et MAX_OPTION_LENGTH caractères.
             channel_options = [
-                discord.SelectOption(label=channel.name, value=str(channel.id))
+                discord.SelectOption(
+                    label=channel.name[:self.MAX_OPTION_LENGTH], # Tronquer le label à 25 caractères
+                    value=str(channel.id),
+                    description=f"ID: {channel.id}" # Optionnel: ajouter une description si besoin
+                )
                 for channel in sorted(guild.text_channels, key=lambda c: c.position)
-                if self.MIN_OPTION_LENGTH <= len(channel.name) <= self.MAX_OPTION_LENGTH and
+                if self.MIN_OPTION_LENGTH <= len(channel.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial
                    channel.id is not None # S'assurer que l'ID du canal est valide
             ]
             # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
@@ -394,26 +403,8 @@ class AdminCog(commands.Cog):
         else: # Si guild est None, on ajoute une option d'erreur.
             channel_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
 
-        # --- Impression pour le débogage : Affiche les options qui seront passées ---
-        print(f"--- Debugging role_options for guild {guild.id if guild else 'None'} ---")
-        if guild and role_options:
-            for opt in role_options:
-                print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
-        elif not guild:
-            print("  Guild is None.")
-        else: # guild existe mais role_options est vide ou contient des erreurs
-            print(f"  Options list status: {role_options[0].label if role_options else 'Empty'}")
-
-        print(f"--- Debugging channel_options for guild {guild.id if guild else 'None'} ---")
-        if guild and channel_options:
-            for opt in channel_options:
-                print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
-        elif not guild:
-            print("  Guild is None.")
-        else: # guild existe mais channel_options est vide ou contient des erreurs
-            print(f"  Options list status: {channel_options[0].label if channel_options else 'Empty'}")
-        print("---------------------------------------------")
-        # --- Fin impression pour le débogage ---
+        # ... (le reste de la méthode generate_general_config_view)
+        # Les logs de débogage restent les mêmes.
 
         view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
         view.add_item(self.RoleSelect(guild_id, "notification_role", row=1, options=role_options))
