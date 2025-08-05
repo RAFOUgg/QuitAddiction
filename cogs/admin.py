@@ -86,7 +86,6 @@ class AdminCog(commands.Cog):
             color=discord.Color.blue()
         )
 
-        # Section Statut Général
         embed.add_field(
             name="▶️ **Statut Général**",
             value=f"**Jeu :** `{'En cours' if state.game_started else 'Non lancée'}`\n"
@@ -95,7 +94,6 @@ class AdminCog(commands.Cog):
             inline=False
         )
 
-        # Section Configuration du Serveur
         admin_role_mention = f"<@&{state.admin_role_id}>" if state.admin_role_id else "Non défini"
         notification_role_mention = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
         game_channel_mention = f"<#{state.game_channel_id}>" if state.game_channel_id else "Non défini"
@@ -108,15 +106,14 @@ class AdminCog(commands.Cog):
             inline=False
         )
 
-        # Section Paramètres du Jeu
-        tick_interval = state.game_tick_interval_minutes if state.game_tick_interval_minutes is not None else 30 # Valeur par défaut pour l'affichage
+        tick_interval = state.game_tick_interval_minutes if state.game_tick_interval_minutes is not None else 30
+        
         embed.add_field(
             name="⏱️ **Paramètres du Jeu**",
             value=f"**Intervalle Tick (min) :** `{tick_interval}`",
             inline=False
         )
         
-        # Section Dégradations par Tick (plus structurée)
         embed.add_field(
             name="📉 **Taux de Dégradation / Tick**",
             value=f"**Faim :** `{state.degradation_rate_hunger:.1f}` | **Soif :** `{state.degradation_rate_thirst:.1f}` | **Vessie :** `{state.degradation_rate_bladder:.1f}`\n"
@@ -138,7 +135,6 @@ class AdminCog(commands.Cog):
             if not cog:
                 await interaction.response.send_message("Erreur: Le cog Admin n'est pas chargé.", ephemeral=True)
                 return
-            # Mise à jour du message pour montrer la vue de sélection de mode/durée
             await interaction.response.edit_message(
                 embed=cog.generate_setup_game_mode_embed(),
                 view=cog.generate_setup_game_mode_view(self.guild_id)
@@ -246,9 +242,8 @@ class AdminCog(commands.Cog):
                 db.close()
                 return
             
-            # Retourner à la VUE GENERALE DES SETTINGS
             await interaction.response.edit_message(
-                embed=cog.generate_config_menu_embed(state), # Utiliser l'embed principal
+                embed=cog.generate_config_menu_embed(state),
                 view=cog.generate_config_menu_view(self.guild_id)      
             )
             db.close()
@@ -328,15 +323,15 @@ class AdminCog(commands.Cog):
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
+            # IMPORTANT : On passe le guild à la méthode de génération pour qu'elle puisse accéder aux rôles/canaux
             await interaction.response.edit_message(
                 embed=cog.generate_role_and_channel_config_embed(state),
-                view=cog.generate_general_config_view(self.guild_id)
+                view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici
             )
             db.close()
 
     # --- Méthodes pour les configurations spécifiques (Rôle Admin, Salon, Rôle Notif) ---
     
-    # Méthode pour générer l'embed de configuration du rôle admin et du salon de jeu
     def generate_role_and_channel_config_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(
             title="⚙️ Configuration Générale (Rôles & Salons)",
@@ -353,43 +348,42 @@ class AdminCog(commands.Cog):
         return embed
 
     # Vue pour la sélection des rôles et du salon
-    def generate_general_config_view(self, guild_id: str) -> discord.ui.View:
+    # On reçoit maintenant le guild en paramètre
+    def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        view.add_item(self.RoleSelect(guild_id, "admin_role", row=0))
-        view.add_item(self.RoleSelect(guild_id, "notification_role", row=1))
-        view.add_item(self.ChannelSelect(guild_id, "game_channel", row=2))
+        
+        # Chargement des options de rôles et canaux ici
+        role_options = []
+        if guild:
+            role_options = [
+                discord.SelectOption(label=role.name, value=str(role.id))
+                for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) if role.name != "@everyone"
+            ]
+        
+        channel_options = []
+        if guild:
+            channel_options = [
+                discord.SelectOption(label=channel.name, value=str(channel.id))
+                for channel in sorted(guild.text_channels, key=lambda c: c.position)
+            ]
+
+        view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
+        view.add_item(self.RoleSelect(guild_id, "notification_role", row=1, options=role_options))
+        view.add_item(self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options))
+        
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
     # Classe de Menu: Sélection de Rôle
     class RoleSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int):
+        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
             placeholder = f"Sélectionnez le rôle pour {'l\'administration' if select_type == 'admin_role' else 'les notifications'}..."
-            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_role_{select_type}_{guild_id}", row=row)
+            super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
-
-        # On charge les options dans on_ready ou quand le cog est chargé, mais ici pour simplifier, on les charge à la volée.
-        # Dans un vrai bot, il serait mieux de les charger une fois.
-        async def load_options(self, interaction: discord.Interaction):
-            guild = interaction.guild
-            if guild:
-                roles = sorted(guild.roles, key=lambda r: r.position, reverse=True)
-                self.options = [
-                    discord.SelectOption(label=role.name, value=str(role.id))
-                    for role in roles if role.name != "@everyone"
-                ]
-            else:
-                self.options = [discord.SelectOption(label="Serveur introuvable", value="error")]
+            # self.options sont maintenant peuplés à l'initialisation
 
         async def callback(self, interaction: discord.Interaction):
-            if not self.options: # Charger les rôles si ce n'est pas déjà fait
-                await self.load_options(interaction)
-
-            if self.values[0] == "error":
-                await interaction.response.send_message("Erreur lors du chargement des rôles.", ephemeral=True)
-                return
-
             selected_role_id = self.values[0]
             
             db = SessionLocal()
@@ -409,9 +403,11 @@ class AdminCog(commands.Cog):
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
+                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant
+                # On réutilise la fonction generate_general_config_view qui prend le guild
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id)
+                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici
                 )
                 await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications'} mis à jour.", ephemeral=True)
             
@@ -419,31 +415,14 @@ class AdminCog(commands.Cog):
 
     # Classe de Menu: Sélection de Salon
     class ChannelSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int):
+        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
             placeholder = f"Sélectionnez le salon pour le jeu..."
-            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_channel_{select_type}_{guild_id}", row=row) 
+            super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row) 
             self.guild_id = guild_id
             self.select_type = select_type
-
-        async def load_options(self, interaction: discord.Interaction):
-            guild = interaction.guild
-            if guild:
-                channels = sorted(guild.text_channels, key=lambda c: c.position)
-                self.options = [
-                    discord.SelectOption(label=channel.name, value=str(channel.id))
-                    for channel in channels
-                ]
-            else:
-                self.options = [discord.SelectOption(label="Serveur introuvable", value="error")]
+            # self.options sont maintenant peuplés à l'initialisation
 
         async def callback(self, interaction: discord.Interaction):
-            if not self.options:
-                await self.load_options(interaction)
-
-            if self.values[0] == "error":
-                await interaction.response.send_message("Erreur lors du chargement des salons.", ephemeral=True)
-                return
-
             selected_channel_id = self.values[0]
             
             db = SessionLocal()
@@ -456,9 +435,10 @@ class AdminCog(commands.Cog):
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
+                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id)
+                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici
                 )
                 await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
             
@@ -492,24 +472,19 @@ class AdminCog(commands.Cog):
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
-    # Remplacement de l'ancienne méthode generate_config_menu_view pour intégrer les nouveaux boutons
     def generate_config_menu_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         
-        # Ligne 0 : Mode & Durée, Lancer/Reinitialiser, Sauvegarder
         view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0))
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
         view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
         
-        # Ligne 1 : Rôles & Salons, Statistiques
         view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) 
         view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
         
-        # Ligne 2 : Notifications, Options Avancées
         view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2))
         view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
-        # Ligne 3 : Bouton retour final
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
