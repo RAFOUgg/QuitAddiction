@@ -1,8 +1,11 @@
-from discord import app_commands
-import discord.ui as ui
+# cogs/admin.py - Début du fichier
+
+import discord # <-- VÉRIFIEZ CETTE LIGNE
 from discord.ext import commands
+from discord import app_commands, ui
 from db.database import SessionLocal
 from db.models import ServerState
+import datetime
 
 class AdminCog(commands.Cog):
     def __init__(self, bot):
