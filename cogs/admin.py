@@ -112,17 +112,15 @@ class AdminCog(commands.Cog):
         embed.add_field(name="---", value="", inline=False) # Séparateur visuel
         embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section
         
-        # Colonne 1 des dégradations avec emojis pour la visibilité
-        # Assurez-vous que ces emojis sont présents dans votre serveur Discord pour qu'ils s'affichent correctement.
-        # Si vous n'avez pas d'emojis personnalisés, vous pouvez utiliser des emojis textuels comme 🍎, 💧, 🩹, ⚡, 😥, 😴 ou les supprimer.
-        embed.add_field(name="🍎 Faim", value=f"**{state.degradation_rate_hunger:.1f}**", inline=True) 
-        embed.add_field(name="💧 Soif", value=f"**{state.degradation_rate_thirst:.1f}**", inline=True)
-        embed.add_field(name=" bladder Vessie", value=f"**{state.degradation_rate_bladder:.1f}**", inline=False) # Sur nouvelle ligne
+        # Colonne 1 des dégradations avec emojis pour la visibilité et formatage
+        embed.add_field(name="🍎 Faim", value=f"`{state.degradation_rate_hunger:.1f}`", inline=True) 
+        embed.add_field(name="💧 Soif", value=f"`{state.degradation_rate_thirst:.1f}`", inline=True)
+        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) # Sur nouvelle ligne
         
         # Colonne 2 des dégradations
-        embed.add_field(name="⚡ Énergie", value=f"**{state.degradation_rate_energy:.1f}**", inline=True) 
-        embed.add_field(name="😥 Stress", value=f"**{state.degradation_rate_stress:.1f}**", inline=True) 
-        embed.add_field(name="😴 Ennui", value=f"**{state.degradation_rate_boredom:.1f}**", inline=True) 
+        embed.add_field(name="⚡ Énergie", value=f"`{state.degradation_rate_energy:.1f}`", inline=True) 
+        embed.add_field(name="😥 Stress", value=f"`{state.degradation_rate_stress:.1f}`", inline=True) 
+        embed.add_field(name="😴 Ennui", value=f"`{state.degradation_rate_boredom:.1f}`", inline=True) 
         
         embed.set_footer(text="Utilisez les boutons ci-dessous pour ajuster les paramètres.")
         return embed
@@ -179,28 +177,25 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None)
         
         # Menu déroulant pour le mode de difficulté
-        # Le row est défini dans __init__ de GameModeSelect
-        view.add_item(self.GameModeSelect(guild_id, "mode")) 
+        view.add_item(self.GameModeSelect(guild_id, "mode", row=0)) 
 
         # Menu déroulant pour la durée
-        # Le row est défini dans __init__ de GameDurationSelect
-        view.add_item(self.GameDurationSelect(guild_id, "duration")) 
+        view.add_item(self.GameDurationSelect(guild_id, "duration", row=1)) 
 
         # Bouton pour retourner à la vue des paramètres de jeu généraux
-        # Le row est défini dans __init__ de BackButton
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2))
         
         return view
 
     # --- Classe de Menu: Mode de Difficulté (Peaceful, Medium, Hard) ---
     class GameModeSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str):
+        def __init__(self, guild_id: str, select_type: str, row: int): # Added row parameter
             options = [
                 discord.SelectOption(label="Peaceful", description="Taux de dégradation bas.", value="peaceful"),
                 discord.SelectOption(label="Medium (Standard)", description="Taux de dégradation standard.", value="medium"),
                 discord.SelectOption(label="Hard", description="Taux de dégradation élevés. Plus difficile.", value="hard")
             ]
-            super().__init__(placeholder="Choisissez le mode de difficulté...", options=options, custom_id=f"select_gamemode_{guild_id}", row=0)
+            super().__init__(placeholder="Choisissez le mode de difficulté...", options=options, custom_id=f"select_gamemode_{guild_id}", row=row)
             self.guild_id = guild_id
 
         async def callback(self, interaction: discord.Interaction):
@@ -229,11 +224,11 @@ class AdminCog(commands.Cog):
 
     # --- Classe de Menu: Durée de Partie (Short, Medium, Long) ---
     class GameDurationSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str):
+        def __init__(self, guild_id: str, select_type: str, row: int): # Added row parameter
             options = []
             # On doit récupérer le cog pour accéder à GAME_DURATIONS. On le fera dans le callback.
             
-            super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=1)
+            super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=row)
             self.guild_id = guild_id
 
         async def callback(self, interaction: discord.Interaction):
