@@ -317,13 +317,77 @@ class AdminCog(commands.Cog):
         
         return view
     
-    # Les classes de boutons/selects (ConfigButton, BackButton, GameModeSelect, GameDurationSelect, SetupGameModeButton)
-    # doivent TOUTES être DÉFINIES DANS CETTE CLASSE AdminCog, ET ELLES Y SONT CORRECTEMENT DÉFINIES.
-    # Donc, si elles ne causent pas d'erreur (type "row argument unexpected"), la structure est bonne.
-    # Si vous les aviez mises à l'extérieur de la classe AdminCog par erreur, c'est là qu'il faudrait les rentrer.
-    # Vu l'historique des erreurs, je pense qu'elles sont déjà à l'intérieur des classes.
+    # --- Bouton pour lancer la partie (adapté pour prendre en compte le mode et la durée) ---
+    class StartGameButton(ui.Button):
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0):
+            super().__init__(label=label, style=style, row=row)
+            self.guild_id = guild_id
 
+        async def callback(self, interaction: discord.Interaction):
+            guild_id_str = str(self.guild_id)
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=guild_id_str).first()
 
-    # --- Il FAUT TOUJOURS appeler le setup à la fin ---
+            if not state:
+                await interaction.response.send_message("Erreur: Paramètres du serveur non trouvés. Utilisez `/config` d'abord.", ephemeral=True)
+                db.close()
+                return
+
+            # Vérifications de configuration minimum
+            if not state.admin_role_id or not state.game_channel_id:
+                await interaction.response.send_message("La configuration est incomplète. Veuillez définir un rôle admin ET un salon de jeu.", ephemeral=True)
+                db.close()
+                return
+            
+            # Vérifier si une partie est déjà lancée
+            if state.game_started:
+                await interaction.response.send_message("Une partie est déjà en cours sur ce serveur.", ephemeral=True)
+                db.close()
+                return
+
+            # --- Préparation pour le lancement de la partie avec les paramètres ---
+            state.game_started = True
+            state.game_start_time = datetime.datetime.utcnow()
+            state.last_update = datetime.datetime.utcnow() # Initialiser last_update pour le Scheduler
+            # Utiliser les paramètres choisis :
+            # Les dégradations et intervalle de tick sont déjà mis dans state si les menus ont été utilisés.
+            # Si ce sont les premiers choix, les valeurs par défaut du modèle s'appliqueront, c'est pourquoi les choix sont importants.
+            # game_mode est aussi dans state.
+
+            db.commit() # Sauvegarder le statut de démarrage et les timings initiaux
+
+            # Récupérer le cog MainEmbed pour son embed principal
+            main_embed_cog = interaction.client.get_cog("MainEmbed")
+            if not main_embed_cog:
+                await interaction.response.send_message("Erreur interne : Le cog MainEmbed n'a pas été trouvé.", ephemeral=True)
+                db.close()
+                return
+
+            # Afficher l'état de départ dans le salon défini
+            game_embed = main_embed_cog.generate_menu_embed(state) # Ici on utilise state qui a été mis à jour
+            game_view = main_embed_cog.generate_main_menu(guild_id_str)
+
+            try:
+                game_channel = interaction.guild.get_channel(int(state.game_channel_id))
+                if not game_channel:
+                    await interaction.response.send_message(f"Le salon de jeu configuré (ID: {state.game_channel_id}) n'a pas été trouvé ou est inaccessible.", ephemeral=True)
+                    state.game_started = False # Annuler le lancement si le channel est perdu
+                    state.game_start_time = None
+                    state.last_update = None
+                    db.commit()
+                    db.close()
+                    return
+                
+                await game_channel.send(f"✨ La partie commence ! Le cuisinier est prêt.\nMode: `{state.game_mode}` ({self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Non défini')}).\nIntervalle Tick: {state.game_tick_interval_minutes} min.\nUtilisez `/menu` ou les boutons pour interagir.", embed=game_embed, view=game_view)
+                await interaction.response.send_message(f"La partie a été lancée avec succès dans {game_channel.mention} !", ephemeral=True)
+            
+            except Exception as e:
+                await interaction.response.send_message(f"Une erreur est survenue lors du lancement de la partie: {e}", ephemeral=True)
+                state.game_started = False # Annuler le lancement en cas d'erreur imprévue
+                state.game_start_time = None
+                state.last_update = None
+                db.commit()
+            finally:
+                db.close()
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))

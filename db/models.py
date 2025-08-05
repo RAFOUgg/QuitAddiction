@@ -14,7 +14,7 @@ class ServerState(Base):
     admin_role_id = Column(String, nullable=True) 
     game_channel_id = Column(String, nullable=True)
     game_started = Column(Boolean, default=False)
-    # Les champs que vous venez d'ajouter
+    duration_key = Column(String, nullable=True, default="medium")
     game_mode = Column(String, default="medium")
     game_tick_interval_minutes = Column(Integer, default=30) 
     game_start_time = Column(DateTime, nullable=True)
