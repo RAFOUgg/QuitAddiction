@@ -126,14 +126,14 @@ class AdminCog(commands.Cog):
         
         # Boutons pour les autres configurations (Lancer, Sauvegarder, Statistiques, etc.)
         # Utilisation de AdminCog.ConfigButton, AdminCog.BackButton etc. pour référencer correctement les classes imbriquées
-        view.add_item(AdminCog.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
-        view.add_item(AdminCog.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
-        view.add_item(AdminCog.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
-        view.add_item(AdminCog.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
-        view.add_item(AdminCog.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
+        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
+        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
+        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
         # Bouton retour à la configuration principale
-        view.add_item(AdminCog.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
 
@@ -220,7 +220,7 @@ class AdminCog(commands.Cog):
     class GameDurationSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
             # Récupérer l'instance du cog Admin pour accéder aux préréglages
-            cog = commands.bot.Bot.get_cog("AdminCog") 
+            cog = self #commands.bot.Bot.get_cog("AdminCog")
             if not cog: 
                 return # Sécurité : si le cog Admin n'est pas chargé, on ne fait rien.
             
