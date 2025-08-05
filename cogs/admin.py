@@ -51,7 +51,7 @@ class AdminCog(commands.Cog):
 
     # Limites pour les labels et valeurs des options de SelectMenu selon Discord API
     MAX_OPTION_LENGTH = 25
-    MIN_OPTION_LENGTH = 1 # Une option ne peut pas être vide
+    MIN_OPTION_LENGTH = 1
 
     # -------------------
     # Commandes Admin (Slash Commands)
@@ -394,6 +394,10 @@ class AdminCog(commands.Cog):
         else: # Si guild est None, on ajoute une option d'erreur
             channel_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
 
+        # --- Impression pour le débogage ---
+        print(f"Debug: Rôle options pour guild {guild_id if guild else 'None'}: {[(opt.label, opt.value) for opt in role_options]}")
+        print(f"Debug: Channel options pour guild {guild_id if guild else 'None'}: {[(opt.label, opt.value) for opt in channel_options]}")
+        # --- Fin impression pour le débogage ---
 
         view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
         view.add_item(self.RoleSelect(guild_id, "notification_role", row=1, options=role_options))
