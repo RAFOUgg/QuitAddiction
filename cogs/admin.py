@@ -10,6 +10,7 @@ import datetime
 import math # Peut être utile pour les calculs de temps
 
 class AdminCog(commands.Cog):
+    """Gestion des configurations du bot et du jeu pour le serveur."""
     def __init__(self, bot):
         self.bot = bot
         # server_channels n'est pas utilisé directement ici car la DB gère l'état du serveur
@@ -129,11 +130,14 @@ class AdminCog(commands.Cog):
         view.add_item(AdminCog.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
         view.add_item(AdminCog.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
         view.add_item(AdminCog.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
-        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
+        # NOTE: Les boutons Notifications et Options Avancées utilisent `self.ConfigButton` au lieu de `AdminCog.ConfigButton`.
+        # Pour que cela fonctionne, la classe ConfigButton doit être définie avant ces appels ou être une classe imbriquée.
+        # Comme ConfigButton est définie après, il faut utiliser le nom de la classe imbriquée `AdminCog.ConfigButton`.
+        view.add_item(AdminCog.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
+        view.add_item(AdminCog.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
         # Bouton retour à la configuration principale
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
+        view.add_item(AdminCog.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
 
@@ -145,6 +149,9 @@ class AdminCog(commands.Cog):
 
         async def callback(self, interaction: discord.Interaction):
             cog = interaction.client.get_cog("AdminCog")
+            if not cog:
+                await interaction.response.send_message("Erreur: Le cog Admin n'est pas chargé.", ephemeral=True)
+                return
             # Mise à jour du message pour montrer la vue de sélection de mode/durée
             await interaction.response.edit_message(
                 embed=cog.generate_setup_game_mode_embed(),
@@ -166,7 +173,7 @@ class AdminCog(commands.Cog):
         
         # Menu déroulant pour le mode de difficulté
         # Utiliser AdminCog.GameModeSelect pour référencer la classe imbriquée
-        mode_select = self.GameModeSelect(guild_id, "mode")
+        mode_select = AdminCog.GameModeSelect(guild_id, "mode")
         view.add_item(mode_select)
 
         # Menu déroulant pour la durée
@@ -219,16 +226,10 @@ class AdminCog(commands.Cog):
     # --- Classe de Menu: Durée de Partie (Short, Medium, Long) ---
     class GameDurationSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
-            # Récupérer l'instance du cog Admin pour accéder aux préréglages
-            cog = self #commands.bot.Bot.get_cog("AdminCog")
-            if not cog: 
-                return # Sécurité : si le cog Admin n'est pas chargé, on ne fait rien.
+            # On doit passer le cog pour accéder à GAME_DURATIONS
+            # On le fera dans le callback pour être sûr qu'il est chargé.
             
             options = []
-            # Créer les options du menu à partir des durées prédéfinies (GAME_DURATIONS)
-            for key, data in cog.GAME_DURATIONS.items():
-                options.append(discord.SelectOption(label=data["label"], value=key, description=f"Durée totale estimée de la partie : {data['days']} jours"))
-                
             # Custom_id unique est bonne pratique pour Discord's UI handling
             super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=1) # row=1 pour la 2ème ligne
             self.guild_id = guild_id
@@ -240,6 +241,11 @@ class AdminCog(commands.Cog):
 
             if state:
                 cog = interaction.client.get_cog("AdminCog")
+                if not cog:
+                    await interaction.response.send_message("Erreur: Le cog Admin n'est pas chargé.", ephemeral=True)
+                    db.close()
+                    return
+                    
                 duration_data = cog.GAME_DURATIONS.get(selected_duration_key) # Récupérer les données de durée
                 
                 if duration_data:
@@ -257,7 +263,7 @@ class AdminCog(commands.Cog):
             db.close()
             
     # --- Bouton de retour vers le Menu Principal des Paramètres (général, pas juste mode/durée) ---
-    class BackButton(ui.Button): # Le nom "BackButton" est correct, car c'est le retour par défaut
+    class BackButton(ui.Button): 
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0): # Le paramètre row est géré ici
             super().__init__(label=label, style=style, row=row)
             self.guild_id = guild_id
@@ -266,12 +272,120 @@ class AdminCog(commands.Cog):
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
             cog = interaction.client.get_cog("AdminCog") # Accéder au cog Admin pour utiliser ses méthodes
+
+            if not cog:
+                await interaction.response.send_message("Erreur: Le cog Admin n'est pas chargé.", ephemeral=True)
+                db.close()
+                return
             
             # Retourner à la VUE GENERALE DES SETTINGS (celle avec les boutons principaux)
+            # Il faut utiliser la méthode qui génère l'embed principal, qui est "generate_config_menu_embed"
+            # La méthode `generate_server_config_embed` n'existe pas dans votre code, il faut utiliser `generate_config_menu_embed`.
             await interaction.response.edit_message(
-                embed=cog.generate_server_config_embed(self.guild_id), # L'embed principal
+                embed=cog.generate_config_menu_embed(state), # L'embed principal
                 view=cog.generate_config_menu_view(self.guild_id)      # La vue principale
             )
             db.close()
+
+    # --- Classe générique pour les boutons de configuration ---
+    # Cette classe est utilisée pour les boutons comme Lancer/Réinitialiser, Sauvegarder, etc.
+    class ConfigButton(ui.Button):
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int):
+            super().__init__(label=label, style=style, row=row)
+            self.guild_id = guild_id
+            self.label = label # Stocker le label pour identifier l'action
+
+        async def callback(self, interaction: discord.Interaction):
+            cog = interaction.client.get_cog("AdminCog")
+            if not cog:
+                await interaction.response.send_message("Erreur: Le cog Admin n'est pas chargé.", ephemeral=True)
+                return
+
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
+
+            if self.label == "🎮 Lancer/Reinitialiser Partie":
+                # Logique pour lancer ou réinitialiser la partie
+                if state:
+                    state.game_started = not state.game_started # Toggle le statut
+                    state.game_start_time = datetime.datetime.utcnow() if state.game_started else None
+                    # Potentiellement réinitialiser les états des joueurs ici aussi
+                    db.commit()
+                    
+                    await interaction.response.edit_message(
+                        embed=cog.generate_config_menu_embed(state),
+                        view=cog.generate_config_menu_view(self.guild_id)
+                    )
+                    await interaction.followup.send(f"La partie a été {'lancée' if state.game_started else 'arrêtée/réinitialisée'}.", ephemeral=True)
+                else:
+                    await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur.", ephemeral=True)
+
+            elif self.label == "💾 Sauvegarder l'État":
+                # Logique pour sauvegarder l'état (qui est déjà fait automatiquement via les commits)
+                # On peut juste envoyer un message de confirmation.
+                await interaction.response.edit_message(
+                    embed=cog.generate_config_menu_embed(state),
+                    view=cog.generate_config_menu_view(self.guild_id)
+                )
+                await interaction.followup.send("L'état actuel a été sauvegardé.", ephemeral=True)
+
+            elif self.label == "📊 Voir Statistiques":
+                # Logique pour afficher les statistiques (qui devrait être une autre méthode/embed)
+                await interaction.response.edit_message(
+                    embed=cog.generate_stats_embed(self.guild_id), # Supposons qu'une telle méthode existe
+                    view=cog.generate_stats_view(self.guild_id)     # Et une vue associée
+                )
+                await interaction.followup.send("Affichage des statistiques...", ephemeral=True)
+
+            elif self.label == "🔔 Notifications":
+                # Logique pour configurer les notifications
+                await interaction.response.edit_message(
+                    embed=cog.generate_notifications_embed(self.guild_id), # Supposons qu'une telle méthode existe
+                    view=cog.generate_notifications_view(self.guild_id)    # Et une vue associée
+                )
+                await interaction.followup.send("Configuration des notifications...", ephemeral=True)
+
+            elif self.label == "🛠️ Options Avancées":
+                # Logique pour les options avancées
+                await interaction.response.edit_message(
+                    embed=cog.generate_advanced_options_embed(self.guild_id), # Supposons qu'une telle méthode existe
+                    view=cog.generate_advanced_options_view(self.guild_id)    # Et une vue associée
+                )
+                await interaction.followup.send("Accès aux options avancées...", ephemeral=True)
+
+            db.close()
+
+    # Placeholder pour les méthodes de génération d'embeds/vues pour les autres sections
+    def generate_stats_embed(self, guild_id: str) -> discord.Embed:
+        # Implémentation à venir
+        embed = discord.Embed(title="📊 Statistiques du Serveur", description="Fonctionnalité en développement.", color=discord.Color.purple())
+        return embed
+    
+    def generate_stats_view(self, guild_id: str) -> discord.ui.View:
+        view = discord.ui.View(timeout=None)
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3))
+        return view
+
+    def generate_notifications_embed(self, guild_id: str) -> discord.Embed:
+        # Implémentation à venir
+        embed = discord.Embed(title="🔔 Paramètres de Notifications", description="Fonctionnalité en développement.", color=discord.Color.green())
+        return embed
+    
+    def generate_notifications_view(self, guild_id: str) -> discord.ui.View:
+        view = discord.ui.View(timeout=None)
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3))
+        return view
+
+    def generate_advanced_options_embed(self, guild_id: str) -> discord.Embed:
+        # Implémentation à venir
+        embed = discord.Embed(title="🛠️ Options Avancées", description="Fonctionnalité en développement.", color=discord.Color.grey())
+        return embed
+    
+    def generate_advanced_options_view(self, guild_id: str) -> discord.ui.View:
+        view = discord.ui.View(timeout=None)
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3))
+        return view
+
+
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
