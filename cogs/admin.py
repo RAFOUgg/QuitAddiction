@@ -352,8 +352,7 @@ class AdminCog(commands.Cog):
         embed.add_field(name="🎮 Salon de Jeu", value=current_game_channel, inline=False)
         return embed
 
-    MAX_OPTION_LENGTH = 25 # Limite pour le label des options
-    MIN_OPTION_LENGTH = 1  # Limite minimale (Discord impose 1)
+    
 
     # Vue pour la sélection des rôles et du salon
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
