@@ -1,8 +1,8 @@
 # --- cogs/admin.py ---
 
 import discord
-from discord.ext import commands, ui # Importez 'ui' pour les SelectMenus et Modals
-from discord import app_commands # Pour les slash commands
+from discord.ext import commands # Importez 'ui' pour les SelectMenus et Modals
+from discord import app_commands, ui # Pour les slash commands
 from db.database import SessionLocal # Assurez-vous que c'est l'import correct de votre SessionLocal
 from db.models import ServerState, PlayerProfile # Nécessaire si vous devez créer des profils ou charger des états
 
