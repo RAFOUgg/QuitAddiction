@@ -42,12 +42,9 @@ class QuitAddictionBot(commands.Bot):
         for filename in os.listdir(f'./{COGS_DIR}'):
             if filename.endswith('.py') and filename != '__init__.py':
                 try:
-                    # S'assure que le fichier existe et est accessible avant de charger l'extension
-                    if os.path.exists(os.path.join(f'./{COGS_DIR}', filename)):
-                        await self.load_extension(f'{COGS_DIR}.{filename[:-3]}')
-                        logging.info(f'✅ Cog chargé : {filename}')
-                    else:
-                        logging.warning(f"Fichier cog non trouvé : {filename}")
+                    # Assurez-vous que le chargement de scheduler est inclus ici !
+                    await self.load_extension(f'{COGS_DIR}.{filename[:-3]}')
+                    logging.info(f'✅ Cog chargé : {filename}')
                 except Exception as e:
                     logging.error(f'❌ Erreur de chargement du cog {filename}: {type(e).__name__} - {e}')
         # Et surtout :
