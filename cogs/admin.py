@@ -132,27 +132,28 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None) # Laisser la vue persistante
         
         # Bouton pour lancer la sélection du mode et de la durée
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary))
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0)) # Row 0
         
         # Boutons pour les autres configurations
-        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
-        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
+        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0)) # Row 0
+        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0)) # Row 0
+        
         # Ajout du bouton pour configurer les rôles et salons
-        # Le Argument 'row' est géré dans __init__ de GeneralConfigButton, mais il faut le spécifier dans add_item
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) 
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2))
-        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) # Row 1
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1)) # Row 1
+        
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2)) # Row 2
+        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2)) # Row 2
         
         # Bouton retour à la configuration principale
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3)) # Row 3
         
         return view
 
     # --- Bouton pour lancer la sous-vue de sélection du Mode et Durée ---
     class SetupGameModeButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle):
-            super().__init__(label=label, style=style, row=0) # Ligne 0 pour les premiers boutons
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int):
+            super().__init__(label=label, style=style, row=row) 
             self.guild_id = guild_id
 
         async def callback(self, interaction: discord.Interaction):
@@ -180,14 +181,15 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None)
         
         # Menu déroulant pour le mode de difficulté
-        mode_select = self.GameModeSelect(guild_id, "mode")
-        view.add_item(mode_select)
+        # Le row est défini dans __init__ de RoleSelect
+        view.add_item(self.GameModeSelect(guild_id, "mode")) 
 
         # Menu déroulant pour la durée
-        duration_select = self.GameDurationSelect(guild_id, "duration")
-        view.add_item(duration_select)
+        # Le row est défini dans __init__ de GameDurationSelect
+        view.add_item(self.GameDurationSelect(guild_id, "duration")) 
 
         # Bouton pour retourner à la vue des paramètres de jeu généraux
+        # Le row est défini dans __init__ de BackButton
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2))
         
         return view
@@ -387,22 +389,19 @@ class AdminCog(commands.Cog):
     # Vue pour la sélection des rôles et du salon
     def generate_general_config_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        # Les rôles de row 0 et 1 pour les menus déroulants
-        # J'ai décalé le row pour éviter le conflit avec le bouton "Lancer/Reinitialiser Partie" qui est row=0.
-        # Il faut s'assurer que les rows ne dépassent pas 4 pour chaque vue.
-        view.add_item(self.RoleSelect(guild_id, "admin_role"))
-        view.add_item(self.RoleSelect(guild_id, "notification_role"))
-        view.add_item(self.ChannelSelect(guild_id, "game_channel"))
-        # Bouton de retour en row 2 pour éviter de surcharger les premières lignes.
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=2))
+        # Les menus déroulants sont sur les lignes 0, 1 et 2 pour éviter les conflits.
+        view.add_item(self.RoleSelect(guild_id, "admin_role", row=0))
+        view.add_item(self.RoleSelect(guild_id, "notification_role", row=1))
+        view.add_item(self.ChannelSelect(guild_id, "game_channel", row=2))
+        # Bouton de retour sur la ligne 3.
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
     # Classe de Menu: Sélection de Rôle
     class RoleSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str):
+        def __init__(self, guild_id: str, select_type: str, row: int): # Added row parameter
             placeholder = f"Sélectionnez un rôle pour {'Admin' if select_type == 'admin_role' else 'Notifications' if select_type == 'notification_role' else 'Rôle'}..."
-            # Les rows sont définis dans generate_general_config_view, donc on les met à 0 par défaut ici.
-            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_role_{select_type}_{guild_id}", row=0 if select_type == "admin_role" else 1)
+            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
 
@@ -437,9 +436,9 @@ class AdminCog(commands.Cog):
 
     # Classe de Menu: Sélection de Salon
     class ChannelSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str):
+        def __init__(self, guild_id: str, select_type: str, row: int): # Added row parameter
             placeholder = f"Sélectionnez un salon pour le jeu..."
-            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_channel_{select_type}_{guild_id}", row=2) # Row 2 pour le salon
+            super().__init__(placeholder=placeholder, options=[], custom_id=f"select_channel_{select_type}_{guild_id}", row=row) 
             self.guild_id = guild_id
             self.select_type = select_type
 
@@ -501,7 +500,7 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None)
         
         # Bouton pour lancer la sélection du mode et de la durée
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary))
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0))
         
         # Boutons pour les autres configurations
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
