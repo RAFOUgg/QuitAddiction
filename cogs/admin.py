@@ -112,15 +112,15 @@ class AdminCog(commands.Cog):
         embed.add_field(name="---", value="", inline=False) # Séparateur visuel
         embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section
         
-        # Colonne 1 des dégradations
-        embed.add_field(name="⬇️ Faim", value=f"{state.degradation_rate_hunger:.1f}", inline=True)
-        embed.add_field(name="⬇️ Soif", value=f"{state.degradation_rate_thirst:.1f}", inline=True)
-        embed.add_field(name="⬇️ Vessie", value=f"{state.degradation_rate_bladder:.1f}", inline=False) # Sur nouvelle ligne
+        # Colonne 1 des dégradations avec emojis pour la visibilité
+        embed.add_field(name="   <:faim:123456789012345678>", value=f"**{state.degradation_rate_hunger:.1f}**", inline=True) # Faim
+        embed.add_field(name="   <:soif:123456789012345679>", value=f"**{state.degradation_rate_thirst:.1f}**", inline=True) # Soif
+        embed.add_field(name="   <:vessie:123456789012345680>", value=f"**{state.degradation_rate_bladder:.1f}**", inline=False) # Vessie, sur nouvelle ligne
         
-        # Colonne 2 des dégradations
-        embed.add_field(name="⬇️ Énergie", value=f"{state.degradation_rate_energy:.1f}", inline=True)
-        embed.add_field(name="⬆️ Stress", value=f"{state.degradation_rate_stress:.1f}", inline=True)
-        embed.add_field(name="⬆️ Ennui", value=f"{state.degradation_rate_boredom:.1f}", inline=True)
+        # Colonne 2 des dégradations avec emojis pour la visibilité
+        embed.add_field(name="   <:energie:123456789012345681>", value=f"**{state.degradation_rate_energy:.1f}**", inline=True) # Énergie
+        embed.add_field(name="   <:stress:123456789012345682>", value=f"**{state.degradation_rate_stress:.1f}**", inline=True) # Stress
+        embed.add_field(name="   <:ennui:123456789012345683>", value=f"**{state.degradation_rate_boredom:.1f}**", inline=True) # Ennui
         
         embed.set_footer(text="Utilisez les boutons ci-dessous pour ajuster les paramètres.")
         return embed
