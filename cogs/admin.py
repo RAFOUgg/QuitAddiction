@@ -64,31 +64,9 @@ class AdminCog(commands.Cog):
     # -------------------
     # Commandes Admin
     # -------------------
-    @commands.command()
-    @commands.has_permissions(administrator=True)
-    async def setchannel(self, ctx, channel: discord.TextChannel):
-        """Définit le salon principal pour les interactions du bot et sauvegarde en DB"""
-        db = SessionLocal()
-        state = db.query(ServerState).filter_by(guild_id=str(ctx.guild.id)).first()
-        if not state:
-            state = ServerState(guild_id=str(ctx.guild.id), main_channel_id=str(channel.id))
-            db.add(state)
-        else:
-            state.main_channel_id = str(channel.id)
-        db.commit()
-        db.close()
-
-        self.server_channels[ctx.guild.id] = channel.id
-        await ctx.send(f"✅ Salon principal défini et sauvegardé : {channel.mention}")
-
-    @commands.command()
-    @commands.has_permissions(administrator=True)
-    async def settings(self, ctx):
-        """Affiche le menu principal des paramètres de la partie"""
-        guild_id = ctx.guild.id
-        embed = self.generate_server_config_embed(ctx.guild.id)
-        view = self.generate_game_settings_view(guild_id)
-        await ctx.send(embed=embed, view=view)
+    @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
+    @app_commands.default_permissions(administrator=True) # Assure que seule une permission d'admin peut l'utiliser
+    async def config(self, interaction: discord.Interaction):
 
     # -------------------
     # Embeds et Vues
