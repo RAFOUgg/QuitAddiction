@@ -130,10 +130,10 @@ class AdminCog(commands.Cog):
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
         view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
         # Ajout du bouton pour configurer les rôles et salons
-        # Le Argument 'row' est géré dans __init__ de GeneralConfigButton
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey)) 
+        # Le Argument 'row' est géré dans __init__ de GeneralConfigButton, mais il faut le spécifier dans add_item
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) 
         view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2))
         view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
         # Bouton retour à la configuration principale
@@ -338,9 +338,9 @@ class AdminCog(commands.Cog):
 
     # --- Classe pour le bouton qui va ouvrir la configuration des rôles et salons ---
     class GeneralConfigButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle):
-            # Le paramètre 'row' n'est pas nécessaire dans le __init__ de ui.Button si vous le définissez dans add_item
-            super().__init__(label=label, style=style) 
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int):
+            # Le paramètre 'row' est maintenant correctement géré dans l'initialisation
+            super().__init__(label=label, style=style, row=row) 
             self.guild_id = guild_id
 
         async def callback(self, interaction: discord.Interaction):
