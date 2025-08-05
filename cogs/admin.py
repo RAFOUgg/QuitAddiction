@@ -113,14 +113,16 @@ class AdminCog(commands.Cog):
         embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section
         
         # Colonne 1 des dégradations avec emojis pour la visibilité
-        embed.add_field(name="   <:faim:123456789012345678>", value=f"**{state.degradation_rate_hunger:.1f}**", inline=True) # Faim
-        embed.add_field(name="   <:soif:123456789012345679>", value=f"**{state.degradation_rate_thirst:.1f}**", inline=True) # Soif
-        embed.add_field(name="   <:vessie:123456789012345680>", value=f"**{state.degradation_rate_bladder:.1f}**", inline=False) # Vessie, sur nouvelle ligne
+        # Assurez-vous que ces emojis sont présents dans votre serveur Discord pour qu'ils s'affichent correctement.
+        # Si vous n'avez pas d'emojis personnalisés, vous pouvez utiliser des emojis textuels comme 🍎, 💧, 🩹, ⚡, 😥, 😴 ou les supprimer.
+        embed.add_field(name="🍎 Faim", value=f"**{state.degradation_rate_hunger:.1f}**", inline=True) 
+        embed.add_field(name="💧 Soif", value=f"**{state.degradation_rate_thirst:.1f}**", inline=True)
+        embed.add_field(name=" bladder Vessie", value=f"**{state.degradation_rate_bladder:.1f}**", inline=False) # Sur nouvelle ligne
         
-        # Colonne 2 des dégradations avec emojis pour la visibilité
-        embed.add_field(name="   <:energie:123456789012345681>", value=f"**{state.degradation_rate_energy:.1f}**", inline=True) # Énergie
-        embed.add_field(name="   <:stress:123456789012345682>", value=f"**{state.degradation_rate_stress:.1f}**", inline=True) # Stress
-        embed.add_field(name="   <:ennui:123456789012345683>", value=f"**{state.degradation_rate_boredom:.1f}**", inline=True) # Ennui
+        # Colonne 2 des dégradations
+        embed.add_field(name="⚡ Énergie", value=f"**{state.degradation_rate_energy:.1f}**", inline=True) 
+        embed.add_field(name="😥 Stress", value=f"**{state.degradation_rate_stress:.1f}**", inline=True) 
+        embed.add_field(name="😴 Ennui", value=f"**{state.degradation_rate_boredom:.1f}**", inline=True) 
         
         embed.set_footer(text="Utilisez les boutons ci-dessous pour ajuster les paramètres.")
         return embed
@@ -386,10 +388,12 @@ class AdminCog(commands.Cog):
     def generate_general_config_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         # Les rôles de row 0 et 1 pour les menus déroulants
+        # J'ai décalé le row pour éviter le conflit avec le bouton "Lancer/Reinitialiser Partie" qui est row=0.
+        # Il faut s'assurer que les rows ne dépassent pas 4 pour chaque vue.
         view.add_item(self.RoleSelect(guild_id, "admin_role"))
         view.add_item(self.RoleSelect(guild_id, "notification_role"))
         view.add_item(self.ChannelSelect(guild_id, "game_channel"))
-        # Bouton de retour en row 2
+        # Bouton de retour en row 2 pour éviter de surcharger les premières lignes.
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=2))
         return view
 
@@ -397,6 +401,7 @@ class AdminCog(commands.Cog):
     class RoleSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
             placeholder = f"Sélectionnez un rôle pour {'Admin' if select_type == 'admin_role' else 'Notifications' if select_type == 'notification_role' else 'Rôle'}..."
+            # Les rows sont définis dans generate_general_config_view, donc on les met à 0 par défaut ici.
             super().__init__(placeholder=placeholder, options=[], custom_id=f"select_role_{select_type}_{guild_id}", row=0 if select_type == "admin_role" else 1)
             self.guild_id = guild_id
             self.select_type = select_type
