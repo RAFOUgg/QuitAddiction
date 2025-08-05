@@ -360,43 +360,48 @@ class AdminCog(commands.Cog):
         role_options = []
         if guild:
             # Filtrer pour avoir des labels et valeurs valides pour Discord SelectMenu
-            # Label et Value doivent être entre 1 et 25 caractères.
-            # Ignorer le rôle "@everyone" et les rôles dont le nom est invalide.
+            # Label et Value doivent être entre MIN_OPTION_LENGTH et MAX_OPTION_LENGTH caractères.
+            # Ignorer le rôle "@everyone" et les rôles dont le nom est invalide ou vide.
             role_options = [
                 discord.SelectOption(label=role.name, value=str(role.id))
                 for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) 
                 if role.name != "@everyone" and 
                    self.MIN_OPTION_LENGTH <= len(role.name) <= self.MAX_OPTION_LENGTH and
-                   str(role.id) # S'assurer que l'ID du rôle est une chaîne non vide
+                   role.id is not None # S'assurer que l'ID du rôle est valide
             ]
-            # Si après filtrage il n'y a plus d'options, on peut ajouter un message indicatif.
+            # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
             if not role_options:
                 role_options.append(discord.SelectOption(label="Aucun rôle valide trouvé", value="no_roles", description="Impossible de trouver des rôles pour la sélection.", default=True))
                 
-        else: # Si guild est None, on ajoute une option d'erreur
+        else: # Si guild est None, on ajoute une option d'erreur.
             role_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
 
         # --- Chargement des options de canaux textuels ---
         channel_options = []
         if guild:
             # Filtrer pour avoir des labels et valeurs valides pour Discord SelectMenu
-            # Label et Value doivent être entre 1 et 25 caractères.
+            # Label et Value doivent être entre MIN_OPTION_LENGTH et MAX_OPTION_LENGTH caractères.
             channel_options = [
                 discord.SelectOption(label=channel.name, value=str(channel.id))
                 for channel in sorted(guild.text_channels, key=lambda c: c.position)
                 if self.MIN_OPTION_LENGTH <= len(channel.name) <= self.MAX_OPTION_LENGTH and
-                   str(channel.id) # S'assurer que l'ID du canal est une chaîne non vide
+                   channel.id is not None # S'assurer que l'ID du canal est valide
             ]
-            # Si après filtrage il n'y a plus d'options, on peut ajouter un message indicatif.
+            # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
             if not channel_options:
                 channel_options.append(discord.SelectOption(label="Aucun salon trouvé", value="no_channels", description="Impossible de trouver des salons textuels.", default=True))
         
-        else: # Si guild est None, on ajoute une option d'erreur
+        else: # Si guild est None, on ajoute une option d'erreur.
             channel_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
 
-        # --- Impression pour le débogage ---
-        print(f"Debug: Rôle options pour guild {guild_id if guild else 'None'}: {[(opt.label, opt.value) for opt in role_options]}")
-        print(f"Debug: Channel options pour guild {guild_id if guild else 'None'}: {[(opt.label, opt.value) for opt in channel_options]}")
+        # --- Impression pour le débogage : Affiche les options qui seront passées ---
+        print(f"--- Debugging role_options for guild {guild.id if guild else 'None'} ---")
+        for opt in role_options:
+            print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
+        print(f"--- Debugging channel_options for guild {guild.id if guild else 'None'} ---")
+        for opt in channel_options:
+            print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
+        print("---------------------------------------------")
         # --- Fin impression pour le débogage ---
 
         view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
