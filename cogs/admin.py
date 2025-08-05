@@ -355,6 +355,7 @@ class AdminCog(commands.Cog):
         # Chargement des options de rôles et canaux ici
         role_options = []
         if guild:
+            # Tri des rôles par position, du plus haut au plus bas (inversé pour le select)
             role_options = [
                 discord.SelectOption(label=role.name, value=str(role.id))
                 for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) if role.name != "@everyone"
@@ -362,11 +363,14 @@ class AdminCog(commands.Cog):
         
         channel_options = []
         if guild:
+            # Tri des salons textuels par position
             channel_options = [
                 discord.SelectOption(label=channel.name, value=str(channel.id))
                 for channel in sorted(guild.text_channels, key=lambda c: c.position)
             ]
 
+        # Si les options sont vides (par ex. guild est None ou aucun rôle/canal trouvé), les select seront vides.
+        # Discord gérera l'affichage du placeholder.
         view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
         view.add_item(self.RoleSelect(guild_id, "notification_role", row=1, options=role_options))
         view.add_item(self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options))
@@ -381,9 +385,14 @@ class AdminCog(commands.Cog):
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
-            # self.options sont maintenant peuplés à l'initialisation
+            # self.options sont maintenant peuplés à l'initialisation, donc pas besoin de les charger dans le callback.
 
         async def callback(self, interaction: discord.Interaction):
+            # Assurons-nous que le guild est toujours valide au moment du callback
+            if not interaction.guild:
+                await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
+                return
+
             selected_role_id = self.values[0]
             
             db = SessionLocal()
@@ -393,23 +402,27 @@ class AdminCog(commands.Cog):
                 if self.select_type == "admin_role":
                     state.admin_role_id = selected_role_id
                 elif self.select_type == "notification_role":
+                    # On s'assure que l'attribut existe, même si on le fait via le modèle, c'est une bonne pratique de vérifier.
                     if hasattr(state, 'notification_role_id'):
                         state.notification_role_id = selected_role_id
                     else:
-                        await interaction.response.send_message("Erreur: L'attribut 'notification_role_id' n'est pas défini.", ephemeral=True)
+                        # Si l'attribut n'existe pas, il y a un problème plus profond dans le modèle ou la migration.
+                        await interaction.response.send_message("Erreur de configuration: L'attribut de rôle de notification n'est pas défini.", ephemeral=True)
                         db.close()
                         return
                 
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
-                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant
-                # On réutilise la fonction generate_general_config_view qui prend le guild
+                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant.
+                # On réutilise la fonction generate_general_config_view qui prend le guild pour recharger les options.
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici
+                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici pour recharger les options
                 )
                 await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications'} mis à jour.", ephemeral=True)
+            else:
+                await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
             
             db.close()
 
@@ -420,9 +433,14 @@ class AdminCog(commands.Cog):
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row) 
             self.guild_id = guild_id
             self.select_type = select_type
-            # self.options sont maintenant peuplés à l'initialisation
+            # self.options sont maintenant peuplés à l'initialisation.
 
         async def callback(self, interaction: discord.Interaction):
+            # Assurons-nous que le guild est toujours valide au moment du callback
+            if not interaction.guild:
+                await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
+                return
+
             selected_channel_id = self.values[0]
             
             db = SessionLocal()
@@ -435,16 +453,19 @@ class AdminCog(commands.Cog):
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
-                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant
+                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant.
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici
+                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici pour recharger les options
                 )
                 await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
+            else:
+                await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
             
             db.close()
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
+    # Ces méthodes sont des placeholders et peuvent être développées plus tard.
     def generate_stats_embed(self, guild_id: str) -> discord.Embed:
         embed = discord.Embed(title="📊 Statistiques du Serveur", description="Fonctionnalité en développement.", color=discord.Color.purple())
         return embed
@@ -472,23 +493,27 @@ class AdminCog(commands.Cog):
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
+    # Méthode principale pour générer la vue du menu de configuration
     def generate_config_menu_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         
+        # Ligne 0 : Mode & Durée, Lancer/Reinitialiser, Sauvegarder
         view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0))
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
         view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
         
+        # Ligne 1 : Rôles & Salons, Statistiques
         view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) 
         view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
         
+        # Ligne 2 : Notifications, Options Avancées
         view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2))
         view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
+        # Ligne 3 : Bouton retour final
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
-
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
