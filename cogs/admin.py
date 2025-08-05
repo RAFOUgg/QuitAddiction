@@ -7,7 +7,7 @@ from db.database import SessionLocal # Assurez-vous que c'est l'import correct d
 from db.models import ServerState, PlayerProfile # Nécessaire si vous devez créer des profils ou charger des états
 
 import datetime
-import math # Peut être utile pour les calculs de temps, non utilisé directement dans ce snippet UI
+import math # Peut être utile pour les calculs de temps
 
 class AdminCog(commands.Cog):
     def __init__(self, bot):
@@ -98,6 +98,7 @@ class AdminCog(commands.Cog):
         embed.add_field(name="▶️ Statut du Jeu", value=game_status, inline=False)
         
         # Informations sur la configuration du Jeu (mode et durée)
+        # Utilisez des valeurs par défaut si state ou les attributs spécifiques ne sont pas définis.
         mode_label = state.game_mode.capitalize() if state.game_mode else "Medium (Standard)"
         duration_label = self.GAME_DURATIONS.get(state.duration_key, {}).get("label", "Moyen (31 jours)") if state.duration_key else "Moyen (31 jours)"
 
@@ -120,9 +121,11 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None) # Laisser la vue persistante
         
         # Bouton pour lancer la sélection du mode et de la durée
+        # Utilisation de AdminCog.SetupGameModeButton pour référencer la classe imbriquée correctement
         view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary))
         
         # Boutons pour les autres configurations (Lancer, Sauvegarder, Statistiques, etc.)
+        # Utilisation de AdminCog.ConfigButton, AdminCog.BackButton etc. pour référencer correctement les classes imbriquées
         view.add_item(AdminCog.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
         view.add_item(AdminCog.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
         view.add_item(AdminCog.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
@@ -162,7 +165,7 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None)
         
         # Menu déroulant pour le mode de difficulté
-        # CECI DOIT ÊTRE INSTANCIÉ EN PASSANT ADMINCOG COMME PARENT OU en référençant la classe parente
+        # Utiliser AdminCog.GameModeSelect pour référencer la classe imbriquée
         mode_select = AdminCog.GameModeSelect(guild_id, "mode") 
         view.add_item(mode_select)
 
@@ -170,7 +173,7 @@ class AdminCog(commands.Cog):
         duration_select = AdminCog.GameDurationSelect(guild_id, "duration")
         view.add_item(duration_select)
 
-        # Bouton Retour (utilisant AdminCog.BackButton)
+        # Bouton pour retourner à la vue des paramètres de jeu généraux
         view.add_item(AdminCog.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2))
         
         return view
@@ -178,13 +181,12 @@ class AdminCog(commands.Cog):
     # --- Classe de Menu: Mode de Difficulté (Peaceful, Medium, Hard) ---
     class GameModeSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
-            # Création des options pour le menu déroulant
             options = [
                 discord.SelectOption(label="Peaceful", description="Taux de dégradation bas.", value="peaceful"),
                 discord.SelectOption(label="Medium (Standard)", description="Taux de dégradation standard.", value="medium"),
                 discord.SelectOption(label="Hard", description="Taux de dégradation élevés. Plus difficile.", value="hard")
             ]
-            # Le 'row=0' est défini dans __init__ de SetupGameModeButton, on peut le répéter ici pour être explicite
+            # L'argument 'row' est utilisé pour contrôler la position du menu dans la vue.
             super().__init__(placeholder="Choisissez le mode de difficulté...", options=options, custom_id=f"select_gamemode_{guild_id}", row=0)
             self.guild_id = guild_id
 
@@ -194,15 +196,15 @@ class AdminCog(commands.Cog):
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
             if state:
-                cog = interaction.client.get_cog("AdminCog")
-                mode_data = cog.GAME_MODES.get(selected_mode)
+                cog = interaction.client.get_cog("AdminCog") # Accéder au cog Admin pour utiliser ses méthodes
+                mode_data = cog.GAME_MODES.get(selected_mode) # Récupérer les données du mode
 
                 if mode_data: # Si le mode choisi existe bien dans GAME_MODES
                     state.game_mode = selected_mode
                     state.game_tick_interval_minutes = mode_data["tick_interval_minutes"]
                     # Mettre à jour tous les taux de dégradation associés au mode
                     for key, value in mode_data["rates"].items():
-                        setattr(state, f"degradation_rate_{key}", value)
+                        setattr(state, f"degradation_rate_{key}", value) # Met à jour les attributs correspondants
                 
                     db.commit() # Sauvegarder les changements en base de données
                     
@@ -217,35 +219,35 @@ class AdminCog(commands.Cog):
     # --- Classe de Menu: Durée de Partie (Short, Medium, Long) ---
     class GameDurationSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str):
+            # Récupérer l'instance du cog Admin pour accéder aux préréglages
             cog = commands.bot.Bot.get_cog("AdminCog") 
-            if not cog: # Vérification de sécurité au cas où le cog n'est pas chargé
-                return 
+            if not cog: 
+                return # Sécurité : si le cog Admin n'est pas chargé, on ne fait rien.
             
             options = []
-            # Créer les options du menu à partir des durées prédéfinies
+            # Créer les options du menu à partir des durées prédéfinies (GAME_DURATIONS)
             for key, data in cog.GAME_DURATIONS.items():
                 options.append(discord.SelectOption(label=data["label"], value=key, description=f"Durée totale estimée de la partie : {data['days']} jours"))
                 
+            # Custom_id unique est bonne pratique pour Discord's UI handling
             super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=1) # row=1 pour la 2ème ligne
             self.guild_id = guild_id
 
         async def callback(self, interaction: discord.Interaction):
-            selected_duration_key = self.values[0] # Clé comme "short", "medium", "long"
+            selected_duration_key = self.values[0] # La clé choisie (ex: "short")
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
             if state:
                 cog = interaction.client.get_cog("AdminCog")
-                duration_data = cog.GAME_DURATIONS.get(selected_duration_key)
+                duration_data = cog.GAME_DURATIONS.get(selected_duration_key) # Récupérer les données de durée
                 
                 if duration_data:
-                    # Sauvegarder la clé de durée choisie.
-                    # NOTE: Le nombre de jours en lui-même (duration_data["days"]) n'est pas directement sauvegardé dans un champ ici.
-                    # On le lit depuis les pré-sets quand on en a besoin. Si vous voulez le sauvegarder pour usage futur,
-                    # ajoutez `game_duration_days` dans models.py et sauvegardez là.
+                    # Sauvegarder la clé de durée choisie dans le state du serveur.
+                    # Le nombre de jours (`duration_data["days"]`) peut être utilisé par le scheduler ou le logic de jeu.
                     state.duration_key = selected_duration_key 
 
-                    db.commit()
+                    db.commit() # Sauvegarder le changement
                     
                     # Mettre à jour le message pour refléter la sélection
                     embed = cog.generate_setup_game_mode_embed()
@@ -256,139 +258,20 @@ class AdminCog(commands.Cog):
             
     # --- Bouton de retour vers le Menu Principal des Paramètres (général, pas juste mode/durée) ---
     class BackButton(ui.Button): # Le nom "BackButton" est correct, car c'est le retour par défaut
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0): # Vous avez déjà mis 'row' ici, c'est bien
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0): # Le paramètre row est géré ici
             super().__init__(label=label, style=style, row=row)
             self.guild_id = guild_id
             
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
-            cog = interaction.client.get_cog("AdminCog") # Recupérer le cog Admin
+            cog = interaction.client.get_cog("AdminCog") # Accéder au cog Admin pour utiliser ses méthodes
             
-            # Ici, on retourne à la VUE GENERALE DES SETTINGS (/config menu)
+            # Retourner à la VUE GENERALE DES SETTINGS (celle avec les boutons principaux)
             await interaction.response.edit_message(
-                embed=cog.generate_server_config_embed(self.guild_id), # Remettre l'embed principal des SETTINGS
-                view=cog.generate_config_menu_view(self.guild_id)      # et la vue principale des SETTINGS
+                embed=cog.generate_server_config_embed(self.guild_id), # L'embed principal
+                view=cog.generate_config_menu_view(self.guild_id)      # La vue principale
             )
             db.close()
-
-    # --- Autres Méthodes Embeds/Vues (les appels vers celles-ci depuis le callback des boutons ConfigButton doivent être ok) ---
-
-    # (Assurez-vous que les autres méthodes comme generate_server_config_embed, generate_game_settings_embed etc. sont bien présentes dans cette classe AdminCog)
-
-    def generate_server_config_embed(self, guild_id: str) -> discord.Embed: # Guild_id doit être string si utilisé pour filtres DB
-        db = SessionLocal()
-        state = db.query(ServerState).filter_by(guild_id=guild_id).first() # OK, mais guild_id_str sera plus sûr
-        db.close()
-
-        if not state:
-            # ... (gestion état absent) ...
-            desc = "Aucune partie n'est encore initialisée pour ce serveur. Configurez les paramètres pour démarrer."
-            embed = discord.Embed(title="⚙️ Paramètres du Serveur", description=desc, color=0x44ff44)
-            return embed
-
-        embed = discord.Embed(title=f"⚙️ Paramètres du serveur {guild_id}", color=0x44ff44)
-        # Ajout du mode et de la durée aux informations affichées ici
-        mode_label = state.game_mode.capitalize() if state.game_mode else "Medium (Standard)"
-        duration_label = self.GAME_DURATIONS.get(state.duration_key, {}).get("label", "Moyen (31 jours)") if state.duration_key else "Moyen (31 jours)"
-        
-        embed.add_field(name="Mode de Difficulté", value=mode_label, inline=True)
-        embed.add_field(name="Durée de Partie", value=duration_label, inline=True)
-        embed.add_field(name="Intervalle Tick (min)", value=f"{state.game_tick_interval_minutes}" if state.game_tick_interval_minutes is not None else "30", inline=False)
-        
-        # ... (reste des fields pour SATATS GLOBALES et les RATES s'ils doivent être affichés ici, ou sur une autre page "options avancées") ...
-
-        return embed
-
-    def generate_game_settings_view(self, guild_id: str) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
-        
-        # Bouton pour lancer la sélection du mode et de la durée (UI dédiée)
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary))
-        
-        # Les autres boutons pour lancer, sauvegarder, etc.
-        view.add_item(AdminCog.ConfigButton("🎮 Lancer/Réinitialiser Partie", guild_id, discord.ButtonStyle.green, row=0))
-        view.add_item(AdminCog.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
-        view.add_item(AdminCog.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
-        view.add_item(AdminCog.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
-        view.add_item(AdminCog.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
-        
-        # Bouton Retour aux paramètres généraux, et non pas à l'embed /config principal
-        view.add_item(AdminCog.BackButton("⬅ Retour Paramètres", guild_id, discord.ButtonStyle.red, row=3))
-        
-        return view
-    
-    # --- Bouton pour lancer la partie (adapté pour prendre en compte le mode et la durée) ---
-    class StartGameButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0):
-            super().__init__(label=label, style=style, row=row)
-            self.guild_id = guild_id
-
-        async def callback(self, interaction: discord.Interaction):
-            guild_id_str = str(self.guild_id)
-            db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=guild_id_str).first()
-
-            if not state:
-                await interaction.response.send_message("Erreur: Paramètres du serveur non trouvés. Utilisez `/config` d'abord.", ephemeral=True)
-                db.close()
-                return
-
-            # Vérifications de configuration minimum
-            if not state.admin_role_id or not state.game_channel_id:
-                await interaction.response.send_message("La configuration est incomplète. Veuillez définir un rôle admin ET un salon de jeu.", ephemeral=True)
-                db.close()
-                return
-            
-            # Vérifier si une partie est déjà lancée
-            if state.game_started:
-                await interaction.response.send_message("Une partie est déjà en cours sur ce serveur.", ephemeral=True)
-                db.close()
-                return
-
-            # --- Préparation pour le lancement de la partie avec les paramètres ---
-            state.game_started = True
-            state.game_start_time = datetime.datetime.utcnow()
-            state.last_update = datetime.datetime.utcnow() # Initialiser last_update pour le Scheduler
-            # Utiliser les paramètres choisis :
-            # Les dégradations et intervalle de tick sont déjà mis dans state si les menus ont été utilisés.
-            # Si ce sont les premiers choix, les valeurs par défaut du modèle s'appliqueront, c'est pourquoi les choix sont importants.
-            # game_mode est aussi dans state.
-
-            db.commit() # Sauvegarder le statut de démarrage et les timings initiaux
-
-            # Récupérer le cog MainEmbed pour son embed principal
-            main_embed_cog = interaction.client.get_cog("MainEmbed")
-            if not main_embed_cog:
-                await interaction.response.send_message("Erreur interne : Le cog MainEmbed n'a pas été trouvé.", ephemeral=True)
-                db.close()
-                return
-
-            # Afficher l'état de départ dans le salon défini
-            game_embed = main_embed_cog.generate_menu_embed(state) # Ici on utilise state qui a été mis à jour
-            game_view = main_embed_cog.generate_main_menu(guild_id_str)
-
-            try:
-                game_channel = interaction.guild.get_channel(int(state.game_channel_id))
-                if not game_channel:
-                    await interaction.response.send_message(f"Le salon de jeu configuré (ID: {state.game_channel_id}) n'a pas été trouvé ou est inaccessible.", ephemeral=True)
-                    state.game_started = False # Annuler le lancement si le channel est perdu
-                    state.game_start_time = None
-                    state.last_update = None
-                    db.commit()
-                    db.close()
-                    return
-                
-                await game_channel.send(f"✨ La partie commence ! Le cuisinier est prêt.\nMode: `{state.game_mode}` ({self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Non défini')}).\nIntervalle Tick: {state.game_tick_interval_minutes} min.\nUtilisez `/menu` ou les boutons pour interagir.", embed=game_embed, view=game_view)
-                await interaction.response.send_message(f"La partie a été lancée avec succès dans {game_channel.mention} !", ephemeral=True)
-            
-            except Exception as e:
-                await interaction.response.send_message(f"Une erreur est survenue lors du lancement de la partie: {e}", ephemeral=True)
-                state.game_started = False # Annuler le lancement en cas d'erreur imprévue
-                state.game_start_time = None
-                state.last_update = None
-                db.commit()
-            finally:
-                db.close()
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
