@@ -396,11 +396,22 @@ class AdminCog(commands.Cog):
 
         # --- Impression pour le débogage : Affiche les options qui seront passées ---
         print(f"--- Debugging role_options for guild {guild.id if guild else 'None'} ---")
-        for opt in role_options:
-            print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
+        if guild and role_options:
+            for opt in role_options:
+                print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
+        elif not guild:
+            print("  Guild is None.")
+        else: # guild existe mais role_options est vide ou contient des erreurs
+            print(f"  Options list status: {role_options[0].label if role_options else 'Empty'}")
+
         print(f"--- Debugging channel_options for guild {guild.id if guild else 'None'} ---")
-        for opt in channel_options:
-            print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
+        if guild and channel_options:
+            for opt in channel_options:
+                print(f"  Label: '{opt.label}' (Len: {len(opt.label)}), Value: '{opt.value}' (Len: {len(opt.value)})")
+        elif not guild:
+            print("  Guild is None.")
+        else: # guild existe mais channel_options est vide ou contient des erreurs
+            print(f"  Options list status: {channel_options[0].label if channel_options else 'Empty'}")
         print("---------------------------------------------")
         # --- Fin impression pour le débogage ---
 
