@@ -5,7 +5,7 @@ from discord.ext import commands
 from discord import app_commands, ui
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
-
+import hashlib
 import datetime
 import math
 
