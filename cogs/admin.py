@@ -130,7 +130,7 @@ class AdminCog(commands.Cog):
         view.add_item(AdminCog.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
         # Bouton retour à la configuration principale
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
+        view.add_item(AdminCog.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
 
@@ -162,15 +162,16 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None)
         
         # Menu déroulant pour le mode de difficulté
-        mode_select = self.GameModeSelect(guild_id, "mode")
+        # CECI DOIT ÊTRE INSTANCIÉ EN PASSANT ADMINCOG COMME PARENT OU en référençant la classe parente
+        mode_select = AdminCog.GameModeSelect(guild_id, "mode") 
         view.add_item(mode_select)
 
         # Menu déroulant pour la durée
-        duration_select = self.GameDurationSelect(guild_id, "duration")
+        duration_select = AdminCog.GameDurationSelect(guild_id, "duration")
         view.add_item(duration_select)
 
-        # Bouton pour retourner à la vue des paramètres de jeu généraux
-        view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2)) # row=2 pour la ligne après les menus
+        # Bouton Retour (utilisant AdminCog.BackButton)
+        view.add_item(AdminCog.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2))
         
         return view
 
@@ -313,7 +314,7 @@ class AdminCog(commands.Cog):
         view.add_item(AdminCog.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
         # Bouton Retour aux paramètres généraux, et non pas à l'embed /config principal
-        view.add_item(self.BackButton("⬅ Retour Paramètres", guild_id, discord.ButtonStyle.red, row=3))
+        view.add_item(AdminCog.BackButton("⬅ Retour Paramètres", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
     
