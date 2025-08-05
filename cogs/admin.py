@@ -97,28 +97,28 @@ class AdminCog(commands.Cog):
         game_status = "En cours" if state.game_started else "Non lancée"
 
         # Sections de configuration générale
-        # Utilisation stricte de inline=True/False pour contrôler les lignes.
         # Les champs avec inline=False forceront un retour à la ligne.
-        embed.add_field(name="▶️ Statut du Jeu", value=game_status, inline=False) # Force retour à la ligne
+        # Les champs avec inline=True essaieront de se placer sur la même ligne, avec un maximum de 3 par ligne.
+        embed.add_field(name="▶️ Statut du Jeu", value=game_status, inline=False) # Toujours sur sa propre ligne
         
         embed.add_field(name="👑 Rôle Admin", value=admin_role_mention, inline=True)
         embed.add_field(name="🔔 Rôle de Notification", value=notification_role_mention, inline=True)
-        embed.add_field(name="🎮 Salon de Jeu Principal", value=game_channel_mention, inline=False) # Force retour à la ligne
+        embed.add_field(name="🎮 Salon de Jeu Principal", value=game_channel_mention, inline=False) # Force retour à la ligne après les deux inline=True
         
         # Section Mode et Durée
-        embed.add_field(name="---", value="", inline=False) # Séparateur visuel
+        embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel (utilise un espace insécable pour que le champ soit vide)
         embed.add_field(name="✨ Mode de Difficulté", value=state.game_mode.capitalize() if state.game_mode else "Medium (Standard)", inline=True)
         embed.add_field(name="⏱️ Durée de Partie", value=self.GAME_DURATIONS.get(state.duration_key, {}).get("label", "Moyen (31 jours)") if state.duration_key else "Moyen (31 jours)", inline=True)
         embed.add_field(name="⏰ Intervalle Tick (min)", value=f"{state.game_tick_interval_minutes}" if state.game_tick_interval_minutes is not None else "30 (Défaut)", inline=False) # Force retour à la ligne
         
         # Section Dégradations par Tick (en deux colonnes)
-        embed.add_field(name="---", value="", inline=False) # Séparateur visuel
+        embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
         embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section, force retour à la ligne
         
-        # Colonne 1 des dégradations
+        # Colonne 1 des dégradations avec emojis pour la visibilité et formatage
         embed.add_field(name="🍎 Faim", value=f"`{state.degradation_rate_hunger:.1f}`", inline=True) 
         embed.add_field(name="💧 Soif", value=f"`{state.degradation_rate_thirst:.1f}`", inline=True)
-        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) # Sur nouvelle ligne
+        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) # Sur nouvelle ligne pour laisser de la place au 3ème élément inline
         
         # Colonne 2 des dégradations
         embed.add_field(name="⚡ Énergie", value=f"`{state.degradation_rate_energy:.1f}`", inline=True) 
