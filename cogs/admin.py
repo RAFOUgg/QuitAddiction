@@ -49,6 +49,10 @@ class AdminCog(commands.Cog):
         "long": {"days": 72, "label": "Long (72 jours)"},
     }
 
+    # Limites pour les labels et valeurs des options de SelectMenu selon Discord API
+    MAX_OPTION_LENGTH = 25
+    MIN_OPTION_LENGTH = 1 # Une option ne peut pas être vide
+
     # -------------------
     # Commandes Admin (Slash Commands)
     # -------------------
@@ -323,7 +327,7 @@ class AdminCog(commands.Cog):
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
-            # IMPORTANT : On passe le guild à la méthode de génération pour qu'elle puisse accéder aux rôles/canaux
+            # On passe le guild à la méthode de génération pour qu'elle puisse accéder aux rôles/canaux
             await interaction.response.edit_message(
                 embed=cog.generate_role_and_channel_config_embed(state),
                 view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici
@@ -352,25 +356,45 @@ class AdminCog(commands.Cog):
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         
-        # Chargement des options de rôles et canaux ici
+        # --- Chargement des options de rôles ---
         role_options = []
         if guild:
-            # Tri des rôles par position, du plus haut au plus bas (inversé pour le select)
+            # Filtrer pour avoir des labels et valeurs valides pour Discord SelectMenu
+            # Label et Value doivent être entre 1 et 25 caractères.
+            # Ignorer le rôle "@everyone" et les rôles dont le nom est invalide.
             role_options = [
                 discord.SelectOption(label=role.name, value=str(role.id))
-                for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) if role.name != "@everyone"
+                for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) 
+                if role.name != "@everyone" and 
+                   self.MIN_OPTION_LENGTH <= len(role.name) <= self.MAX_OPTION_LENGTH and
+                   str(role.id) # S'assurer que l'ID du rôle est une chaîne non vide
             ]
-        
+            # Si après filtrage il n'y a plus d'options, on peut ajouter un message indicatif.
+            if not role_options:
+                role_options.append(discord.SelectOption(label="Aucun rôle valide trouvé", value="no_roles", description="Impossible de trouver des rôles pour la sélection.", default=True))
+                
+        else: # Si guild est None, on ajoute une option d'erreur
+            role_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
+
+        # --- Chargement des options de canaux textuels ---
         channel_options = []
         if guild:
-            # Tri des salons textuels par position
+            # Filtrer pour avoir des labels et valeurs valides pour Discord SelectMenu
+            # Label et Value doivent être entre 1 et 25 caractères.
             channel_options = [
                 discord.SelectOption(label=channel.name, value=str(channel.id))
                 for channel in sorted(guild.text_channels, key=lambda c: c.position)
+                if self.MIN_OPTION_LENGTH <= len(channel.name) <= self.MAX_OPTION_LENGTH and
+                   str(channel.id) # S'assurer que l'ID du canal est une chaîne non vide
             ]
+            # Si après filtrage il n'y a plus d'options, on peut ajouter un message indicatif.
+            if not channel_options:
+                channel_options.append(discord.SelectOption(label="Aucun salon trouvé", value="no_channels", description="Impossible de trouver des salons textuels.", default=True))
+        
+        else: # Si guild est None, on ajoute une option d'erreur
+            channel_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
 
-        # Si les options sont vides (par ex. guild est None ou aucun rôle/canal trouvé), les select seront vides.
-        # Discord gérera l'affichage du placeholder.
+
         view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
         view.add_item(self.RoleSelect(guild_id, "notification_role", row=1, options=role_options))
         view.add_item(self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options))
@@ -385,12 +409,17 @@ class AdminCog(commands.Cog):
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
-            # self.options sont maintenant peuplés à l'initialisation, donc pas besoin de les charger dans le callback.
+            # self.options sont maintenant peuplés à l'initialisation.
 
         async def callback(self, interaction: discord.Interaction):
             # Assurons-nous que le guild est toujours valide au moment du callback
             if not interaction.guild:
                 await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
+                return
+
+            # Vérifier si l'option sélectionnée est une erreur ou une absence
+            if not self.values or self.values[0] in ["no_roles", "error_guild", "no_channels"]:
+                await interaction.response.send_message("Veuillez sélectionner un rôle valide.", ephemeral=True)
                 return
 
             selected_role_id = self.values[0]
@@ -402,11 +431,9 @@ class AdminCog(commands.Cog):
                 if self.select_type == "admin_role":
                     state.admin_role_id = selected_role_id
                 elif self.select_type == "notification_role":
-                    # On s'assure que l'attribut existe, même si on le fait via le modèle, c'est une bonne pratique de vérifier.
                     if hasattr(state, 'notification_role_id'):
                         state.notification_role_id = selected_role_id
                     else:
-                        # Si l'attribut n'existe pas, il y a un problème plus profond dans le modèle ou la migration.
                         await interaction.response.send_message("Erreur de configuration: L'attribut de rôle de notification n'est pas défini.", ephemeral=True)
                         db.close()
                         return
@@ -439,6 +466,11 @@ class AdminCog(commands.Cog):
             # Assurons-nous que le guild est toujours valide au moment du callback
             if not interaction.guild:
                 await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
+                return
+
+            # Vérifier si l'option sélectionnée est une erreur ou une absence
+            if not self.values or self.values[0] in ["no_channels", "error_guild"]:
+                await interaction.response.send_message("Veuillez sélectionner un salon valide.", ephemeral=True)
                 return
 
             selected_channel_id = self.values[0]
