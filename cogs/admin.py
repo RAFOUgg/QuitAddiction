@@ -352,89 +352,89 @@ class AdminCog(commands.Cog):
         embed.add_field(name="🎮 Salon de Jeu", value=current_game_channel, inline=False)
         return embed
 
-    
-
     # Vue pour la sélection des rôles et du salon
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        
-        # --- Chargement des options de rôles ---
-        role_options = []
-        if guild:
-            # Filtrer pour avoir des labels et valeurs valides pour Discord SelectMenu
-            # Label et Value doivent être entre MIN_OPTION_LENGTH et MAX_OPTION_LENGTH caractères.
-            # Ignorer le rôle "@everyone" et les rôles dont le nom est invalide ou vide.
-            role_options = [
-                discord.SelectOption(
-                    label=role.name[:self.MAX_OPTION_LENGTH], # TRONQUE LE LABEL ici
-                    value=str(role.id),
-                    description=f"ID: {role.id}" # Optionnel: ajouter une description si besoin
-                )
-                for role in sorted(guild.roles, key=lambda r: r.position, reverse=True) 
-                if role.name != "@everyone" and 
-                   self.MIN_OPTION_LENGTH <= len(role.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial, mais le label sera tronqué
-                   role.id is not None # S'assurer que l'ID du rôle est valide
-            ]
-            # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
-            if not role_options:
-                role_options.append(discord.SelectOption(label="Aucun rôle valide", value="no_roles", description="Aucun rôle trouvé.", default=True))
-                
-        else: # Si guild est None, on ajoute une option d'erreur.
-            role_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
 
-        # --- Chargement des options de canaux textuels ---
-        channel_options = []
-        if guild:
-            # Filtrer pour avoir des labels et valeurs valides pour Discord SelectMenu
-            # Label et Value doivent être entre MIN_OPTION_LENGTH et MAX_OPTION_LENGTH caractères.
-            channel_options = [
-                discord.SelectOption(
-                    label=channel.name[:self.MAX_OPTION_LENGTH], # TRONQUE LE LABEL ici
-                    value=str(channel.id),
-                    description=f"ID: {channel.id}" # Optionnel: ajouter une description si besoin
-                )
-                for channel in sorted(guild.text_channels, key=lambda c: c.position)
-                if self.MIN_OPTION_LENGTH <= len(channel.name) <= 100 and # Garder la limite supérieure plus haute ici pour le filtrage initial, mais le label sera tronqué
-                   channel.id is not None # S'assurer que l'ID du canal est valide
-            ]
-            # Si après filtrage il n'y a plus d'options, on ajoute une option par défaut pour indiquer cela.
-            if not channel_options:
-                channel_options.append(discord.SelectOption(label="Aucun salon trouvé", value="no_channels", description="Aucun salon textuel trouvé.", default=True))
-        
-        else: # Si guild est None, on ajoute une option d'erreur.
-            channel_options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
+        # Helper function to create options and a mapping
+        def create_options_and_mapping(items, item_type):
+            options = []
+            id_mapping = {}
+            if guild:
+                for item in sorted(items, key=lambda x: x.position): # Use position for sorting
+                    if item.name != "@everyone" and \
+                       self.MIN_OPTION_LENGTH <= len(item.name) <= 100 and \
+                       item.id is not None:
 
-        # Ajout des SelectMenus à la vue, en utilisant les options préparées
-        # On s'assure que les options sont bien créées pour chaque SelectMenu
-        view.add_item(self.RoleSelect(guild_id, "admin_role", row=0, options=role_options))
-        view.add_item(self.RoleSelect(guild_id, "notification_role", row=1, options=role_options))
-        view.add_item(self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options))
-        
+                        # Truncate label to Discord's max label length
+                        label = item.name[:self.MAX_OPTION_LENGTH]
+                        # Hash and truncate the value to Discord's max value length
+                        # Use a short hash or truncation if MAX_OPTION_LENGTH is too restrictive for a good hash
+                        hashed_value = hashlib.sha256(str(item.id).encode()).hexdigest()
+                        value = hashed_value[:self.MAX_OPTION_LENGTH]
+
+                        options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item.id}"))
+                        id_mapping[value] = str(item.id) # Map the short value to the original ID
+
+                if not options:
+                    options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun item trouvé.", default=True))
+            else:
+                options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
+            return options, id_mapping
+
+        # Generate role options and mapping
+        role_options, role_id_mapping = create_options_and_mapping(guild.roles if guild else [], "role")
+        # Store the mapping in the view or pass it to the callback somehow
+        # A simple way is to attach it to the view itself or the select items if possible.
+        # For simplicity here, we'll create a lambda in the callback to access the mapping.
+
+        # Generate channel options and mapping
+        channel_options, channel_id_mapping = create_options_and_mapping(guild.text_channels if guild else [], "channel")
+
+        # Add SelectMenus to the view
+        role_select_admin = self.RoleSelect(guild_id, "admin_role", row=0, options=role_options)
+        role_select_admin.id_mapping = role_id_mapping # Attach mapping to the item
+        view.add_item(role_select_admin)
+
+        role_select_notif = self.RoleSelect(guild_id, "notification_role", row=1, options=role_options)
+        role_select_notif.id_mapping = role_id_mapping # Attach mapping to the item
+        view.add_item(role_select_notif)
+
+        channel_select_game = self.ChannelSelect(guild_id, "game_channel", row=2, options=channel_options)
+        channel_select_game.id_mapping = channel_id_mapping # Attach mapping to the item
+        view.add_item(channel_select_game)
+
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3))
         return view
 
-    # --- Classe de Menu: Sélection de Rôle ---
+    # ... (Modify RoleSelect and ChannelSelect callbacks to use the mapping) ...
+
     class RoleSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
             placeholder = f"Sélectionnez le rôle pour {'l\'admin' if select_type == 'admin_role' else 'les notifications'}..."
             placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
-            
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
+            self.id_mapping = {} # Placeholder for the mapping
 
         async def callback(self, interaction: discord.Interaction):
-
             if not interaction.guild:
                 await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
                 return
 
-            if not self.values or self.values[0] in ["no_roles", "error_guild", "no_channels"]:
+            if not self.values or self.values[0] in ["no_items", "error_guild"]:
                 await interaction.response.send_message("Veuillez sélectionner un rôle valide.", ephemeral=True)
                 return
 
-            selected_role_id = self.values[0]
-            
+            selected_short_id = self.values[0]
+            # Retrieve the original ID using the mapping
+            selected_role_id = self.id_mapping.get(selected_short_id)
+
+            if not selected_role_id:
+                await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du rôle.", ephemeral=True)
+                return
+
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -448,65 +448,63 @@ class AdminCog(commands.Cog):
                         await interaction.response.send_message("Erreur de configuration: L'attribut de rôle de notification n'est pas défini.", ephemeral=True)
                         db.close()
                         return
-                
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
-
+                # Re-generate the view to ensure mappings are fresh if needed, or pass them correctly
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici pour recharger les options
+                    view=cog.generate_general_config_view(self.guild_id, interaction.guild)
                 )
                 await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications'} mis à jour.", ephemeral=True)
             else:
                 await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
-            
             db.close()
 
-    # Classe de Menu: Sélection de Salon
+
     class ChannelSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
-            # Le placeholder doit aussi être court si jamais
             placeholder = f"Sélectionnez le salon pour le jeu..."
             placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
-            
-            super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row) 
+            super().__init__(placeholder=placeholder, options=options, custom_id=f"select_channel_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
-            # self.options sont maintenant peuplés à l'initialisation.
+            self.id_mapping = {} # Placeholder for the mapping
 
         async def callback(self, interaction: discord.Interaction):
-            # Assurons-nous que le guild est toujours valide au moment du callback
             if not interaction.guild:
                 await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
                 return
 
-            # Vérifier si l'option sélectionnée est une erreur ou une absence
-            if not self.values or self.values[0] in ["no_channels", "error_guild"]:
+            if not self.values or self.values[0] in ["no_items", "error_guild"]:
                 await interaction.response.send_message("Veuillez sélectionner un salon valide.", ephemeral=True)
                 return
 
-            selected_channel_id = self.values[0]
-            
+            selected_short_id = self.values[0]
+            # Retrieve the original ID using the mapping
+            selected_channel_id = self.id_mapping.get(selected_short_id)
+
+            if not selected_channel_id:
+                await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du salon.", ephemeral=True)
+                return
+
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
             if state:
                 if self.select_type == "game_channel":
                     state.game_channel_id = selected_channel_id
-                
+
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
-                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant.
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
-                    view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici pour recharger les options
+                    view=cog.generate_general_config_view(self.guild_id, interaction.guild)
                 )
                 await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
             else:
                 await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
-            
             db.close()
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
