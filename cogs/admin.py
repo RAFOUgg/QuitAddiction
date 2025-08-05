@@ -417,23 +417,19 @@ class AdminCog(commands.Cog):
     # --- Classe de Menu: Sélection de Rôle ---
     class RoleSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption]):
-            # Le placeholder doit aussi être court si jamais
             placeholder = f"Sélectionnez le rôle pour {'l\'admin' if select_type == 'admin_role' else 'les notifications'}..."
-            # On tronque le placeholder si nécessaire, bien que ce soit moins fréquent
             placeholder = placeholder[:AdminCog.MAX_OPTION_LENGTH]
             
             super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
             self.guild_id = guild_id
             self.select_type = select_type
-            # self.options sont maintenant peuplés à l'initialisation.
 
         async def callback(self, interaction: discord.Interaction):
-            # Assurons-nous que le guild est toujours valide au moment du callback
+
             if not interaction.guild:
                 await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
                 return
 
-            # Vérifier si l'option sélectionnée est une erreur ou une absence
             if not self.values or self.values[0] in ["no_roles", "error_guild", "no_channels"]:
                 await interaction.response.send_message("Veuillez sélectionner un rôle valide.", ephemeral=True)
                 return
@@ -457,8 +453,7 @@ class AdminCog(commands.Cog):
                 db.commit()
 
                 cog = interaction.client.get_cog("AdminCog")
-                # Il faut reconstruire la vue car on ne peut pas modifier les options d'un Select existant.
-                # On réutilise la fonction generate_general_config_view qui prend le guild pour recharger les options.
+
                 await interaction.response.edit_message(
                     embed=cog.generate_role_and_channel_config_embed(state),
                     view=cog.generate_general_config_view(self.guild_id, interaction.guild) # Passer le guild ici pour recharger les options
