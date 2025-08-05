@@ -46,8 +46,6 @@ class QuitAddictionBot(commands.Bot):
                     logging.info(f'✅ Cog chargé : {filename}')
                 except Exception as e:
                     logging.error(f'❌ Erreur de chargement du cog {filename}: {type(e).__name__} - {e}')
-
-        await bot.add_cog(AdminCog(bot)) # Charge le cog admin
         # Et surtout :
         if self.test_guild:
             self.tree.copy_global_to(guild=self.test_guild) # Important pour TEST RAPIDE
