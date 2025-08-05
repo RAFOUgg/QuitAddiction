@@ -15,12 +15,6 @@ class MainEmbed(commands.Cog):
     # -------------------
     @commands.command()
     @commands.has_permissions(administrator=True)
-    async def setchannel(self, ctx, channel: discord.TextChannel):
-        self.server_channels[ctx.guild.id] = channel.id
-        await ctx.send(f"✅ Salon principal défini : {channel.mention}")
-
-    @commands.command()
-    @commands.has_permissions(administrator=True)
     async def startgame(self, ctx):
         channel_id = self.server_channels.get(ctx.guild.id, ctx.channel.id)
         channel = self.bot.get_channel(channel_id)
