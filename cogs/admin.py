@@ -122,13 +122,13 @@ class AdminCog(commands.Cog):
         
         # Bouton pour lancer la sélection du mode et de la durée
         # Utilisation de AdminCog.SetupGameModeButton pour référencer la classe imbriquée correctement
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary))
+        view.add_item(AdminCog.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary))
         
         # Boutons pour les autres configurations (Lancer, Sauvegarder, Statistiques, etc.)
         # Utilisation de AdminCog.ConfigButton, AdminCog.BackButton etc. pour référencer correctement les classes imbriquées
-        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
-        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
+        view.add_item(AdminCog.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
+        view.add_item(AdminCog.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
+        view.add_item(AdminCog.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
         view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1))
         view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
@@ -166,7 +166,7 @@ class AdminCog(commands.Cog):
         
         # Menu déroulant pour le mode de difficulté
         # Utiliser AdminCog.GameModeSelect pour référencer la classe imbriquée
-        mode_select = AdminCog.GameModeSelect(guild_id, "mode") 
+        mode_select = self.GameModeSelect(guild_id, "mode")
         view.add_item(mode_select)
 
         # Menu déroulant pour la durée
