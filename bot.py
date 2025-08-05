@@ -47,13 +47,13 @@ class QuitAddictionBot(commands.Bot):
                 except Exception as e:
                     logging.error(f'❌ Erreur de chargement du cog {filename}: {type(e).__name__} - {e}')
 
+        await bot.add_cog(AdminCog(bot)) # Charge le cog admin
+        # Et surtout :
         if self.test_guild:
-            self.tree.copy_global_to(guild=self.test_guild) # <-- Copie des commandes globales à ce serveur test
-            await self.tree.sync(guild=self.test_guild)     # <-- Synchronise sur ce serveur test
-            logging.info(f"Commandes synchronisées avec le serveur de test (ID: {GUILD_ID}).")
+            self.tree.copy_global_to(guild=self.test_guild) # Important pour TEST RAPIDE
+            await self.tree.sync(guild=self.test_guild)
         else:
-            await self.tree.sync()                           # <-- Synchronise les commandes globalement
-            logging.info("Commandes synchronisées globalement.")
+            await self.tree.sync() # Sync global (plus lent)
 
 async def main():
     bot = QuitAddictionBot()
