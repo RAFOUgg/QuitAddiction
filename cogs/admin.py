@@ -132,21 +132,19 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None) # Laisser la vue persistante
         
         # Bouton pour lancer la sélection du mode et de la durée
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0)) # Row 0
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0))
         
         # Boutons pour les autres configurations
-        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0)) # Row 0
-        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0)) # Row 0
-        
+        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
+        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
         # Ajout du bouton pour configurer les rôles et salons
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) # Row 1
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1)) # Row 1
-        
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2)) # Row 2
-        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2)) # Row 2
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) 
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2))
+        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
         # Bouton retour à la configuration principale
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3)) # Row 3
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
 
@@ -181,7 +179,7 @@ class AdminCog(commands.Cog):
         view = discord.ui.View(timeout=None)
         
         # Menu déroulant pour le mode de difficulté
-        # Le row est défini dans __init__ de RoleSelect
+        # Le row est défini dans __init__ de GameModeSelect
         view.add_item(self.GameModeSelect(guild_id, "mode")) 
 
         # Menu déroulant pour la durée
