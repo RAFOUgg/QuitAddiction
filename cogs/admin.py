@@ -96,8 +96,7 @@ class AdminCog(commands.Cog):
         notification_role_mention = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
         game_status = "En cours" if state.game_started else "Non lancée"
 
-        # --- Sections de configuration générale ---
-        # Chaque information est maintenant sur sa propre ligne avec inline=False pour un contrôle total de l'alignement.
+        # Sections de configuration générale - chaque élément sur sa propre ligne pour une meilleure lisibilité
         embed.add_field(name="▶️ Statut du Jeu", value=f"`{game_status}`", inline=False)
         embed.add_field(name="👑 Rôle Admin", value=f"`{admin_role_mention}`", inline=False)
         embed.add_field(name="🔔 Rôle de Notification", value=f"`{notification_role_mention}`", inline=False)
@@ -105,18 +104,19 @@ class AdminCog(commands.Cog):
         
         # Section Mode et Durée
         embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
-        embed.add_field(name="✨ Mode de Difficulté", value=f"`{state.game_mode.capitalize() if state.game_mode else 'Medium (Standard)'}`", inline=False)
-        embed.add_field(name="⏱️ Durée de Partie", value=f"`{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Moyen (31 jours)') if state.duration_key else 'Moyen (31 jours)'}`", inline=False)
-        embed.add_field(name="⏰ Intervalle Tick (min)", value=f"`{state.game_tick_interval_minutes}`" if state.game_tick_interval_minutes is not None else "`30 (Défaut)`", inline=False)
+        embed.add_field(name="✨ Mode de Difficulté", value=f"`{state.game_mode.capitalize() if state.game_mode else 'Medium (Standard)'}`", inline=True)
+        embed.add_field(name="⏱️ Durée de Partie", value=f"`{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Moyen (31 jours)') if state.duration_key else 'Moyen (31 jours)'}`", inline=True)
+        embed.add_field(name="⏰ Intervalle Tick (min)", value=f"`{state.game_tick_interval_minutes}`" if state.game_tick_interval_minutes is not None else "`30 (Défaut)`", inline=False) # Force retour à la ligne
         
         # Section Dégradations par Tick (en deux colonnes)
         embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
-        embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section
+        embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section, force retour à la ligne
         
         # Colonne 1 des dégradations avec nom, emoji, et valeur formatée
         embed.add_field(name="🍎 Faim", value=f"`{state.degradation_rate_hunger:.1f}`", inline=True) 
         embed.add_field(name="💧 Soif", value=f"`{state.degradation_rate_thirst:.1f}`", inline=True)
-        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) # Force nouvelle ligne
+        # Utiliser inline=False pour le dernier élément de la première colonne afin de pousser la colonne suivante sur une nouvelle ligne
+        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) 
         
         # Colonne 2 des dégradations
         embed.add_field(name="⚡ Énergie", value=f"`{state.degradation_rate_energy:.1f}`", inline=True) 
