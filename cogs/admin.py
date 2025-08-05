@@ -1,4 +1,5 @@
-import discord
+from discord import app_commands
+import discord.ui as ui
 from discord.ext import commands
 from db.database import SessionLocal
 from db.models import ServerState
@@ -223,7 +224,7 @@ class AdminCog(commands.Cog):
                 view=cog.generate_game_settings_view(self.guild_id)
             )
             db.close()
-            
+
     def generate_server_config_embed(self, guild_id: int) -> discord.Embed:
         db = SessionLocal()
         state = db.query(ServerState).filter_by(guild_id=str(guild_id)).first()
