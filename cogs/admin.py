@@ -97,12 +97,12 @@ class AdminCog(commands.Cog):
         game_status = "En cours" if state.game_started else "Non lancée"
 
         # Sections de configuration générale
-        embed.add_field(name="▶️ Statut du Jeu", value=f"`{game_status}`", inline=False)
+        embed.add_field(name="▶️ Statut du Jeu", value=f"`{game_status}`", inline=False) # Statut sur sa propre ligne
         
-        # Rôles et Salon, regroupés pour la clarté
+        # Utilisation de inline=True pour grouper les éléments sur une ligne si possible
         embed.add_field(name="👑 Rôle Admin", value=f"`{admin_role_mention}`", inline=True)
         embed.add_field(name="🔔 Rôle de Notification", value=f"`{notification_role_mention}`", inline=True)
-        embed.add_field(name="🎮 Salon de Jeu Principal", value=f"`{game_channel_mention}`", inline=False) # Force retour à la ligne
+        embed.add_field(name="🎮 Salon de Jeu Principal", value=f"`{game_channel_mention}`", inline=False) # Force retour à la ligne après les deux inline=True
         
         # Section Mode et Durée
         embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
@@ -117,7 +117,8 @@ class AdminCog(commands.Cog):
         # Colonne 1 des dégradations avec nom, emoji, et valeur formatée
         embed.add_field(name="🍎 Faim", value=f"`{state.degradation_rate_hunger:.1f}`", inline=True) 
         embed.add_field(name="💧 Soif", value=f"`{state.degradation_rate_thirst:.1f}`", inline=True)
-        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) # Forcer nouvelle ligne
+        # Utiliser inline=False pour le dernier élément de la première colonne afin de pousser la colonne suivante sur une nouvelle ligne
+        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) 
         
         # Colonne 2 des dégradations
         embed.add_field(name="⚡ Énergie", value=f"`{state.degradation_rate_energy:.1f}`", inline=True) 
