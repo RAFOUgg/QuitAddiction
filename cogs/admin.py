@@ -73,50 +73,43 @@ class AdminCog(commands.Cog):
 
         # Envoyer le message interactif principal
         await interaction.response.send_message(
-            embed=self.generate_config_menu_embed(state),
-            view=self.generate_config_menu_view(guild_id_str),
+            embed=self.generate_main_config_embed(state),
+            view=self.generate_main_config_view(guild_id_str),
             ephemeral=True # Rendre le message visible seulement pour l'utilisateur qui lance la commande
         )
         db.close()
 
     # --- Méthodes pour Générer les Embeds et Vues de Configuration ---
     
-    def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
+    def generate_main_config_embed(self, state: ServerState) -> discord.Embed:
         """Génère l'embed principal affichant l'état actuel des configurations."""
         embed = discord.Embed(
-            title="⚙️ Configuration du Bot et du Jeu",
+            title="⚙️ Panneau de Configuration",
             description="Sélectionnez une section à configurer ci-dessous.",
             color=discord.Color.blue()
         )
 
-        # Informations sur la configuration du Bot
-        admin_role_mention = f"<@&{state.admin_role_id}>" if state.admin_role_id else "Non défini"
-        game_channel_mention = f"<#{state.game_channel_id}>" if state.game_channel_id else "Non défini"
-        # Vérifier si notification_role_id existe avant de l'utiliser
-        notification_role_mention = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
-        game_status = "En cours" if state.game_started else "Non lancée"
-
-        # Sections de configuration générale - chaque élément sur sa propre ligne pour une meilleure lisibilité
-        embed.add_field(name="▶️ Statut du Jeu", value=f"`{game_status}`", inline=False)
-        embed.add_field(name="👑 Rôle Admin", value=f"`{admin_role_mention}`", inline=False)
-        embed.add_field(name="🔔 Rôle de Notification", value=f"`{notification_role_mention}`", inline=False)
-        embed.add_field(name="🎮 Salon de Jeu Principal", value=f"`{game_channel_mention}`", inline=False)
+        # --- Section Configuration Générale du Serveur ---
+        embed.add_field(name="🔧 Configuration Serveur", value="\u200b", inline=False) # Titre de section
+        embed.add_field(name="▶️ Statut du Jeu", value=f"`{'En cours' if state.game_started else 'Non lancée'}`", inline=False)
+        embed.add_field(name="👑 Rôle Admin", value=f"`{'<@&' + str(state.admin_role_id) + '>' if state.admin_role_id else 'Non défini'}`", inline=False)
+        embed.add_field(name="🔔 Rôle de Notification", value=f"`{'<@&' + str(state.notification_role_id) + '>' if hasattr(state, 'notification_role_id') and state.notification_role_id else 'Non défini'}`", inline=False)
+        embed.add_field(name="🎮 Salon de Jeu Principal", value=f"`{'<#' + str(state.game_channel_id) + '>' if state.game_channel_id else 'Non défini'}`", inline=False)
         
-        # Section Mode et Durée
+        # Section Configuration de la Partie
         embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
-        embed.add_field(name="✨ Mode de Difficulté", value=f"`{state.game_mode.capitalize() if state.game_mode else 'Medium (Standard)'}`", inline=True)
-        embed.add_field(name="⏱️ Durée de Partie", value=f"`{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Moyen (31 jours)') if state.duration_key else 'Moyen (31 jours)'}`", inline=True)
-        embed.add_field(name="⏰ Intervalle Tick (min)", value=f"`{state.game_tick_interval_minutes}`" if state.game_tick_interval_minutes is not None else "`30 (Défaut)`", inline=False) # Force retour à la ligne
+        embed.add_field(name="✨ Mode de Difficulté", value=f"`{state.game_mode.capitalize() if state.game_mode else 'Medium (Standard)'}`", inline=False)
+        embed.add_field(name="⏱️ Durée de Partie", value=f"`{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Moyen (31 jours)') if state.duration_key else 'Moyen (31 jours)'}`", inline=False)
+        embed.add_field(name="⏰ Intervalle Tick (min)", value=f"`{state.game_tick_interval_minutes}`" if state.game_tick_interval_minutes is not None else "`30 (Défaut)`", inline=False)
         
         # Section Dégradations par Tick (en deux colonnes)
         embed.add_field(name="---", value="\u200b", inline=False) # Séparateur visuel
-        embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section, force retour à la ligne
+        embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section
         
         # Colonne 1 des dégradations avec nom, emoji, et valeur formatée
         embed.add_field(name="🍎 Faim", value=f"`{state.degradation_rate_hunger:.1f}`", inline=True) 
         embed.add_field(name="💧 Soif", value=f"`{state.degradation_rate_thirst:.1f}`", inline=True)
-        # Utiliser inline=False pour le dernier élément de la première colonne afin de pousser la colonne suivante sur une nouvelle ligne
-        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) 
+        embed.add_field(name=" bladder Vessie", value=f"`{state.degradation_rate_bladder:.1f}`", inline=False) # Force nouvelle ligne
         
         # Colonne 2 des dégradations
         embed.add_field(name="⚡ Énergie", value=f"`{state.degradation_rate_energy:.1f}`", inline=True) 
@@ -130,19 +123,20 @@ class AdminCog(commands.Cog):
         """Génère la vue des boutons pour le menu principal de configuration."""
         view = discord.ui.View(timeout=None) # Laisser la vue persistante
         
-        # Bouton pour lancer la sélection du mode et de la durée
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0))
-        
-        # Boutons pour les autres configurations
-        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0))
-        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0))
-        # Ajout du bouton pour configurer les rôles et salons
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1)) 
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1))
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2))
+        # Section Configuration Serveur
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.primary, row=0))
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=0))
+
+        # Section Configuration de la Partie
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.secondary, row=1))
+        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=1))
+        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=1))
+
+        # Section Dégradations & Avancées
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=2))
         view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2))
         
-        # Bouton retour à la configuration principale
+        # Bouton retour
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3))
         
         return view
