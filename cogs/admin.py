@@ -96,25 +96,31 @@ class AdminCog(commands.Cog):
         notification_role_mention = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
         game_status = "En cours" if state.game_started else "Non lancée"
 
-        embed.add_field(name="👑 Rôle Admin", value=admin_role_mention, inline=False)
-        embed.add_field(name="🎮 Salon de Jeu Principal", value=game_channel_mention, inline=False)
-        embed.add_field(name="🔔 Rôle de Notification", value=notification_role_mention, inline=False)
+        # Sections de configuration générale
         embed.add_field(name="▶️ Statut du Jeu", value=game_status, inline=False)
+        embed.add_field(name="👑 Rôle Admin", value=admin_role_mention, inline=True)
+        embed.add_field(name="🔔 Rôle de Notification", value=notification_role_mention, inline=True)
+        embed.add_field(name="🎮 Salon de Jeu Principal", value=game_channel_mention, inline=False) # Salon sur une nouvelle ligne
         
-        # Informations sur la configuration du Jeu (mode et durée)
-        mode_label = state.game_mode.capitalize() if state.game_mode else "Medium (Standard)"
-        duration_label = self.GAME_DURATIONS.get(state.duration_key, {}).get("label", "Moyen (31 jours)") if state.duration_key else "Moyen (31 jours)"
-
-        embed.add_field(name="✨ Mode de Difficulté", value=mode_label, inline=True)
-        embed.add_field(name="⏱️ Durée de Partie", value=duration_label, inline=True)
-        
+        # Section Mode et Durée
+        embed.add_field(name="---", value="", inline=False) # Séparateur visuel
+        embed.add_field(name="✨ Mode de Difficulté", value=state.game_mode.capitalize() if state.game_mode else "Medium (Standard)", inline=True)
+        embed.add_field(name="⏱️ Durée de Partie", value=self.GAME_DURATIONS.get(state.duration_key, {}).get("label", "Moyen (31 jours)") if state.duration_key else "Moyen (31 jours)", inline=True)
         embed.add_field(name="⏰ Intervalle Tick (min)", value=f"{state.game_tick_interval_minutes}" if state.game_tick_interval_minutes is not None else "30 (Défaut)", inline=False)
-        embed.add_field(name="⬇️ Dégrad. Faim/Tick", value=f"{state.degradation_rate_hunger:.1f}", inline=True)
-        embed.add_field(name="⬇️ Dégrad. Soif/Tick", value=f"{state.degradation_rate_thirst:.1f}", inline=True)
-        embed.add_field(name="⬇️ Dégrad. Vessie/Tick", value=f"{state.degradation_rate_bladder:.1f}", inline=False)
-        embed.add_field(name="⬇️ Dégrad. Énergie/Tick", value=f"{state.degradation_rate_energy:.1f}", inline=True)
-        embed.add_field(name="⬆️ Dégrad. Stress/Tick", value=f"{state.degradation_rate_stress:.1f}", inline=True)
-        embed.add_field(name="⬆️ Dégrad. Ennui/Tick", value=f"{state.degradation_rate_boredom:.1f}", inline=True)
+        
+        # Section Dégradations par Tick (en deux colonnes)
+        embed.add_field(name="---", value="", inline=False) # Séparateur visuel
+        embed.add_field(name="📉 Dégradations / Tick", value="", inline=False) # Titre de section
+        
+        # Colonne 1 des dégradations
+        embed.add_field(name="⬇️ Faim", value=f"{state.degradation_rate_hunger:.1f}", inline=True)
+        embed.add_field(name="⬇️ Soif", value=f"{state.degradation_rate_thirst:.1f}", inline=True)
+        embed.add_field(name="⬇️ Vessie", value=f"{state.degradation_rate_bladder:.1f}", inline=False) # Sur nouvelle ligne
+        
+        # Colonne 2 des dégradations
+        embed.add_field(name="⬇️ Énergie", value=f"{state.degradation_rate_energy:.1f}", inline=True)
+        embed.add_field(name="⬆️ Stress", value=f"{state.degradation_rate_stress:.1f}", inline=True)
+        embed.add_field(name="⬆️ Ennui", value=f"{state.degradation_rate_boredom:.1f}", inline=True)
         
         embed.set_footer(text="Utilisez les boutons ci-dessous pour ajuster les paramètres.")
         return embed
