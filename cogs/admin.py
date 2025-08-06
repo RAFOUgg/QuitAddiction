@@ -417,8 +417,8 @@ class AdminCog(commands.Cog):
         
         embed.add_field(
             name="📉 **Taux de Dégradation / Tick**",
-            value=f"**Faim :** `{state.degradation_rate_hunger:.1f}` | **Soif :** `{state.degradation_rate_thirst:.1f}` | **Vessie :** `{state.degradation_rate_bladder:.1f}`\n"
-                  f"**Énergie :** `{state.degradation_rate_energy:.1f}` | **Stress :** `{state.degradation_rate_stress:.1f}` | **Ennui :** `{state.degradation_rate_boredom:.1f}`",
+            value=f"**Faim :** `{state.degradation_rate_hunger:.1f}` | **Soif :** `{state.degradation_rate_thirst:.1f}` \n **Vessie :** `{state.degradation_rate_bladder:.1f}`"
+                  f"**| Énergie :** `{state.degradation_rate_energy:.1f}` \n **Stress :** `{state.degradation_rate_stress:.1f}` | **Ennui :** `{state.degradation_rate_boredom:.1f}`",
             inline=False
         )
         
