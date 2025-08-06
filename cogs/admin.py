@@ -422,39 +422,15 @@ class AdminCog(commands.Cog):
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=180)
-        # Initialiser un compteur pour chaque ligne, pour savoir combien de composants y sont déjà placés.
-        row_counts = [0] * 5 
 
-        # Une fonction helper pour trouver la prochaine ligne disponible et assigner le row au composant
-        # Cette fonction modifie le row du composant et met à jour row_counts.
-        def find_and_assign_row(component: discord.ui.Item):
-            # Si le composant a déjà une ligne assignée et qu'elle est valide (0-4)
-            if component.row is not None and 0 <= component.row < 5:
-                target_row = component.row
-            else: # Sinon, chercher la première ligne disponible
-                target_row = -1
-                for r in range(5): # Chercher une ligne de 0 à 4
-                    if row_counts[r] < MAX_COMPONENTS_PER_ROW:
-                        target_row = r
-                        break
-            
-            # Si une ligne valide a été trouvée (soit spécifiée, soit trouvée)
-            if target_row != -1:
-                component.row = target_row # Assigner le row au composant
-                row_counts[target_row] += 1
-                return True # Indique que le row a été assigné avec succès
-            else:
-                print(f"WARNING: Could not find a free row for component '{getattr(component, 'label', 'unknown')}' with initial row {component.row}. Row counts: {row_counts}")
-                return False # Indique qu'aucune ligne n'a pu être trouvée
-        
-        # --- Prepare Data ---
+        # --- Préparer les données ---
         all_roles = guild.roles if guild else []
         role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
 
         text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
         channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
 
-        # --- Create Pagination Managers ---
+        # --- Créer les gestionnaires paginés ---
         admin_role_manager = self.PaginatedViewManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="admin_role", cog=self, initial_page=0
@@ -468,42 +444,47 @@ class AdminCog(commands.Cog):
             select_type="channel", cog=self, initial_page=0
         )
 
-        # --- Add Components FROM MANAGERS to View ---
-        # Pour chaque composant, on s'assure qu'il a une ligne valide avant de l'ajouter à la vue.
-        
-        # Composants du premier manager (Admin Role)
-        if find_and_assign_row(admin_role_manager.selection_menu):
-            view.add_item(admin_role_manager.selection_menu)
+        # --- Ajouter les composants en respectant la largeur max ---
+        current_row = 0
+
+        # 1. Admin Role
+        admin_role_manager.selection_menu.row = current_row
+        view.add_item(admin_role_manager.selection_menu)
         if admin_role_manager.total_pages > 1:
-            if find_and_assign_row(admin_role_manager.prev_button):
-                view.add_item(admin_role_manager.prev_button)
-            if find_and_assign_row(admin_role_manager.next_button):
-                view.add_item(admin_role_manager.next_button)
+            current_row += 1
+            admin_role_manager.prev_button.row = current_row
+            admin_role_manager.next_button.row = current_row
+            view.add_item(admin_role_manager.prev_button)
+            view.add_item(admin_role_manager.next_button)
 
-        # Composants du second manager (Notification Role)
-        if find_and_assign_row(notification_role_manager.selection_menu):
-            view.add_item(notification_role_manager.selection_menu)
+        # 2. Notification Role
+        current_row += 1
+        notification_role_manager.selection_menu.row = current_row
+        view.add_item(notification_role_manager.selection_menu)
         if notification_role_manager.total_pages > 1:
-            if find_and_assign_row(notification_role_manager.prev_button):
-                view.add_item(notification_role_manager.prev_button)
-            if find_and_assign_row(notification_role_manager.next_button):
-                view.add_item(notification_role_manager.next_button)
+            current_row += 1
+            notification_role_manager.prev_button.row = current_row
+            notification_role_manager.next_button.row = current_row
+            view.add_item(notification_role_manager.prev_button)
+            view.add_item(notification_role_manager.next_button)
 
-        # Composants du troisième manager (Channel)
-        if find_and_assign_row(channel_manager.selection_menu):
-            view.add_item(channel_manager.selection_menu)
+        # 3. Game Channel
+        current_row += 1
+        channel_manager.selection_menu.row = current_row
+        view.add_item(channel_manager.selection_menu)
         if channel_manager.total_pages > 1:
-            if find_and_assign_row(channel_manager.prev_button):
-                view.add_item(channel_manager.prev_button)
-            if find_and_assign_row(channel_manager.next_button):
-                view.add_item(channel_manager.next_button)
+            current_row += 1
+            channel_manager.prev_button.row = current_row
+            channel_manager.next_button.row = current_row
+            view.add_item(channel_manager.prev_button)
+            view.add_item(channel_manager.next_button)
 
-        # Bouton retour - lui donner une ligne initiale (row=2) pour aider find_and_assign_row
+        # 4. Bouton retour (dernière ligne)
+        current_row += 1
         back_button = self.BackButton(
-            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2, cog=self
+            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=current_row, cog=self
         )
-        if find_and_assign_row(back_button):
-            view.add_item(back_button)
+        view.add_item(back_button)
 
         return view
 
