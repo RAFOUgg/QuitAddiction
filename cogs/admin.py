@@ -859,6 +859,11 @@ class AdminCog(commands.Cog):
         return view
 
     # Dans admin.py, dans AdminCog
+        # --- Méthodes pour les configurations spécifiques (Rôle Admin, Salon, Rôle Notif) ---
+    
+    # ... (generate_role_and_channel_config_embed, etc.) ...
+
+    # --- L'EMBED POUR LES PARAMÈTRES DE NOTIFICATIONS ---
     def generate_notifications_embed(self, guild_id: str) -> discord.Embed:
         db = SessionLocal()
         state = db.query(ServerState).filter_by(guild_id=guild_id).first()
@@ -888,73 +893,74 @@ class AdminCog(commands.Cog):
         embed.set_footer(text="Utilisez les boutons ci-dessous pour ajuster les préférences.")
         return embed
     
-    # Dans admin.py, dans AdminCog
-class NotificationToggle(ui.Button):
-    def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog'):
-        super().__init__(label=label, style=style, row=0)
-        self.toggle_key = toggle_key # Ex: "notify_on_low_vital_stat"
-        self.guild_id = guild_id
-        self.cog = cog
-
-    async def callback(self, interaction: discord.Interaction):
-        db = SessionLocal()
-        state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-        
-        if not state:
-            await interaction.response.send_message("Erreur: État du serveur non trouvé.", ephemeral=True)
-            db.close()
-            return
-        
-        # Vérifier si le jeu est en cours pour les modifications de notifications
-        # Vous pouvez décider si les notifications peuvent être gérées pendant une partie ou non.
-        # Si vous voulez le verrouiller :
-        if state.game_started:
-            await interaction.response.send_message("Une partie est en cours. Les préférences de notification sont verrouillées pour le moment.", ephemeral=True)
-            db.close()
-            return
-
-        current_value = getattr(state, self.toggle_key)
-        new_value = not current_value # Inverser la valeur booléenne
-        setattr(state, self.toggle_key, new_value)
-        db.commit()
-        db.refresh(state)
-
-        # Rafraîchir l'embed et la vue
-        await interaction.response.edit_message(
-            embed=self.cog.generate_notifications_embed(self.guild_id),
-            view=self.cog.generate_notifications_view(self.guild_id)
-        )
-        await interaction.followup.send(f"Notifications pour '{self.toggle_key.replace('_', ' ').title()}' réglées sur {'Activé' if new_value else 'Désactivé'}.", ephemeral=True)
-        db.close()
-
+    # --- LA VUE POUR LES PRÉFÉRENCES DE NOTIFICATIONS ---
     def generate_notifications_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=180)
 
-        # Boutons pour activer/désactiver les notifications
-        # Il faut construire les labels et styles dynamiquement en fonction de l'état actuel
         db = SessionLocal()
         state = db.query(ServerState).filter_by(guild_id=guild_id).first()
         db.close()
 
         if state:
+            # Assurez-vous que les noms des attributs correspondent à ceux de votre modèle ServerState
+            # (notify_on_low_vital_stat, notify_on_critical_event, etc.)
             view.add_item(self.NotificationToggle("🔴 Jauges Basses", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, cog=self))
             view.add_item(self.NotificationToggle("🔴 Événement Critique", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, cog=self))
             view.add_item(self.NotificationToggle("🟢 Envie de Fumer", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, cog=self))
             view.add_item(self.NotificationToggle("🔵 Message Ami/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, cog=self))
             view.add_item(self.NotificationToggle("🟠 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.warning if state.notify_on_shop_promo else discord.ButtonStyle.secondary, cog=self))
             
-        # Bouton de sélection du rôle (repris de la partie 1.1)
-        # Il faut récupérer les options de rôles ici pour le select
-        # Pour l'instant, je vais juste ajouter le bouton retour, mais il faudrait intégrer
-        # le select_menu pour le rôle de notification.
-        # Assuming role_options and role_id_mapping are available or fetched
-        # if role_options and role_id_mapping:
-        #     view.add_item(NotificationRoleSelect(guild_id, role_options, role_id_mapping, cog=self))
+        # Le bouton de sélection du rôle pour les notifications devrait être ici aussi
+        # (si vous utilisez PaginatedSelect pour cela, comme pour le rôle admin)
+        # Par exemple :
+        # all_roles = guild.roles if guild else []
+        # role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
+        # notification_role_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
+        # notification_role_select.row = 1 # Ou une autre ligne appropriée
+        # view.add_item(notification_role_select)
+        # Si vous n'utilisez pas PaginatedSelect ici, assurez-vous que le rôle est bien géré.
 
-        # Bouton retour
+        # Bouton retour (assurez-vous que le row est correct pour ne pas interférer avec les autres vues)
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Ajustez le row si nécessaire
 
         return view
+
+    # --- La classe NotificationToggle est aussi ici ---
+    class NotificationToggle(ui.Button):
+        # ... (votre code pour NotificationToggle, qui semble correct) ...
+        def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog'):
+            super().__init__(label=label, style=style, row=0)
+            self.toggle_key = toggle_key
+            self.guild_id = guild_id
+            self.cog = cog
+
+        async def callback(self, interaction: discord.Interaction):
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+            
+            if not state:
+                await interaction.response.send_message("Erreur: État du serveur non trouvé.", ephemeral=True)
+                db.close()
+                return
+            
+            if state.game_started:
+                await interaction.response.send_message("Une partie est en cours. Les préférences de notification sont verrouillées pour le moment.", ephemeral=True)
+                db.close()
+                return
+
+            current_value = getattr(state, self.toggle_key)
+            new_value = not current_value
+            setattr(state, self.toggle_key, new_value)
+            db.commit()
+            db.refresh(state)
+
+            # Rafraîchir l'embed et la vue
+            await interaction.response.edit_message(
+                embed=self.cog.generate_notifications_embed(self.guild_id),
+                view=self.cog.generate_notifications_view(self.guild_id)
+            )
+            await interaction.followup.send(f"Notifications pour '{self.toggle_key.replace('_', ' ').title()}' réglées sur {'Activé' if new_value else 'Désactivé'}.", ephemeral=True)
+            db.close()
 class PaginatedSelect(discord.ui.Select):
         def __init__(self, guild_id: str, select_type: str, options: list[discord.SelectOption], id_mapping: dict, page: int, cog: 'AdminCog'):
             self.guild_id = guild_id
