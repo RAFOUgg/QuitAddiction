@@ -1,3 +1,4 @@
+# Correct docker-compose.yml
 version: '3.8'
 
 services:
@@ -10,8 +11,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./db:/app/db
-      - ./logs:/app/logs # Si vous gardez aussi le changement de logs
-      - ./config:/app/config
+      - ./logs:/app/logs
+      - ./config:/app/config # This was a guess, ensure it's correct
     logging:
       driver: json-file
       options:
