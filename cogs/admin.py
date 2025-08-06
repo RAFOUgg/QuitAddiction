@@ -742,14 +742,12 @@ class NotificationToggle(ui.Button):
         # Ligne 0 : Mode/Durée, Lancer/Réinitialiser, Sauvegarder
         view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) 
-        
-        # Ligne 1 : Rôles & Salons, Statistiques
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1, cog=self)) 
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=0, cog=self)) 
+        # Ligne 1 : Statistiques & Notifs
         view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1, cog=self)) 
-        # Ligne 2 : Statistiques, Sauvegarder
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=2, cog=self)) 
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) 
         # Ligne 3 : Bouton retour final
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3, cog=self)) 
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=2, cog=self)) 
        
         return view
 
