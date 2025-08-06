@@ -12,7 +12,7 @@ from typing import List, Tuple, Dict, Optional
 
 # Constante pour le nombre maximum d'options par page
 MAX_OPTIONS_PER_PAGE = 25 # Discord limite à 25 options par SelectMenu
-MAX_COMPONENTS_PER_ROW = 25
+MAX_COMPONENTS_PER_ROW = 5
 class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
     def __init__(self, bot):
