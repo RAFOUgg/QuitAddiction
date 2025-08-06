@@ -421,30 +421,8 @@ class AdminCog(commands.Cog):
 
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
-        view = discord.ui.View(timeout=180)
-        # Initialiser le compteur de composants pour chaque ligne à 0
-        # Il y a 5 lignes possibles (0 à 4)
-        row_counts = [0] * 5 
-
-        # Helper function to add components, respecting the 5-item limit per row
-        def add_component_to_view(component: discord.ui.Item):
-            # Tenter de placer le composant sur la ligne spécifiée s'il y a de la place
-            if component.row is not None and component.row < 5 and row_counts[component.row] < MAX_COMPONENTS_PER_ROW:
-                view.add_item(component)
-                row_counts[component.row] += 1
-                return True # Ajout réussi
-
-            # Sinon, chercher la première ligne disponible
-            for r in range(5):
-                if row_counts[r] < MAX_COMPONENTS_PER_ROW:
-                    component.row = r # Assigner une nouvelle ligne
-                    view.add_item(component)
-                    row_counts[r] += 1
-                    return True # Ajout réussi
-            
-            # Si aucune ligne n'est disponible
-            print(f"WARNING: Could not add component '{getattr(component, 'label', 'unknown')}' to view - all rows are full.")
-            return False # Échec de l'ajout
+        # Créez la vue principale qui contiendra tous les éléments.
+        view = discord.ui.View(timeout=180) 
 
         # --- Prepare Data ---
         all_roles = guild.roles if guild else []
@@ -454,6 +432,8 @@ class AdminCog(commands.Cog):
         channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
 
         # --- Create Pagination Managers ---
+        # Chaque manager va contenir son propre menu et ses propres boutons de pagination,
+        # avec leurs lignes déjà assignées (row=0 pour le menu, row=1 pour les boutons).
         admin_role_manager = self.PaginatedViewManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="admin_role", cog=self, initial_page=0
@@ -467,31 +447,35 @@ class AdminCog(commands.Cog):
             select_type="channel", cog=self, initial_page=0
         )
 
-        # --- Add Components FROM MANAGERS to View ---
-        # Utiliser add_component_to_view pour ajouter chaque composant
-        # Note: Les managers créent déjà leurs select_menu et boutons avec row=0 et row=1 respectivement.
-        # On s'assure juste que l'ajout respecte les limites.
+        # --- Add Components FROM MANAGERS to the main view ---
+        # Maintenant, au lieu d'appeler add_component_to_view pour chaque élément,
+        # on ajoute simplement les composants du manager à la vue principale.
+        # La logique de row=0 et row=1 est gérée DANS chaque manager.
+        # Discord gère automatiquement le placement des composants s'ils ont leurs lignes bien définies.
 
-        add_component_to_view(admin_role_manager.selection_menu)
+        # Ajout du menu et des boutons de pagination pour les rôles admin
+        view.add_item(admin_role_manager.selection_menu)
         if admin_role_manager.total_pages > 1:
-            add_component_to_view(admin_role_manager.prev_button)
-            add_component_to_view(admin_role_manager.next_button)
+            view.add_item(admin_role_manager.prev_button)
+            view.add_item(admin_role_manager.next_button)
 
-        add_component_to_view(notification_role_manager.selection_menu)
+        # Ajout du menu et des boutons de pagination pour les rôles de notification
+        view.add_item(notification_role_manager.selection_menu)
         if notification_role_manager.total_pages > 1:
-            add_component_to_view(notification_role_manager.prev_button)
-            add_component_to_view(notification_role_manager.next_button)
+            view.add_item(notification_role_manager.prev_button)
+            view.add_item(notification_role_manager.next_button)
 
-        add_component_to_view(channel_manager.selection_menu)
+        # Ajout du menu et des boutons de pagination pour les salons
+        view.add_item(channel_manager.selection_menu)
         if channel_manager.total_pages > 1:
-            add_component_to_view(channel_manager.prev_button)
-            add_component_to_view(channel_manager.next_button)
+            view.add_item(channel_manager.prev_button)
+            view.add_item(channel_manager.next_button)
 
-        # Back Button - Doit être ajouté en dernier pour être potentiellement sur une nouvelle ligne
+        # Ajout du bouton retour
         back_button = self.BackButton(
             "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, cog=self
         )
-        add_component_to_view(back_button)
+        view.add_item(back_button) # Ajout direct du bouton retour
 
         return view
 
