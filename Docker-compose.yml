@@ -8,8 +8,10 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data  # Gardez ceci si vous utilisez le dossier data
-      - ./db:/app/db      # <-- AJOUTEZ CETTE LIGNE POUR PERSISTER LA BASE DE DONNÉES
+      - ./data:/app/data
+      - ./db:/app/db
+      - ./logs:/app/logs # Si vous gardez aussi le changement de logs
+      - ./config:/app/config
     logging:
       driver: json-file
       options:
