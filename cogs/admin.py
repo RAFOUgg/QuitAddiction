@@ -339,26 +339,24 @@ class AdminCog(commands.Cog):
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         
-        # Garder une trace des composants par ligne pour respecter la limite de 5 par ligne.
         components_per_row = [0] * 5 # Initialiser avec 5 lignes, 0 composants chacune
 
         def add_item_to_view(item):
             """Helper pour ajouter un item en trouvant la prochaine ligne disponible."""
             for row_index in range(5):
                 if components_per_row[row_index] < 5:
-                    item.row = row_index # Assigner le row à l'item
+                    # Assigner le row à l'item AVANT de l'ajouter à la vue
+                    item.row = row_index
                     view.add_item(item)
                     components_per_row[row_index] += 1
                     return True
-            print(f"AVERTISSEMENT: Impossible d'ajouter l'item {item.label} car toutes les lignes sont pleines.")
+            print(f"AVERTISSEMENT: Impossible d'ajouter l'item {getattr(item, 'label', 'inconnu')} car toutes les lignes sont pleines.")
             return False
 
-        # --- Création des options et mapping ---
-        # Helper function to create options and a mapping
+        # --- Création des options et mapping (inchangé) ---
         def create_options_and_mapping(items, item_type):
             options = []
             id_mapping = {}
-
             if guild:
                 try:
                     if item_type == "role":
@@ -374,27 +372,19 @@ class AdminCog(commands.Cog):
                 for item in sorted_items:
                     item_id = str(item.id)
                     item_name = item.name
-
                     if item_id is None or not isinstance(item_name, str) or not item_name: continue
-
                     label = item_name[:self.MAX_OPTION_LENGTH]
                     if not label: label = item_id[:self.MAX_OPTION_LENGTH]
                     if not label: continue
-
                     hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
                     value = hashed_id[:self.MAX_OPTION_LENGTH]
                     if not value: continue
-
                     if not (self.MIN_OPTION_LENGTH <= len(label) <= self.MAX_OPTION_LENGTH and self.MIN_OPTION_LENGTH <= len(value) <= self.MAX_OPTION_LENGTH): continue
-
                     options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
                     id_mapping[value] = item_id
-
-                if not options:
-                    options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun élément trouvé.", default=True))
+                if not options: options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun élément trouvé.", default=True))
             else:
                 options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
-            
             return options, id_mapping
 
         all_roles = guild.roles if guild else []
@@ -403,28 +393,29 @@ class AdminCog(commands.Cog):
         text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
         all_channel_options, channel_id_mapping = create_options_and_mapping(text_channels, "channel")
 
-        # --- Création des composants pour les Rôles ---
+        # --- Création des composants ---
+
         # Select pour le Rôle Admin
         role_select_admin = self.RoleSelect(
             guild_id=guild_id,
             select_type="admin_role",
-            # row=0, # On va laisser add_item_to_view s'en occuper
-            options=role_options[:self.MAX_OPTION_LENGTH], # Tronquer au cas où il y aurait plus de 25 rôles
+            # row=0, # Le row est géré par add_item_to_view
+            options=role_options[:self.MAX_OPTION_LENGTH],
             id_mapping=role_id_mapping,
             cog=self
         )
-        add_item_to_view(role_select_admin)
+        add_item_to_view(role_select_admin) # Ajoute sur la première ligne libre
 
         # Select pour le Rôle de Notification
         role_select_notif = self.RoleSelect(
             guild_id=guild_id,
             select_type="notification_role",
-            # row=1,
+            # row=1, # Le row est géré par add_item_to_view
             options=role_options[:self.MAX_OPTION_LENGTH],
             id_mapping=role_id_mapping,
             cog=self
         )
-        add_item_to_view(role_select_notif)
+        add_item_to_view(role_select_notif) # Ajoute sur la prochaine ligne libre
 
         # --- Logique de pagination pour les salons ---
         channel_pagination_manager = self.ChannelPaginationManager(
@@ -443,14 +434,13 @@ class AdminCog(commands.Cog):
             add_item_to_view(channel_pagination_manager.next_button) # S'ajoutera sur la même ligne si possible, sinon sur la suivante
 
         # Bouton de retour
-        # Assurons-nous qu'il y a une ligne libre pour le bouton de retour,
-        # sinon il ne sera pas affiché. Le mieux est de le placer sur une ligne spécifique si possible.
-        # On peut le placer manuellement après avoir ajouté les autres items, en vérifiant qu'il y a de la place.
-        
-        # Pour simplifier, plaçons le bouton de retour explicitement sur la dernière ligne possible.
-        # Si la ligne 3 est déjà pleine, il ne sera pas ajouté.
-        # Le mieux serait de le rendre flexible.
-        back_button = self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, cog=self)
+        back_button = self.BackButton(
+            "⬅ Retour Paramètres Jeu",
+            guild_id,
+            discord.ButtonStyle.secondary,
+            # row=3, # Le row est géré par add_item_to_view
+            cog=self
+        )
         add_item_to_view(back_button) # Il sera ajouté à la première ligne disponible
 
         return view
