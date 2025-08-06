@@ -423,27 +423,28 @@ class AdminCog(commands.Cog):
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=180)
         # Initialiser un compteur pour chaque ligne, pour savoir combien de composants y sont déjà placés.
-        # Ce compteur sera utilisé par la fonction find_and_assign_row.
         row_counts = [0] * 5 
 
         # Une fonction helper pour trouver la prochaine ligne disponible et assigner le row au composant
         # Cette fonction modifie le row du composant et met à jour row_counts.
         def find_and_assign_row(component: discord.ui.Item):
-            if component.row is not None and component.row < 5: # Si un row est déjà spécifié et valide
+            # Si le composant a déjà une ligne assignée et qu'elle est valide (0-4)
+            if component.row is not None and 0 <= component.row < 5:
                 target_row = component.row
             else: # Sinon, chercher la première ligne disponible
                 target_row = -1
-                for r in range(5):
+                for r in range(5): # Chercher une ligne de 0 à 4
                     if row_counts[r] < MAX_COMPONENTS_PER_ROW:
                         target_row = r
                         break
             
+            # Si une ligne valide a été trouvée (soit spécifiée, soit trouvée)
             if target_row != -1:
                 component.row = target_row # Assigner le row au composant
                 row_counts[target_row] += 1
                 return True # Indique que le row a été assigné avec succès
             else:
-                print(f"WARNING: Could not find a free row for component '{getattr(component, 'label', 'unknown')}' with initial row {component.row}.")
+                print(f"WARNING: Could not find a free row for component '{getattr(component, 'label', 'unknown')}' with initial row {component.row}. Row counts: {row_counts}")
                 return False # Indique qu'aucune ligne n'a pu être trouvée
         
         # --- Prepare Data ---
@@ -454,7 +455,6 @@ class AdminCog(commands.Cog):
         channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
 
         # --- Create Pagination Managers ---
-        # Chaque manager crée ses composants avec des rows initiaux (0 pour le menu, 1 pour les boutons).
         admin_role_manager = self.PaginatedViewManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="admin_role", cog=self, initial_page=0
@@ -469,9 +469,8 @@ class AdminCog(commands.Cog):
         )
 
         # --- Add Components FROM MANAGERS to View ---
-        # Pour chaque composant, on utilise find_and_assign_row pour déterminer sa ligne,
-        # puis on l'ajoute à la vue principale.
-
+        # Pour chaque composant, on s'assure qu'il a une ligne valide avant de l'ajouter à la vue.
+        
         # Composants du premier manager (Admin Role)
         if find_and_assign_row(admin_role_manager.selection_menu):
             view.add_item(admin_role_manager.selection_menu)
@@ -645,7 +644,6 @@ class AdminCog(commands.Cog):
             self.cog = cog
 
             # Création des composants avec des lignes initiales.
-            # Le menu est sur la ligne 0.
             if self.select_type in ('admin_role', 'notification_role'):
                 self.selection_menu = AdminCog.RoleSelect(
                     guild_id=self.guild_id, select_type=self.select_type, row=0, 
@@ -660,7 +658,6 @@ class AdminCog(commands.Cog):
             else:
                 raise ValueError(f"Unknown select_type: {self.select_type}")
 
-            # Les boutons de pagination sont sur la ligne 1.
             self.prev_button = ui.Button(
                 label="⬅ Précédent", style=discord.ButtonStyle.secondary,
                 custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}",
@@ -675,21 +672,16 @@ class AdminCog(commands.Cog):
             self.prev_button.callback = self.handle_page_change
             self.next_button.callback = self.handle_page_change
 
-            # Calculer le nombre total de pages
             self.total_pages = math.ceil(len(self.all_options) / MAX_OPTIONS_PER_PAGE) if MAX_OPTIONS_PER_PAGE else 1
             if self.all_options and self.total_pages == 0:
                 self.total_pages = 1
             
-            # Ajuster l'état initial des boutons après calcul de total_pages
             self.prev_button.disabled = self.current_page == 0
             self.next_button.disabled = self.current_page >= self.total_pages - 1 if self.total_pages > 0 else True
 
-
         def update_components(self, interaction: discord.Interaction):
-            # Suppression de l'ancien menu pour le remplacer par celui de la nouvelle page
             self.remove_item(self.selection_menu)
 
-            # Création du nouveau menu pour la page mise à jour (row=0)
             if self.select_type in ('admin_role', 'notification_role'):
                 self.selection_menu = AdminCog.RoleSelect(
                     guild_id=self.guild_id, select_type=self.select_type, row=0, 
@@ -703,9 +695,8 @@ class AdminCog(commands.Cog):
                 )
             else:
                 raise ValueError(f"Unknown select_type: {self.select_type}")
-            self.add_item(self.selection_menu) # Ajout du nouveau menu
+            self.add_item(self.selection_menu)
 
-            # Mise à jour de l'état des boutons de pagination (row=1)
             self.prev_button.disabled = self.current_page == 0
             self.next_button.disabled = self.current_page >= self.total_pages - 1 if self.total_pages > 0 else True
 
@@ -726,6 +717,7 @@ class AdminCog(commands.Cog):
                     await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
+    # ... (reste des méthodes : generate_stats_embed, generate_stats_view, etc.) ...
     def generate_stats_embed(self, guild_id: str) -> discord.Embed:
         embed = discord.Embed(title="📊 Statistiques du Serveur", description="Fonctionnalité en développement.", color=discord.Color.purple())
         return embed
@@ -753,25 +745,26 @@ class AdminCog(commands.Cog):
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Passer self
         return view
 
+
     # Méthode principale pour générer la vue du menu de configuration
     def generate_config_menu_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         
         # Ligne 0 : Mode/Durée, Lancer/Réinitialiser, Sauvegarder
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) # Passer self
-        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) # Passer self
-        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0, cog=self)) # Passer self
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
+        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) 
+        view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0, cog=self)) 
         
         # Ligne 1 : Rôles & Salons, Statistiques
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1, cog=self)) # Passer self
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) # Passer self
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1, cog=self)) 
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) 
         
         # Ligne 2 : Notifications, Options Avancées
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2, cog=self)) # Passer self
-        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2, cog=self)) # Passer self
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2, cog=self)) 
+        view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2, cog=self)) 
         
         # Ligne 3 : Bouton retour final
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3, cog=self)) # Passer self
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3, cog=self)) 
         
         return view
 
