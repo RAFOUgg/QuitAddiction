@@ -1,5 +1,6 @@
 import discord
-from discord.ext import commands, ui
+from discord.ext import commands
+from discord import app_commands, ui
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import hashlib
