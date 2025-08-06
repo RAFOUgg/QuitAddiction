@@ -477,15 +477,15 @@ class AdminCog(commands.Cog):
 
         # --- Create Pagination Managers ---
         # These managers will hold their respective select menus and buttons.
-        admin_role_manager = self.PaginationManager(
+        admin_role_manager = self.ChannelPaginationManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="admin_role", cog=self, initial_page=0
         )
-        notification_role_manager = self.PaginationManager(
+        notification_role_manager = self.ChannelPaginationManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="notification_role", cog=self, initial_page=0
         )
-        channel_manager = self.PaginationManager(
+        channel_manager = self.ChannelPaginationManager(
             guild_id=guild_id, all_options=channel_options, id_mapping=channel_id_mapping,
             select_type="channel", cog=self, initial_page=0
         )
