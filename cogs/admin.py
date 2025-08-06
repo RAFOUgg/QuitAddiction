@@ -408,76 +408,130 @@ class AdminCog(commands.Cog):
         embed.add_field(name="🎮 Salon de Jeu", value=current_game_channel, inline=False)
         return embed
 
+    class PaginatedSelect(discord.ui.Select):
+        def __init__(self, guild_id: str, select_type: str, options: list[discord.SelectOption], id_mapping: dict, page: int, cog: 'AdminCog'):
+            self.guild_id = guild_id
+            self.select_type = select_type
+            self.id_mapping = id_mapping
+            self.page = page
+            self.cog = cog
+
+            self.items_per_page = 24  # 24 vrais éléments + 1 pour navigation
+            self.total_pages = max(1, math.ceil(len(options) / self.items_per_page))
+
+            # Calculer la page courante
+            start = page * self.items_per_page
+            end = start + self.items_per_page
+            page_options = options[start:end]
+
+            # Ajouter la dernière option comme pagination si nécessaire
+            if self.total_pages > 1:
+                if page < self.total_pages - 1:
+                    page_options.append(discord.SelectOption(
+                        label=f"➡ Page suivante ({page+2}/{self.total_pages})",
+                        value="__next_page__"
+                    ))
+                else:
+                    page_options.append(discord.SelectOption(
+                        label=f"↩ Retour page 1/{self.total_pages}",
+                        value="__first_page__"
+                    ))
+
+            placeholder = f"Sélectionnez {'un rôle' if 'role' in select_type else 'un salon'} (Page {page+1}/{self.total_pages})"
+            super().__init__(placeholder=placeholder, options=page_options, custom_id=f"paginated_{select_type}_{guild_id}_p{page}", row=0)
+
+        async def callback(self, interaction: discord.Interaction):
+            selected = self.values[0]
+
+            # --- Pagination ---
+            if selected in ["__next_page__", "__first_page__"]:
+                if selected == "__next_page__":
+                    self.page += 1
+                else:
+                    self.page = 0
+
+                # Rebuild menu for new page
+                parent_view = interaction.message.components[0]  # current View
+                new_select = PaginatedSelect(self.guild_id, self.select_type, list(self.id_mapping.keys()), self.id_mapping, self.page, self.cog)
+                new_view = discord.ui.View(timeout=180)
+                new_view.add_item(new_select)
+                await interaction.response.edit_message(view=new_view)
+                return
+
+            # --- Sélection réelle ---
+            selected_role_id = self.id_mapping.get(selected)
+            if not selected_role_id:
+                await interaction.response.send_message("Erreur: impossible de trouver cet élément.", ephemeral=True)
+                return
+
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+            if state:
+                if self.select_type == "admin_role":
+                    state.admin_role_id = selected_role_id
+                elif self.select_type == "notification_role":
+                    state.notification_role_id = selected_role_id
+                elif self.select_type == "channel":
+                    state.game_channel_id = selected_role_id
+                db.commit()
+
+            await interaction.response.send_message("✅ Sélection mise à jour.", ephemeral=True)
+            db.close()
+
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
+        """
+        Génère la vue de configuration générale (rôles & salons) avec pagination intégrée dans les SelectMenus.
+        """
         view = discord.ui.View(timeout=180)
 
-        # --- Préparer les données ---
+        # --- Préparer les options ---
         all_roles = guild.roles if guild else []
         role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
 
         text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
         channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
 
-        # --- Créer les gestionnaires paginés ---
-        admin_role_manager = self.PaginatedViewManager(
-            guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
-            select_type="admin_role", cog=self, initial_page=0
+        # --- Ajouter les SelectMenus avec pagination intégrée ---
+        admin_role_select = PaginatedSelect(
+            guild_id=guild_id,
+            select_type="admin_role",
+            options=role_options,
+            id_mapping=role_id_mapping,
+            page=0,
+            cog=self
         )
-        notification_role_manager = self.PaginatedViewManager(
-            guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
-            select_type="notification_role", cog=self, initial_page=0
+        notification_role_select = PaginatedSelect(
+            guild_id=guild_id,
+            select_type="notification_role",
+            options=role_options,
+            id_mapping=role_id_mapping,
+            page=0,
+            cog=self
         )
-        channel_manager = self.PaginatedViewManager(
-            guild_id=guild_id, all_options=channel_options, id_mapping=channel_id_mapping,
-            select_type="channel", cog=self, initial_page=0
+        channel_select = PaginatedSelect(
+            guild_id=guild_id,
+            select_type="channel",
+            options=channel_options,
+            id_mapping=channel_id_mapping,
+            page=0,
+            cog=self
         )
 
-        # ---------------------
-        # Ligne 0 : Admin Role Select
-        admin_role_manager.selection_menu.row = 0
-        view.add_item(admin_role_manager.selection_menu)
+        # Chaque SelectMenu sur sa propre ligne
+        admin_role_select.row = 0
+        notification_role_select.row = 1
+        channel_select.row = 2
 
-        # Ligne 1 : Pagination Admin (max 2 boutons)
-        if admin_role_manager.total_pages > 1:
-            admin_role_manager.prev_button.row = 1
-            admin_role_manager.next_button.row = 1
-            view.add_item(admin_role_manager.prev_button)
-            view.add_item(admin_role_manager.next_button)
+        view.add_item(admin_role_select)
+        view.add_item(notification_role_select)
+        view.add_item(channel_select)
 
-        # Ligne 2 : Notification Role Select
-        notification_role_manager.selection_menu.row = 2
-        view.add_item(notification_role_manager.selection_menu)
-
-        # Ligne 3 : Pagination Notification + Channel Select (1+1+5 = 7 > 5) ❌
-        # => On met uniquement la sélection des channels
-        channel_manager.selection_menu.row = 3
-        view.add_item(channel_manager.selection_menu)
-
-        # Ligne 4 : Pagination Notification + Channel Pagination + Bouton Retour
-        components_line4 = []
-
-        if notification_role_manager.total_pages > 1:
-            notification_role_manager.prev_button.row = 4
-            notification_role_manager.next_button.row = 4
-            components_line4.append(notification_role_manager.prev_button)
-            components_line4.append(notification_role_manager.next_button)
-
-        if channel_manager.total_pages > 1:
-            channel_manager.prev_button.row = 4
-            channel_manager.next_button.row = 4
-            components_line4.append(channel_manager.prev_button)
-            components_line4.append(channel_manager.next_button)
-
-        # Bouton retour
+        # --- Bouton Retour ---
         back_button = self.BackButton(
-            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=4, cog=self
+            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self
         )
-        components_line4.append(back_button)
-
-        # Ajouter les composants de la dernière ligne
-        for comp in components_line4[:5]:  # Discord limite à 5 par ligne
-            view.add_item(comp)
+        view.add_item(back_button)
 
         return view
 
