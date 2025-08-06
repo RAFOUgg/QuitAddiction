@@ -444,49 +444,54 @@ class AdminCog(commands.Cog):
             select_type="channel", cog=self, initial_page=0
         )
 
-        # --- Ajouter les composants en respectant la largeur max ---
-        current_row = 0
-
-        # 1. Admin Role
-        admin_role_manager.selection_menu.row = current_row
+        # ---------------------
+        # Ligne 0 : Admin Role Select
+        admin_role_manager.selection_menu.row = 0
         view.add_item(admin_role_manager.selection_menu)
+
+        # Ligne 1 : Pagination Admin (max 2 boutons)
         if admin_role_manager.total_pages > 1:
-            current_row += 1
-            admin_role_manager.prev_button.row = current_row
-            admin_role_manager.next_button.row = current_row
+            admin_role_manager.prev_button.row = 1
+            admin_role_manager.next_button.row = 1
             view.add_item(admin_role_manager.prev_button)
             view.add_item(admin_role_manager.next_button)
 
-        # 2. Notification Role
-        current_row += 1
-        notification_role_manager.selection_menu.row = current_row
+        # Ligne 2 : Notification Role Select
+        notification_role_manager.selection_menu.row = 2
         view.add_item(notification_role_manager.selection_menu)
-        if notification_role_manager.total_pages > 1:
-            current_row += 1
-            notification_role_manager.prev_button.row = current_row
-            notification_role_manager.next_button.row = current_row
-            view.add_item(notification_role_manager.prev_button)
-            view.add_item(notification_role_manager.next_button)
 
-        # 3. Game Channel
-        current_row += 1
-        channel_manager.selection_menu.row = current_row
+        # Ligne 3 : Pagination Notification + Channel Select (1+1+5 = 7 > 5) ❌
+        # => On met uniquement la sélection des channels
+        channel_manager.selection_menu.row = 3
         view.add_item(channel_manager.selection_menu)
-        if channel_manager.total_pages > 1:
-            current_row += 1
-            channel_manager.prev_button.row = current_row
-            channel_manager.next_button.row = current_row
-            view.add_item(channel_manager.prev_button)
-            view.add_item(channel_manager.next_button)
 
-        # 4. Bouton retour (dernière ligne)
-        current_row += 1
+        # Ligne 4 : Pagination Notification + Channel Pagination + Bouton Retour
+        components_line4 = []
+
+        if notification_role_manager.total_pages > 1:
+            notification_role_manager.prev_button.row = 4
+            notification_role_manager.next_button.row = 4
+            components_line4.append(notification_role_manager.prev_button)
+            components_line4.append(notification_role_manager.next_button)
+
+        if channel_manager.total_pages > 1:
+            channel_manager.prev_button.row = 4
+            channel_manager.next_button.row = 4
+            components_line4.append(channel_manager.prev_button)
+            components_line4.append(channel_manager.next_button)
+
+        # Bouton retour
         back_button = self.BackButton(
-            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=current_row, cog=self
+            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=4, cog=self
         )
-        view.add_item(back_button)
+        components_line4.append(back_button)
+
+        # Ajouter les composants de la dernière ligne
+        for comp in components_line4[:5]:  # Discord limite à 5 par ligne
+            view.add_item(comp)
 
         return view
+
 
     # --- Classe de Menu pour la sélection des Rôles ---
     class RoleSelect(ui.Select):
