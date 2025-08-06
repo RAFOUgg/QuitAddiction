@@ -337,26 +337,33 @@ class AdminCog(commands.Cog):
 
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
+        view = discord.ui.View(timeout=180) # Set a timeout for the view
 
-        # Keep track of how many items are on each row
-        components_on_row = [0] * 5 # Max 5 rows, 0 items initially
+        # Keep track of how many components are on each row
+        # We initialize this to zeros and it will be updated as we add items.
+        # The index represents the row number (0-4).
+        rows_item_count = [0] * 5
 
-        def add_component_to_view(component):
-            """Helper to add a component to the view, managing rows."""
-            if components_on_row[component.row] < 5:
+        def add_component_to_view(component: discord.ui.Item):
+            """
+            Helper function to add a component to the view.
+            It tries to place the component on the first available row (0-4).
+            If a row is full (5 items), it tries the next row.
+            """
+            # Check if component already has a row assigned and if that row has space
+            if component.row is not None and component.row < 5 and rows_item_count[component.row] < 5:
                 view.add_item(component)
-                components_on_row[component.row] += 1
+                rows_item_count[component.row] += 1
                 return True
             else:
-                # Find the next available row
-                for r in range(5):
-                    if components_on_row[r] < 5:
-                        component.row = r
+                # If no row assigned, or current row is full, find the next available row
+                for r in range(5): # Iterate through rows 0 to 4
+                    if rows_item_count[r] < 5:
+                        component.row = r # Assign the component to this row
                         view.add_item(component)
-                        components_on_row[r] += 1
+                        rows_item_count[r] += 1
                         return True
-                print(f"WARNING: Could not add component {getattr(component, 'label', 'unknown')} to view - all rows full.")
+                print(f"WARNING: Could not add component {getattr(component, 'label', 'unknown')} to view - all rows are full (5 components per row).")
                 return False
 
         # --- Creation des options et mapping ---
@@ -402,11 +409,11 @@ class AdminCog(commands.Cog):
         # --- Création des composants ---
 
         # Select pour le Rôle Admin
-        # Provide an initial row, but the helper will manage final placement.
+        # We initialize with row=0, but the helper will assign the final row.
         role_select_admin = self.RoleSelect(
             guild_id=guild_id,
             select_type="admin_role",
-            row=0, # Initial row, will be managed by add_component_to_view
+            row=0, # Initial row value, will be potentially updated by add_component_to_view
             options=role_options[:self.MAX_OPTION_LENGTH],
             id_mapping=role_id_mapping,
             cog=self
@@ -417,7 +424,7 @@ class AdminCog(commands.Cog):
         role_select_notif = self.RoleSelect(
             guild_id=guild_id,
             select_type="notification_role",
-            row=0, # Initial row
+            row=0, # Initial row value
             options=role_options[:self.MAX_OPTION_LENGTH],
             id_mapping=role_id_mapping,
             cog=self
@@ -436,7 +443,7 @@ class AdminCog(commands.Cog):
         add_component_to_view(channel_pagination_manager.channel_select)
 
         # Add pagination buttons if needed
-        if len(all_channel_options) > MAX_OPTIONS_PER_PAGE: # Use MAX_OPTIONS_PER_PAGE directly or from self.cog
+        if len(all_channel_options) > MAX_OPTIONS_PER_PAGE:
             add_component_to_view(channel_pagination_manager.prev_button)
             add_component_to_view(channel_pagination_manager.next_button)
 
