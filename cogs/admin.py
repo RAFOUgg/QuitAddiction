@@ -494,19 +494,19 @@ class AdminCog(commands.Cog):
         # Add Admin Role Select Menu and its pagination buttons
         # The select_menu inside each manager already has row=0, and buttons have row=1.
         # The add_component_to_view helper handles placing them correctly in the main view.
-        add_component_to_view(admin_role_manager.select_menu)
+        add_component_to_view(admin_role_manager.selection_menu)
         if admin_role_manager.total_pages > 1:
             add_component_to_view(admin_role_manager.prev_button)
             add_component_to_view(admin_role_manager.next_button)
 
         # Add Notification Role Select Menu and its pagination buttons
-        add_component_to_view(notification_role_manager.select_menu)
+        add_component_to_view(admin_role_manager.selection_menu)
         if notification_role_manager.total_pages > 1:
             add_component_to_view(notification_role_manager.prev_button)
             add_component_to_view(notification_role_manager.next_button)
 
         # Add Channel Select Menu and its pagination buttons
-        add_component_to_view(channel_manager.select_menu)
+        add_component_to_view(admin_role_manager.selection_menu)
         if channel_manager.total_pages > 1:
             add_component_to_view(channel_manager.prev_button)
             add_component_to_view(channel_manager.next_button)
