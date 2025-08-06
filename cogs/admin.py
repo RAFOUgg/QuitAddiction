@@ -377,8 +377,8 @@ class AdminCog(commands.Cog):
                     if not label:
                         label = item_id[:self.MAX_OPTION_LENGTH]
                         if not label:
-                        print(f"DEBUG: Ignoré item (type: {item_type}) car aucun label valide généré: ID={item_id}, Nom='{item_name}'")
-                        continue
+                            print(f"DEBUG: Ignoré item (type: {item_type}) car aucun label valide généré: ID={item_id}, Nom='{item_name}'")
+                            continue
 
                     # Générer la value
                     hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
