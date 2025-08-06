@@ -968,7 +968,7 @@ class AdminCog(commands.Cog):
         
         # Ligne 2: Message Ami/Quiz ET Promo Boutique
         view.add_item(self.NotificationToggle("💬 Message Ami/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, cog=self, row=2))
-        view.add_item(self.NotificationToggle("🟠 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.warning if state.notify_on_shop_promo else discord.ButtonStyle.secondary, cog=self, row=2))
+        view.add_item(self.NotificationToggle("💛 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.secondary, cog=self, row=2))
         
         # --- Ajout du SelectMenu pour le rôle de notification général ---
         # Il faut le placer sur une ligne libre, par exemple row=3
