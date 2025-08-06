@@ -358,55 +358,55 @@ class AdminCog(commands.Cog):
 
         # Helper function to create options and a mapping
         def create_options_and_mapping(items, item_type):
-        options = []
-        id_mapping = {}
+            options = []
+            id_mapping = {}
 
-        if guild:
-            sorted_items = sorted(items, key=lambda x: getattr(x, 'position', x.id))
+            if guild:
+                sorted_items = sorted(items, key=lambda x: getattr(x, 'position', x.id))
 
-            for item in sorted_items:
-                item_id = str(item.id)
-                item_name = item.name
+                for item in sorted_items:
+                    item_id = str(item.id)
+                    item_name = item.name
 
-                if item_id is None or not isinstance(item_name, str) or not item_name:
-                    print(f"DEBUG: Ignoré item (type: {item_type}) car ID nul ou nom invalide: ID={item_id}, Nom={item_name}")
-                    continue
+                    if item_id is None or not isinstance(item_name, str) or not item_name:
+                        print(f"DEBUG: Ignoré item (type: {item_type}) car ID nul ou nom invalide: ID={item_id}, Nom={item_name}")
+                        continue
 
-                # Générer le label
-                label = item_name[:self.MAX_OPTION_LENGTH]
-                if not label:
-                    label = item_id[:self.MAX_OPTION_LENGTH]
+                    # Générer le label
+                    label = item_name[:self.MAX_OPTION_LENGTH]
                     if not label:
-                       print(f"DEBUG: Ignoré item (type: {item_type}) car aucun label valide généré: ID={item_id}, Nom='{item_name}'")
-                       continue
+                        label = item_id[:self.MAX_OPTION_LENGTH]
+                        if not label:
+                        print(f"DEBUG: Ignoré item (type: {item_type}) car aucun label valide généré: ID={item_id}, Nom='{item_name}'")
+                        continue
 
-                # Générer la value
-                hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
-                value = hashed_id[:self.MAX_OPTION_LENGTH]
-                if not value:
-                    print(f"DEBUG: Ignoré item (type: {item_type}) car aucune value valide générée: ID={item_id}, Nom='{item_name}'")
-                    continue
+                    # Générer la value
+                    hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
+                    value = hashed_id[:self.MAX_OPTION_LENGTH]
+                    if not value:
+                        print(f"DEBUG: Ignoré item (type: {item_type}) car aucune value valide générée: ID={item_id}, Nom='{item_name}'")
+                        continue
 
-                # Vérification finale des longueurs avant d'ajouter
-                if not (1 <= len(label) <= 25 and 1 <= len(value) <= 25):
-                    print(f"DEBUG: ERREUR DE LONGUEUR - Ignoré item (type: {item_type})")
-                    print(f"  -> Item original: ID='{item_id}', Nom='{item_name}'")
-                    print(f"  -> Label généré : '{label}' (longueur: {len(label)})")
-                    print(f"  -> Value générée: '{value}' (longueur: {len(value)})")
-                    continue # Ignorer si les longueurs ne sont pas bonnes malgré tout
+                    # Vérification finale des longueurs avant d'ajouter
+                    if not (1 <= len(label) <= 25 and 1 <= len(value) <= 25):
+                        print(f"DEBUG: ERREUR DE LONGUEUR - Ignoré item (type: {item_type})")
+                        print(f"  -> Item original: ID='{item_id}', Nom='{item_name}'")
+                        print(f"  -> Label généré : '{label}' (longueur: {len(label)})")
+                        print(f"  -> Value générée: '{value}' (longueur: {len(value)})")
+                        continue # Ignorer si les longueurs ne sont pas bonnes malgré tout
 
-                # Debug des options qui seront ajoutées
-                # print(f"DEBUG: Ajout option (type: {item_type}) - Label='{label}', Value='{value}', Desc='ID: {item_id}'")
-                
-                options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
-                id_mapping[value] = item_id
+                    # Debug des options qui seront ajoutées
+                    # print(f"DEBUG: Ajout option (type: {item_type}) - Label='{label}', Value='{value}', Desc='ID: {item_id}'")
+                    
+                    options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
+                    id_mapping[value] = item_id
 
-            if not options:
-                options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun item trouvé.", default=True))
-        else:
-            options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
-        
-        return options, id_mapping
+                if not options:
+                    options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun item trouvé.", default=True))
+            else:
+                options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
+            
+            return options, id_mapping
 
         # Générer les options et le mapping pour les rôles
         role_options, role_id_mapping = create_options_and_mapping(guild.roles if guild else [], "role")
