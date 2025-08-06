@@ -396,7 +396,7 @@ class AdminCog(commands.Cog):
                         continue # Ignorer si les longueurs ne sont pas bonnes malgré tout
 
                     # Debug des options qui seront ajoutées
-                    # print(f"DEBUG: Ajout option (type: {item_type}) - Label='{label}', Value='{value}', Desc='ID: {item_id}'")
+                    print(f"DEBUG: Ajout option (type: {item_type}) - Label='{label}', Value='{value}', Desc='ID: {item_id}'")
                     
                     options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
                     id_mapping[value] = item_id
