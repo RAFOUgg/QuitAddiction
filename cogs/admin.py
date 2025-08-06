@@ -609,87 +609,76 @@ class AdminCog(commands.Cog):
 
     # --- Classe pour gérer la vue paginée des salons ---
     class PaginatedViewManager(ui.View):
-        def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, select_type: str, initial_page: int = 0, cog: 'AdminCog'=None):
-            super().__init__(timeout=180)
-            self.guild_id = guild_id
-            self.all_options = all_options
-            self.id_mapping = id_mapping
-            self.select_type = select_type
-            self.current_page = initial_page
-            self.cog = cog
+    def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, select_type: str, initial_page: int = 0, cog: 'AdminCog'=None):
+        super().__init__(timeout=180)
+        self.guild_id = guild_id
+        self.all_options = all_options
+        self.id_mapping = id_mapping
+        self.select_type = select_type
+        self.current_page = initial_page
+        self.cog = cog
 
-            # Création des composants avec des lignes initiales.
-            if self.select_type in ('admin_role', 'notification_role'):
-                self.selection_menu = AdminCog.RoleSelect(
-                    guild_id=self.guild_id, select_type=self.select_type, row=0, 
-                    options=self.all_options, id_mapping=self.id_mapping, cog=self.cog
-                )
-            elif self.select_type == 'channel':
-                self.selection_menu = AdminCog.ChannelSelect(
-                    guild_id=self.guild_id, select_type=self.select_type, row=0, 
-                    options=self.all_options, id_mapping=self.id_mapping, 
-                    page=self.current_page, cog=self.cog
-                )
-            else:
-                raise ValueError(f"Unknown select_type: {self.select_type}")
+        self.total_pages = max(1, math.ceil(len(self.all_options) / MAX_OPTIONS_PER_PAGE))
 
-            self.prev_button = ui.Button(
-                label="⬅ Précédent", style=discord.ButtonStyle.secondary,
-                custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}",
-                disabled=self.current_page == 0, row=1 
-            )
-            self.next_button = ui.Button(
-                label="Suivant ➡", style=discord.ButtonStyle.secondary,
-                custom_id=f"pagination_{self.select_type}_next_{self.guild_id}",
-                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options), row=1
-            )
-            
-            self.prev_button.callback = self.handle_page_change
-            self.next_button.callback = self.handle_page_change
+        # Création du menu
+        self.selection_menu = self.create_select()
+        self.add_item(self.selection_menu)
 
-            self.total_pages = math.ceil(len(self.all_options) / MAX_OPTIONS_PER_PAGE) if MAX_OPTIONS_PER_PAGE else 1
-            if self.all_options and self.total_pages == 0:
-                self.total_pages = 1
-            
+        # Créer la pagination uniquement si plus d'une page
+        if self.total_pages > 1:
+            self.prev_button = ui.Button(label="◀", style=discord.ButtonStyle.secondary)
+            self.page_button = ui.Button(label=f"{self.current_page+1}/{self.total_pages}", style=discord.ButtonStyle.gray, disabled=True)
+            self.next_button = ui.Button(label="▶", style=discord.ButtonStyle.secondary)
+
+            self.prev_button.callback = self.prev_page
+            self.next_button.callback = self.next_page
+
+            self.add_item(self.prev_button)
+            self.add_item(self.page_button)
+            self.add_item(self.next_button)
+
+    def create_select(self):
+        start_index = self.current_page * MAX_OPTIONS_PER_PAGE
+        end_index = start_index + MAX_OPTIONS_PER_PAGE
+        current_page_options = self.all_options[start_index:end_index]
+
+        if not current_page_options:
+            current_page_options = [discord.SelectOption(label="Aucun élément", value="no_items", default=True)]
+
+        placeholder = f"Sélectionnez {('un rôle' if 'role' in self.select_type else 'un salon')} (Page {self.current_page+1}/{self.total_pages})"
+        return (AdminCog.RoleSelect if 'role' in self.select_type else AdminCog.ChannelSelect)(
+            guild_id=self.guild_id,
+            select_type=self.select_type,
+            row=0,
+            options=current_page_options,
+            id_mapping=self.id_mapping,
+            cog=self.cog
+        )
+
+    async def prev_page(self, interaction: discord.Interaction):
+        if self.current_page > 0:
+            self.current_page -= 1
+            await self.update_page(interaction)
+
+    async def next_page(self, interaction: discord.Interaction):
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            await self.update_page(interaction)
+
+    async def update_page(self, interaction: discord.Interaction):
+        # Rebuild menu
+        self.remove_item(self.selection_menu)
+        self.selection_menu = self.create_select()
+        self.add_item(self.selection_menu)
+
+        # Update page button
+        if self.total_pages > 1:
+            self.page_button.label = f"{self.current_page+1}/{self.total_pages}"
             self.prev_button.disabled = self.current_page == 0
-            self.next_button.disabled = self.current_page >= self.total_pages - 1 if self.total_pages > 0 else True
+            self.next_button.disabled = self.current_page >= self.total_pages-1
 
-        def update_components(self, interaction: discord.Interaction):
-            self.remove_item(self.selection_menu)
+        await interaction.response.edit_message(view=self)
 
-            if self.select_type in ('admin_role', 'notification_role'):
-                self.selection_menu = AdminCog.RoleSelect(
-                    guild_id=self.guild_id, select_type=self.select_type, row=0, 
-                    options=self.all_options, id_mapping=self.id_mapping, cog=self.cog
-                )
-            elif self.select_type == 'channel':
-                self.selection_menu = AdminCog.ChannelSelect(
-                    guild_id=self.guild_id, select_type=self.select_type, row=0, 
-                    options=self.all_options, id_mapping=self.id_mapping, 
-                    page=self.current_page, cog=self.cog
-                )
-            else:
-                raise ValueError(f"Unknown select_type: {self.select_type}")
-            self.add_item(self.selection_menu)
-
-            self.prev_button.disabled = self.current_page == 0
-            self.next_button.disabled = self.current_page >= self.total_pages - 1 if self.total_pages > 0 else True
-
-        async def handle_page_change(self, interaction: discord.Interaction):
-            if interaction.data['custom_id'].endswith('_prev'):
-                if self.current_page > 0:
-                    self.current_page -= 1
-                    self.update_components(interaction)
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("C'est la première page.", ephemeral=True)
-            else: # next
-                if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
-                    self.current_page += 1
-                    self.update_components(interaction)
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
     # ... (reste des méthodes : generate_stats_embed, generate_stats_view, etc.) ...
