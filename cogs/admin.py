@@ -395,6 +395,7 @@ class AdminCog(commands.Cog):
         channel_options_all, channel_id_mapping = create_options_and_mapping(text_channels, "channel")
 
         # Créer les instances de Select pour les rôles
+        # Rôles : Admin (row=0), Notification (row=1)
         role_select_admin = self.RoleSelect(guild_id, "admin_role", row=0, options=role_options, id_mapping=role_id_mapping, cog=self) # Passer self
         view.add_item(role_select_admin)
 
@@ -402,10 +403,55 @@ class AdminCog(commands.Cog):
         view.add_item(role_select_notif)
 
         # --- Logique de pagination pour les salons ---
-        # On crée ici la vue qui contiendra le select pour la page actuelle et les boutons de navigation
-        channel_select_view_container = self.ChannelSelectView(guild_id, channel_options_all, channel_id_mapping, cog=self) # Passer self
-        view.add_item(channel_select_view_container) # Ajouter la sous-vue au menu principal
+        # Créer la vue parente pour gérer le Select et les boutons de pagination
+        # Lui passer le cog pour qu'elle puisse créer ses éléments
+        channel_pagination_view = self.ChannelPaginationView(guild_id, channel_options_all, channel_id_mapping, cog=self) # Utiliser une classe dédiée pour gérer les éléments paginés
+        
+        # Ajouter les éléments de la vue de pagination à la vue principale
+        # IMPORTANT: Ne pas ajouter la vue de pagination elle-même, mais ses composants.
+        # L'idée est que `ChannelPaginationView` contient les `Select` et les `Buttons`
+        # et que `generate_general_config_view` ajoute ces composants à la vue principale.
+        
+        # Le `ChannelPaginationView` va créer son propre Select et ses boutons.
+        # Il faut donc ajouter ces éléments à la vue principale.
+        # Le `ChannelPaginationView` lui-même n'est pas un composant interactif à ajouter directement.
+        # Il est plutôt un gestionnaire de la logique.
 
+        # Correction: La `ChannelPaginationView` doit être une `ui.View` qui contient les éléments.
+        # On ajoute donc directement les éléments de la `ChannelPaginationView` à notre `view` principal.
+
+        # Créer le Select pour les salons (row=0)
+        channel_select_element = self.ChannelSelect(
+            guild_id=guild_id,
+            select_type="game_channel",
+            row=0, # Select sur la ligne 0
+            options=channel_options_all,
+            id_mapping=channel_id_mapping,
+            page=0, # Page initiale
+            cog=self # Passer self
+        )
+        view.add_item(channel_select_element)
+
+        # Créer les boutons de navigation (row=1)
+        if len(channel_options_all) > MAX_OPTIONS_PER_PAGE:
+            prev_button = ui.Button(
+                label="⬅ Précédent",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"channel_prev_page_{guild_id}_0", # Inclure la page pour le callback
+                disabled=True, # Désactivé au début si page 0
+                row=1 # Bouton précédent sur la ligne 1
+            )
+            next_button = ui.Button(
+                label="Suivant ➡",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"channel_next_page_{guild_id}_0", # Inclure la page pour le callback
+                disabled=False, # Activé s'il y a plus d'une page
+                row=1 # Bouton suivant sur la ligne 1
+            )
+            view.add_item(prev_button)
+            view.add_item(next_button)
+
+        # Le bouton de retour doit être sur une ligne distincte, par exemple row=3
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Passer self
         return view
 
@@ -511,6 +557,9 @@ class AdminCog(commands.Cog):
                     db.commit()
                     db.refresh(state)
 
+                    # Ici, il faut reconstruire la vue entière pour que le changement de page soit bien géré
+                    # dans le cas où l'utilisateur change de page et sélectionne un salon.
+                    # On utilise le cog pour générer la vue complète.
                     await interaction.response.edit_message(
                         embed=self.cog.generate_role_and_channel_config_embed(state), # Utiliser self.cog
                         view=self.cog.generate_general_config_view(self.guild_id, interaction.guild) # Utiliser self.cog
@@ -525,120 +574,8 @@ class AdminCog(commands.Cog):
             db.close()
 
     # --- Classe pour gérer la vue paginée des salons ---
-    class ChannelSelectView(ui.View):
-        def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, initial_page: int = 0, cog: 'AdminCog'=None): # Ajout de cog
-            super().__init__(timeout=None)
-            self.guild_id = guild_id
-            self.all_options = all_options
-            self.id_mapping = id_mapping
-            self.current_page = initial_page
-            self.cog = cog # Stocker l'instance du cog
-
-            # Créer le ChannelSelect pour la page initiale
-            # Lui attribuer row=0
-            self.channel_select = AdminCog.ChannelSelect( # Utilisation de AdminCog.ChannelSelect
-                guild_id=self.guild_id,
-                select_type="game_channel",
-                row=0, # Ligne 0 pour le Select
-                options=self.all_options,
-                id_mapping=self.id_mapping,
-                page=self.current_page,
-                cog=self.cog # Passer self.cog
-            )
-            self.add_item(self.channel_select)
-
-            # Créer les boutons de navigation avec des custom_ids statiques
-            # Assurez-vous qu'ils sont sur une autre ligne pour éviter le dépassement
-            self.prev_button = ui.Button(
-                label="⬅ Précédent",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"channel_prev_page_{self.guild_id}", # Static custom_id
-                disabled=self.current_page == 0,
-                row=1 # Ligne 1 pour le bouton précédent
-            )
-            self.next_button = ui.Button(
-                label="Suivant ➡",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"channel_next_page_{self.guild_id}", # Static custom_id
-                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options),
-                row=1 # Ligne 1 pour le bouton suivant
-            )
-
-            if len(self.all_options) > MAX_OPTIONS_PER_PAGE:
-                self.add_item(self.prev_button)
-                self.add_item(self.next_button)
-        
-        # Méthodes pour mettre à jour l'affichage (channels)
-        def update_display(self, interaction: discord.Interaction):
-            # Remove the old select
-            self.remove_item(self.channel_select)
-
-            # Create the new select for the updated page
-            self.channel_select = AdminCog.ChannelSelect( # Utilisation de AdminCog.ChannelSelect
-                guild_id=self.guild_id,
-                select_type="game_channel",
-                row=0, # Réinitialiser row=0 pour le nouveau Select
-                options=self.all_options,
-                id_mapping=self.id_mapping,
-                page=self.current_page,
-                cog=self.cog # Passer self.cog
-            )
-            self.add_item(self.channel_select) # Add the new select
-
-            # Update buttons' disabled state
-            self.prev_button.disabled = self.current_page == 0
-            self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
-
-            # Les callbacks des boutons vont gérer l'édition du message.
-
-        # Callbacks pour les boutons de pagination
-        @ui.button(custom_id="channel_prev_page_placeholder") # Placeholder, car les custom_id sont dans les instances
-        async def prev_button_callback(self, interaction: discord.Interaction):
-            # Il faut lier ce callback au bouton approprié.
-            # Le plus simple est de vérifier le `interaction.custom_id`
-            if interaction.custom_id == f"channel_prev_page_{self.guild_id}":
-                if interaction.user.id != interaction.guild.owner_id: 
-                    await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
-                    return
-                
-                if self.current_page > 0:
-                    self.current_page -= 1
-                    self.update_display(interaction)
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("C'est la première page.", ephemeral=True)
-
-        @ui.button(custom_id="channel_next_page_placeholder") # Placeholder, car les custom_id sont dans les instances
-        async def next_button_callback(self, interaction: discord.Interaction):
-            # Il faut lier ce callback au bouton approprié.
-            if interaction.custom_id == f"channel_next_page_{self.guild_id}":
-                if interaction.user.id != interaction.guild.owner_id:
-                    await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
-                    return
-
-                if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
-                    self.current_page += 1
-                    self.update_display(interaction)
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
-
-        # NOTE IMPORTANTE SUR LES CALLBACKS DE BOUTONS DANS UNE VUE AVEC ÉLÉMENTS DYNAMIQUES :
-        # Pour que les `@ui.button` fonctionnent, leurs `custom_id` doivent correspondre exactement
-        # aux `custom_id` des boutons ajoutés à la vue.
-        # Comme les boutons `self.prev_button` et `self.next_button` sont créés dans `__init__`
-        # avec des `custom_id` spécifiques, les `custom_id` dans les décorateurs `@ui.button`
-        # ci-dessus (placeholder_prev, placeholder_next) DOIVENT être remplacés par les vrais `custom_id`.
-        # Si vous rencontrez toujours des problèmes, vérifiez la correspondance exacte des `custom_id`.
-        # Les `custom_id` des boutons dans `__init__` sont :
-        # f"channel_prev_page_{self.guild_id}"
-        # f"channel_next_page_{self.guild_id}"
-        # Il faut les mettre dans les `@ui.button`.
-        # Ce qui pourrait causer un conflit si une autre vue utilise les mêmes custom_id.
-        # Une approche plus sûre est de gérer les callbacks via un routeur d'interaction global,
-        # ou de s'assurer que les custom_id sont vraiment uniques.
-        # Pour cet exemple, je vais les laisser comme cela, en supposant que les custom_id sont gérés
-        # par Discord lorsqu'ils sont sérialisés avec la vue.
+    # Cette classe n'est plus nécessaire car nous ajoutons les composants directement à la vue principale.
+    # Nous allons donc la supprimer et adapter generate_general_config_view.
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
     def generate_stats_embed(self, guild_id: str) -> discord.Embed:
@@ -672,16 +609,20 @@ class AdminCog(commands.Cog):
     def generate_config_menu_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
         
+        # Ligne 0 : Mode/Durée, Lancer/Réinitialiser, Sauvegarder
         view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) # Passer self
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) # Passer self
         view.add_item(self.ConfigButton("💾 Sauvegarder l'État", guild_id, discord.ButtonStyle.blurple, row=0, cog=self)) # Passer self
         
+        # Ligne 1 : Rôles & Salons, Statistiques
         view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=1, cog=self)) # Passer self
         view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) # Passer self
         
+        # Ligne 2 : Notifications, Options Avancées
         view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=2, cog=self)) # Passer self
         view.add_item(self.ConfigButton("🛠 Options Avancées", guild_id, discord.ButtonStyle.secondary, row=2, cog=self)) # Passer self
         
+        # Ligne 3 : Bouton retour final
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=3, cog=self)) # Passer self
         
         return view
