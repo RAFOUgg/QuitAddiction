@@ -874,54 +874,138 @@ class AdminCog(commands.Cog):
 
         embed = discord.Embed(title="🔔 Paramètres de Notifications", color=discord.Color.green())
 
-        # Afficher le rôle de notification sélectionné
+        # Rôle de notification général (peut rester pour des alertes par défaut ou globales)
         notif_role_mention = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Non défini"
-        embed.add_field(name="📍 Rôle de Notification Principal", value=notif_role_mention, inline=False)
+        embed.add_field(name="📍 Rôle de Notification Général", value=notif_role_mention, inline=False)
 
-        # Afficher l'état des différentes notifications activées/désactivées
+        # Rôles spécifiques pour chaque type de notification
         embed.add_field(
-            name="✅ Notifications Activées",
+            name="🚨 Rôles d'Alerte Spécifiques",
             value=(
-                f"📉 Jauges Vitales Basses : {'Activé' if state.notify_on_low_vital_stat else 'Désactivé'}\n"
-                f"🚨 Événement Critique : {'Activé' if state.notify_on_critical_event else 'Désactivé'}\n"
-                f"🚬 Envie de Fumer : {'Activé' if state.notify_on_envie_fumer else 'Désactivé'}\n"
-                f"💬 Message d'Ami / Quiz : {'Activé' if state.notify_on_friend_message else 'Désactivé'}\n"
-                f"🛒 Promotion Boutique : {'Activé' if state.notify_on_shop_promo else 'Désactivé'}"
+                f"📉 Jauges Basses : {f'<@&{state.notify_vital_low_role_id}>' if state.notify_vital_low_role_id else 'Non défini'}\n"
+                f"🚨 Critique : {f'<@&{state.notify_critical_role_id}>' if state.notify_critical_role_id else 'Non défini'}\n"
+                f"🚬 Envie de Fumer : {f'<@&{state.notify_envie_fumer_role_id}>' if state.notify_envie_fumer_role_id else 'Non défini'}\n"
+                f"💬 Message Ami/Quiz : {f'<@&{state.notify_friend_message_role_id}>' if state.notify_friend_message_role_id else 'Non défini'}\n"
+                f"🛒 Promo Boutique : {f'<@&{state.notify_shop_promo_role_id}>' if state.notify_shop_promo_role_id else 'Non défini'}"
             ),
             inline=False
         )
         embed.set_footer(text="Utilisez les boutons ci-dessous pour ajuster les préférences.")
         return embed
     
+    class NotificationRoleSelect(ui.Select):
+        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict, cog: 'AdminCog'):
+            placeholder = f"Sélectionnez le rôle pour les notifications : {select_type.replace('_role_id', '').replace('_', ' ').title()}"
+            placeholder = placeholder[:100] # Tronquer si trop long
+            
+            super().__init__(placeholder=placeholder, options=options[:MAX_OPTIONS_PER_PAGE], custom_id=f"select_notif_role_{select_type}_{guild_id}", row=row)
+            self.guild_id = guild_id
+            self.select_type = select_type # Ex: "notify_vital_low_role_id"
+            self.id_mapping = id_mapping
+            self.cog = cog
+
+        async def callback(self, interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant.", ephemeral=True)
+                return
+
+            if not self.values or self.values[0] in ["no_items", "error_guild"]:
+                await interaction.response.send_message("Veuillez sélectionner un rôle valide.", ephemeral=True)
+                return
+
+            selected_short_id = self.values[0]
+            selected_role_id = self.id_mapping.get(selected_short_id)
+
+            if not selected_role_id:
+                await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du rôle.", ephemeral=True)
+                return
+
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+
+            if state:
+                # Utiliser setattr pour mettre à jour le bon champ dans ServerState
+                setattr(state, self.select_type, selected_role_id)
+                
+                try:
+                    db.commit()
+                    db.refresh(state)
+
+                    # Rafraîchir la vue complète
+                    await interaction.response.edit_message(
+                        embed=self.cog.generate_notifications_embed(self.guild_id), # Recalculer l'embed
+                        view=self.cog.generate_notifications_view(self.guild_id)     # Recalculer la vue
+                    )
+                    await interaction.followup.send(f"Rôle de notification pour '{self.select_type.replace('_role_id', '').replace('_', ' ').title()}' mis à jour.", ephemeral=True)
+                except Exception as e:
+                    db.rollback()
+                    Logger.error(f"Erreur lors de la sauvegarde du rôle de notification {self.select_type} : {e}")
+                    await interaction.response.send_message(f"Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            else:
+                await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur.", ephemeral=True)
+            
+            db.close()
+
     # --- LA VUE POUR LES PRÉFÉRENCES DE NOTIFICATIONS ---
     def generate_notifications_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=180)
 
+        # --- Préparer les options ---
+        all_roles = []
+        role_id_mapping = {}
+        if interaction and interaction.guild: # Il faut que interaction soit accessible ici, sinon il faut le passer
+             all_roles = interaction.guild.roles if interaction.guild else []
+             role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", interaction.guild)
+        else:
+            # Fallback si guild n'est pas accessible
+            role_options = [discord.SelectOption(label="Erreur serveur", value="error_guild", default=True)]
+            role_id_mapping = {}
+
+        # --- Rôle Général de Notification ---
+        # Vous pouvez utiliser PaginatedSelect ici aussi pour la cohérence
+        general_notif_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
+        general_notif_select.row = 0
+        view.add_item(general_notif_select)
+
+        # --- Rôles spécifiques pour chaque type de notification ---
+        # Assurez-vous d'avoir les bonnes valeurs pour 'select_type' qui correspondent aux noms des champs dans ServerState
+        
+        # Jauges Vitales Basses
+        notify_vital_low_select = NotificationRoleSelect(guild_id, "notify_vital_low_role_id", row=1, options=role_options, id_mapping=role_id_mapping, cog=self)
+        view.add_item(notify_vital_low_select)
+        
+        # Événement Critique
+        notify_critical_select = NotificationRoleSelect(guild_id, "notify_critical_role_id", row=1, options=role_options, id_mapping=role_id_mapping, cog=self)
+        view.add_item(notify_critical_select)
+        
+        # Envie de Fumer
+        notify_envie_fumer_select = NotificationRoleSelect(guild_id, "notify_envie_fumer_role_id", row=2, options=role_options, id_mapping=role_id_mapping, cog=self)
+        view.add_item(notify_envie_fumer_select)
+        
+        # Message d'Ami / Quiz
+        notify_friend_message_select = NotificationRoleSelect(guild_id, "notify_friend_message_role_id", row=2, options=role_options, id_mapping=role_id_mapping, cog=self)
+        view.add_item(notify_friend_message_select)
+        
+        # Promotion Boutique
+        notify_shop_promo_select = NotificationRoleSelect(guild_id, "notify_shop_promo_role_id", row=3, options=role_options, id_mapping=role_id_mapping, cog=self)
+        view.add_item(notify_shop_promo_select)
+
+        # --- Boutons de Toggle (Activé/Désactivé) ---
+        # Il faut récupérer l'état actuel pour définir le style des boutons et les valeurs
         db = SessionLocal()
         state = db.query(ServerState).filter_by(guild_id=guild_id).first()
         db.close()
 
         if state:
-            # Assurez-vous que les noms des attributs correspondent à ceux de votre modèle ServerState
-            # (notify_on_low_vital_stat, notify_on_critical_event, etc.)
-            view.add_item(self.NotificationToggle("🔴 Jauges Basses", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, cog=self))
-            view.add_item(self.NotificationToggle("🔴 Événement Critique", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, cog=self))
-            view.add_item(self.NotificationToggle("🟢 Envie de Fumer", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, cog=self))
-            view.add_item(self.NotificationToggle("🔵 Message Ami/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, cog=self))
-            view.add_item(self.NotificationToggle("🟠 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.warning if state.notify_on_shop_promo else discord.ButtonStyle.secondary, cog=self))
-            
-        # Le bouton de sélection du rôle pour les notifications devrait être ici aussi
-        # (si vous utilisez PaginatedSelect pour cela, comme pour le rôle admin)
-        # Par exemple :
-        # all_roles = guild.roles if guild else []
-        # role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
-        # notification_role_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
-        # notification_role_select.row = 1 # Ou une autre ligne appropriée
-        # view.add_item(notification_role_select)
-        # Si vous n'utilisez pas PaginatedSelect ici, assurez-vous que le rôle est bien géré.
-
-        # Bouton retour (assurez-vous que le row est correct pour ne pas interférer avec les autres vues)
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Ajustez le row si nécessaire
+            view.add_item(self.NotificationToggle("📉 Jauges Basses", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, cog=self))
+            view.add_item(self.NotificationToggle("🚨 Événement Critique", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, cog=self))
+            view.add_item(self.NotificationToggle("🚬 Envie de Fumer", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, cog=self))
+            view.add_item(self.NotificationToggle("💬 Message Ami/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, cog=self))
+            view.add_item(self.NotificationToggle("🛒 Promo Boutique", "notify_shop_promo", guild_id, discord.ButtonStyle.warning if state.notify_shop_promo else discord.ButtonStyle.secondary, cog=self))
+        
+        # Bouton retour
+        # Assurez-vous que le row est correct pour ne pas interférer
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=4, cog=self)) # Placez-le sur une ligne libre
 
         return view
 
