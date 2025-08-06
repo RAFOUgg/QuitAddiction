@@ -32,12 +32,19 @@ class ServerState(Base):
     # Taux de dégradation par "tick" (basés sur le game_mode choisi)
     game_tick_interval_minutes = Column(Integer, default=30) # Durée d'une unité de temps de jeu (en minutes)
     
-    # Notifications et alertes
-    notify_on_low_vital_stat = Column(Boolean, nullable=False, default=True) # Ex: Si PHYS < 15%
-    notify_on_critical_event = Column(Boolean, nullable=False, default=True) # Ex: Mort, perte de conscience
-    notify_on_envie_fumer = Column(Boolean, nullable=False, default=True) # Si le cuisinier a envie
-    notify_on_friend_message = Column(Boolean, nullable=False, default=True) # Messages d'amis / quiz
-    notify_on_shop_promo = Column(Boolean, nullable=False, default=False) # Promotions de la boutique
+    # --- NOUVEAUX CHAMPS POUR LES RÔLES DE NOTIFICATION SPÉCIFIQUES ---
+    # Stockez les IDs des rôles sous forme de chaînes (car les IDs peuvent être grands)
+    # Ou sous forme de BigInteger si votre base de données le supporte bien pour les IDs Discord.
+    # String est plus sûr. Utilisez nullable=True car ils ne seront pas toujours définis.
+
+    # Notifications Vitales
+    notify_vital_low_role_id = Column(String, nullable=True)      # Rôle pour les alertes "Jauges Vitales Basses"
+    notify_critical_role_id = Column(String, nullable=True)       # Rôle pour les alertes "Événement Critique"
+
+    # Notifications Comportementales
+    notify_envie_fumer_role_id = Column(String, nullable=True)     # Rôle pour "Envie de Fumer"
+    notify_friend_message_role_id = Column(String, nullable=True)  # Rôle pour "Message d'Ami / Quiz"
+    notify_shop_promo_role_id = Column(String, nullable=True)      # Rôle pour "Promotion Boutique"
 
     # Taux de dégradation des besoins vitaux (peut être ajusté par le game_mode)
     degradation_rate_hunger = Column(Float, default=10.0)
