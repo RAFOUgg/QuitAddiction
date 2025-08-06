@@ -88,86 +88,75 @@ class AdminCog(commands.Cog):
     
     def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
         """
-        Crée des listes d'options Discord (discord.SelectOption) et un mapping ID pour les menus déroulants.
-        Permet de convertir des objets (rôles, canaux) en options sélectionnables.
-
-        Args:
-            items (list): Une liste d'objets Discord (ex: discord.Role, discord.TextChannel).
-            item_type (str): Le type d'objet pour adapter le tri et la logique ('role' ou 'channel').
-            guild (discord.Guild | None): L'objet Guild pour accéder aux propriétés spécifiques comme la position des rôles ou des canaux.
-
-        Returns:
-            Tuple[List[discord.SelectOption], Dict[str, str]]: 
-            Une paire contenant:
-            1. Une liste d'objets discord.SelectOption prêts à être utilisés dans un menu déroulant.
-            2. Un dictionnaire mappant les valeurs hachées uniques (short_id) aux IDs originaux des objets (item_id).
+        Crée des options hiérarchisées et lisibles pour les SelectMenus (rôles ou salons).
+        - Ajoute des icônes (📁 pour catégories, # pour salons, 🔹 pour rôles)
+        - Ignore les éléments non pertinents (comme @everyone pour les rôles)
+        - Fournit un mapping ID haché -> ID réel
         """
         options = []
         id_mapping = {}
-        
-        # Gestion d'erreur si la guild n'est pas trouvée (ex: dans certains contextes de test ou de réponse différée)
+
         if not guild:
             return [discord.SelectOption(label="Erreur serveur", value="error_guild", default=True)], {}
 
         try:
-            # Tri des éléments pour une meilleure organisation dans le menu déroulant.
+            # --- Trier les items ---
             if item_type == "role":
-                # Les rôles sont triés par position, du plus élevé (haut du serveur) au plus bas.
+                # Les rôles triés du plus élevé au plus bas
                 sorted_items = sorted(items, key=lambda x: x.position, reverse=True)
             elif item_type == "channel":
-                # Les canaux sont triés d'abord par catégorie (les canaux sans catégorie en dernier),
-                # puis par position au sein de leur catégorie.
+                # Trier par catégorie puis par position
                 sorted_items = sorted(items, key=lambda x: (getattr(x, 'category_id', float('inf')), x.position))
             else:
-                # Pas de tri spécifique pour d'autres types d'éléments.
                 sorted_items = items
         except Exception as e:
-            # En cas d'erreur lors du tri, log l'erreur et continue avec les éléments non triés.
             print(f"Error sorting {item_type}s: {e}")
             sorted_items = items
 
-        # Limites pour les labels et valeurs des options de SelectMenu selon Discord API
-        MAX_OPTION_LENGTH = 25 # Max 25 caractères pour label et value
-        MIN_OPTION_LENGTH = 1  # Min 1 caractère
-
-        # Itération sur les éléments triés pour créer les options du menu.
+        # --- Construire les options ---
         for item in sorted_items:
-            # Ignorer les éléments qui n'ont pas d'ID ou dont le nom n'est pas valide.
             item_id = str(item.id)
-            item_name = item.name
-            if item_id is None or not isinstance(item_name, str) or not item_name:
+            item_name = item.name if hasattr(item, 'name') else None
+
+            if not item_id or not item_name:
                 continue
 
-            # Créer le label : on tronque le nom de l'élément à la longueur maximale.
-            label = item_name[:MAX_OPTION_LENGTH]
-            # Si le label tronqué est vide, utiliser l'ID tronqué (cas très rare).
-            if not label:
-                label = item_id[:MAX_OPTION_LENGTH]
-            if not label: # Si même l'ID tronqué est vide, on ignore cet élément.
-                continue
+            # --- Filtrage pour éviter le spam ---
+            if item_type == "role":
+                # Ignore @everyone
+                if item.is_default():
+                    continue
+                label = f"🔹 {item_name}"
+            elif item_type == "channel":
+                # Ignore les salons vocaux, threads ou catégories directes
+                if isinstance(item, discord.CategoryChannel):
+                    continue
+                if not isinstance(item, discord.TextChannel):
+                    continue
 
-            # Créer une valeur unique et hachée pour l'option.
-            # Cela permet de créer une valeur courte et unique pour Discord.
-            # Le hachage SHA256 est utilisé pour garantir l'unicité et la sécurité.
-            hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
-            value = hashed_id[:MAX_OPTION_LENGTH] # Tronquer la valeur hachée.
-            if not value: # Si la valeur hachée tronquée est vide, on ignore.
-                continue
+                # Ajout hiérarchique : Catégorie | #Nom
+                category_name = item.category.name if item.category else "Sans catégorie"
+                label = f"📁 {category_name} | #{item_name}"
+            else:
+                label = item_name
 
-            # Vérifier que le label et la valeur respectent les contraintes de longueur.
-            if not (MIN_OPTION_LENGTH <= len(label) <= MAX_OPTION_LENGTH and MIN_OPTION_LENGTH <= len(value) <= MAX_OPTION_LENGTH):
-                continue
+            # Tronquer à 25 caractères (limite Discord)
+            label = label[:25]
 
-            # Ajouter l'option à la liste. Le 'description' inclut l'ID original pour référence.
-            options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
-            # Mappage de la valeur hachée (value) à l'ID original (item_id).
-            id_mapping[value] = item_id
+            # --- Hachage pour value ---
+            hashed_id = hashlib.sha256(item_id.encode()).hexdigest()[:25]
 
-        # Si aucun élément valide n'a été trouvé, ajouter une option indiquant cela.
+            # --- Ajouter à la liste ---
+            options.append(discord.SelectOption(
+                label=label,
+                value=hashed_id,
+                description=f"ID: {item_id}"  # affiché en petit sous le label
+            ))
+            id_mapping[hashed_id] = item_id
+
         if not options:
             options.append(discord.SelectOption(label="Aucun élément trouvé", value="no_items", default=True))
 
-        # Retourner la liste d'options et le mapping d'IDs.
         return options, id_mapping
     
     def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
