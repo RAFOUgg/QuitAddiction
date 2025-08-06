@@ -338,22 +338,28 @@ class AdminCog(commands.Cog):
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        
-        components_per_row = [0] * 5 # Initialiser avec 5 lignes, 0 composants chacune
 
-        def add_item_to_view(item):
-            """Helper pour ajouter un item en trouvant la prochaine ligne disponible."""
-            for row_index in range(5):
-                if components_per_row[row_index] < 5:
-                    # Assigner le row à l'item AVANT de l'ajouter à la vue
-                    item.row = row_index
-                    view.add_item(item)
-                    components_per_row[row_index] += 1
-                    return True
-            print(f"AVERTISSEMENT: Impossible d'ajouter l'item {getattr(item, 'label', 'inconnu')} car toutes les lignes sont pleines.")
-            return False
+        # Keep track of how many items are on each row
+        components_on_row = [0] * 5 # Max 5 rows, 0 items initially
 
-        # --- Création des options et mapping (inchangé) ---
+        def add_component_to_view(component):
+            """Helper to add a component to the view, managing rows."""
+            if components_on_row[component.row] < 5:
+                view.add_item(component)
+                components_on_row[component.row] += 1
+                return True
+            else:
+                # Find the next available row
+                for r in range(5):
+                    if components_on_row[r] < 5:
+                        component.row = r
+                        view.add_item(component)
+                        components_on_row[r] += 1
+                        return True
+                print(f"WARNING: Could not add component {getattr(component, 'label', 'unknown')} to view - all rows full.")
+                return False
+
+        # --- Creation des options et mapping ---
         def create_options_and_mapping(items, item_type):
             options = []
             id_mapping = {}
@@ -366,7 +372,7 @@ class AdminCog(commands.Cog):
                     else:
                         sorted_items = items
                 except Exception as e:
-                    print(f"Erreur lors du tri des {item_type}s: {e}")
+                    print(f"Error sorting {item_type}s: {e}")
                     sorted_items = items
 
                 for item in sorted_items:
@@ -382,9 +388,9 @@ class AdminCog(commands.Cog):
                     if not (self.MIN_OPTION_LENGTH <= len(label) <= self.MAX_OPTION_LENGTH and self.MIN_OPTION_LENGTH <= len(value) <= self.MAX_OPTION_LENGTH): continue
                     options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
                     id_mapping[value] = item_id
-                if not options: options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun élément trouvé.", default=True))
+                if not options: options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", default=True))
             else:
-                options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", description="Serveur non trouvé.", default=True))
+                options.append(discord.SelectOption(label="Erreur serveur", value="error_guild", default=True))
             return options, id_mapping
 
         all_roles = guild.roles if guild else []
@@ -396,26 +402,27 @@ class AdminCog(commands.Cog):
         # --- Création des composants ---
 
         # Select pour le Rôle Admin
+        # Provide an initial row, but the helper will manage final placement.
         role_select_admin = self.RoleSelect(
             guild_id=guild_id,
             select_type="admin_role",
-            # row=0, # Le row est géré par add_item_to_view
+            row=0, # Initial row, will be managed by add_component_to_view
             options=role_options[:self.MAX_OPTION_LENGTH],
             id_mapping=role_id_mapping,
             cog=self
         )
-        add_item_to_view(role_select_admin) # Ajoute sur la première ligne libre
+        add_component_to_view(role_select_admin)
 
         # Select pour le Rôle de Notification
         role_select_notif = self.RoleSelect(
             guild_id=guild_id,
             select_type="notification_role",
-            # row=1, # Le row est géré par add_item_to_view
+            row=0, # Initial row
             options=role_options[:self.MAX_OPTION_LENGTH],
             id_mapping=role_id_mapping,
             cog=self
         )
-        add_item_to_view(role_select_notif) # Ajoute sur la prochaine ligne libre
+        add_component_to_view(role_select_notif)
 
         # --- Logique de pagination pour les salons ---
         channel_pagination_manager = self.ChannelPaginationManager(
@@ -424,24 +431,24 @@ class AdminCog(commands.Cog):
             id_mapping=channel_id_mapping,
             cog=self
         )
-        
-        # Ajout du SelectMenu pour les salons (il sera placé sur la première ligne libre par add_item_to_view)
-        add_item_to_view(channel_pagination_manager.channel_select)
 
-        # Ajout des boutons de pagination (si nécessaire)
-        if len(all_channel_options) > self.MAX_OPTIONS_PER_PAGE:
-            add_item_to_view(channel_pagination_manager.prev_button) # S'ajoutera sur la ligne libre
-            add_item_to_view(channel_pagination_manager.next_button) # S'ajoutera sur la même ligne si possible, sinon sur la suivante
+        # Add the channel select menu
+        add_component_to_view(channel_pagination_manager.channel_select)
+
+        # Add pagination buttons if needed
+        if len(all_channel_options) > MAX_OPTIONS_PER_PAGE: # Use MAX_OPTIONS_PER_PAGE directly or from self.cog
+            add_component_to_view(channel_pagination_manager.prev_button)
+            add_component_to_view(channel_pagination_manager.next_button)
 
         # Bouton de retour
         back_button = self.BackButton(
             "⬅ Retour Paramètres Jeu",
             guild_id,
             discord.ButtonStyle.secondary,
-            # row=3, # Le row est géré par add_item_to_view
             cog=self
+            # row will be assigned by add_component_to_view
         )
-        add_item_to_view(back_button) # Il sera ajouté à la première ligne disponible
+        add_component_to_view(back_button)
 
         return view
 
