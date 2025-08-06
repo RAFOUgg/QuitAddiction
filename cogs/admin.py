@@ -567,14 +567,12 @@ class AdminCog(commands.Cog):
                     embed=self.cog.generate_stats_embed(self.guild_id), # Utiliser self.cog
                     view=self.cog.generate_stats_view(self.guild_id) # Utiliser self.cog
                 )
-                await interaction.followup.send("Accès aux statistiques...", ephemeral=True) # Message informatif
 
             elif self.label == "🔔 Notifications":
                 await interaction.response.edit_message(
                     embed=self.cog.generate_notifications_embed(self.guild_id), # Utiliser self.cog
                     view=self.cog.generate_notifications_view(self.guild_id) # Utiliser self.cog
                 )
-                await interaction.followup.send("Accès à la configuration des notifications...", ephemeral=True) # Message informatif
 
             db.close()
 
