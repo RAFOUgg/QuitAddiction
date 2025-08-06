@@ -409,121 +409,121 @@ class AdminCog(commands.Cog):
         return embed
 
     class PaginatedSelect(discord.ui.Select):
-    def __init__(self, guild_id: str, select_type: str, options: list[discord.SelectOption], id_mapping: dict, page: int, cog: 'AdminCog'):
-        self.guild_id = guild_id
-        self.select_type = select_type
-        self.id_mapping = id_mapping
-        self.page = page
-        self.cog = cog
+        def __init__(self, guild_id: str, select_type: str, options: list[discord.SelectOption], id_mapping: dict, page: int, cog: 'AdminCog'):
+            self.guild_id = guild_id
+            self.select_type = select_type
+            self.id_mapping = id_mapping
+            self.page = page
+            self.cog = cog
 
-        self.items_per_page = 24  # 24 vrais éléments + 1 pour navigation
-        self.total_pages = max(1, math.ceil(len(options) / self.items_per_page))
-        self.all_options = options
+            self.items_per_page = 24  # 24 vrais éléments + 1 pour navigation
+            self.total_pages = max(1, math.ceil(len(options) / self.items_per_page))
+            self.all_options = options
 
-        # Construire les options de la page courante
-        start = page * self.items_per_page
-        end = start + self.items_per_page
-        page_options = options[start:end]
+            # Construire les options de la page courante
+            start = page * self.items_per_page
+            end = start + self.items_per_page
+            page_options = options[start:end]
 
-        # Ajouter la dernière option de navigation si nécessaire
-        if self.total_pages > 1:
-            if page < self.total_pages - 1:
-                page_options.append(discord.SelectOption(
-                    label=f"… Suite (Page {page+2}/{self.total_pages})",
-                    value="__next_page__"
-                ))
-            else:
-                page_options.append(discord.SelectOption(
-                    label=f"↩ Retour à la première page (1/{self.total_pages})",
-                    value="__first_page__"
-                ))
+            # Ajouter la dernière option de navigation si nécessaire
+            if self.total_pages > 1:
+                if page < self.total_pages - 1:
+                    page_options.append(discord.SelectOption(
+                        label=f"… Suite (Page {page+2}/{self.total_pages})",
+                        value="__next_page__"
+                    ))
+                else:
+                    page_options.append(discord.SelectOption(
+                        label=f"↩ Retour à la première page (1/{self.total_pages})",
+                        value="__first_page__"
+                    ))
 
-        placeholder = f"Sélectionnez {'un rôle' if 'role' in select_type else 'un salon'} (Page {page+1}/{self.total_pages})"
-        super().__init__(placeholder=placeholder, options=page_options, custom_id=f"paginated_{select_type}_{guild_id}_p{page}", row=0)
+            placeholder = f"Sélectionnez {'un rôle' if 'role' in select_type else 'un salon'} (Page {page+1}/{self.total_pages})"
+            super().__init__(placeholder=placeholder, options=page_options, custom_id=f"paginated_{select_type}_{guild_id}_p{page}", row=0)
 
-    async def callback(self, interaction: discord.Interaction):
-        selected = self.values[0]
+        async def callback(self, interaction: discord.Interaction):
+            selected = self.values[0]
 
-        # --- Gestion de la pagination ---
-        if selected in ["__next_page__", "__first_page__"]:
-            self.page = self.page + 1 if selected == "__next_page__" else 0
+            # --- Gestion de la pagination ---
+            if selected in ["__next_page__", "__first_page__"]:
+                self.page = self.page + 1 if selected == "__next_page__" else 0
 
-            # Créer un nouveau Select pour la page suivante
-            new_select = PaginatedSelect(
-                guild_id=self.guild_id,
-                select_type=self.select_type,
-                options=self.all_options,
-                id_mapping=self.id_mapping,
-                page=self.page,
-                cog=self.cog
-            )
+                # Créer un nouveau Select pour la page suivante
+                new_select = PaginatedSelect(
+                    guild_id=self.guild_id,
+                    select_type=self.select_type,
+                    options=self.all_options,
+                    id_mapping=self.id_mapping,
+                    page=self.page,
+                    cog=self.cog
+                )
 
-            new_view = discord.ui.View(timeout=180)
-            new_view.add_item(new_select)
+                new_view = discord.ui.View(timeout=180)
+                new_view.add_item(new_select)
 
-            # Ajouter le bouton retour
-            back_button = self.cog.BackButton(
-                "⬅ Retour Paramètres Jeu", self.guild_id, discord.ButtonStyle.secondary, row=1, cog=self.cog
-            )
-            new_view.add_item(back_button)
+                # Ajouter le bouton retour
+                back_button = self.cog.BackButton(
+                    "⬅ Retour Paramètres Jeu", self.guild_id, discord.ButtonStyle.secondary, row=1, cog=self.cog
+                )
+                new_view.add_item(back_button)
 
-            await interaction.response.edit_message(view=new_view)
-            return
+                await interaction.response.edit_message(view=new_view)
+                return
 
-        # --- Sélection réelle ---
-        selected_item_id = self.id_mapping.get(selected)
-        if not selected_item_id:
-            await interaction.response.send_message("Erreur: élément introuvable.", ephemeral=True)
-            return
+            # --- Sélection réelle ---
+            selected_item_id = self.id_mapping.get(selected)
+            if not selected_item_id:
+                await interaction.response.send_message("Erreur: élément introuvable.", ephemeral=True)
+                return
 
-        db = SessionLocal()
-        state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-        if state:
-            if self.select_type == "admin_role":
-                state.admin_role_id = selected_item_id
-            elif self.select_type == "notification_role":
-                state.notification_role_id = selected_item_id
-            elif self.select_type == "channel":
-                state.game_channel_id = selected_item_id
-            db.commit()
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+            if state:
+                if self.select_type == "admin_role":
+                    state.admin_role_id = selected_item_id
+                elif self.select_type == "notification_role":
+                    state.notification_role_id = selected_item_id
+                elif self.select_type == "channel":
+                    state.game_channel_id = selected_item_id
+                db.commit()
 
-        await interaction.response.send_message("✅ Sélection mise à jour.", ephemeral=True)
-        db.close()
+            await interaction.response.send_message("✅ Sélection mise à jour.", ephemeral=True)
+            db.close()
 
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
-    """
-    Vue de configuration générale avec pagination intégrée dans le menu déroulant.
-    """
-    view = discord.ui.View(timeout=180)
+        """
+        Vue de configuration générale avec pagination intégrée dans le menu déroulant.
+        """
+        view = discord.ui.View(timeout=180)
 
-    # --- Préparer les options ---
-    all_roles = guild.roles if guild else []
-    role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
+        # --- Préparer les options ---
+        all_roles = guild.roles if guild else []
+        role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
 
-    text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
-    channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
+        text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
+        channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
 
-    # --- Ajouter les SelectMenus paginés ---
-    admin_role_select = PaginatedSelect(guild_id, "admin_role", role_options, role_id_mapping, page=0, cog=self)
-    notification_role_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
-    channel_select = PaginatedSelect(guild_id, "channel", channel_options, channel_id_mapping, page=0, cog=self)
+        # --- Ajouter les SelectMenus paginés ---
+        admin_role_select = PaginatedSelect(guild_id, "admin_role", role_options, role_id_mapping, page=0, cog=self)
+        notification_role_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
+        channel_select = PaginatedSelect(guild_id, "channel", channel_options, channel_id_mapping, page=0, cog=self)
 
-    admin_role_select.row = 0
-    notification_role_select.row = 1
-    channel_select.row = 2
+        admin_role_select.row = 0
+        notification_role_select.row = 1
+        channel_select.row = 2
 
-    view.add_item(admin_role_select)
-    view.add_item(notification_role_select)
-    view.add_item(channel_select)
+        view.add_item(admin_role_select)
+        view.add_item(notification_role_select)
+        view.add_item(channel_select)
 
-    # --- Bouton retour ---
-    back_button = self.BackButton(
-        "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self
-    )
-    view.add_item(back_button)
+        # --- Bouton retour ---
+        back_button = self.BackButton(
+            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self
+        )
+        view.add_item(back_button)
 
-    return view
+        return view
 
     # --- Classe de Menu pour la sélection des Rôles ---
     class RoleSelect(ui.Select):
