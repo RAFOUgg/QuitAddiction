@@ -1,41 +1,38 @@
-# --- STAGE 1: Le Builder ---
-# On utilise une image python "slim" comme base, qui contient les outils pour installer des paquets.
+# --- STAGE 1: The Builder ---
 FROM python:3.12-slim as builder
 
-# Mettre à jour les paquets et installer 'git', qui est une dépendance système pour dev_stats_cog.py
-# --no-install-recommends évite d'installer des paquets inutiles.
-# Les commandes de nettoyage réduisent la taille de cette couche.
+# Install system dependencies
 RUN apt-get update && apt-get install -y git --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Définir le répertoire de travail
 WORKDIR /app
-
-# Copier uniquement le fichier des dépendances pour profiter du cache Docker
 COPY requirements.txt .
-
-# Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-
-# --- STAGE 2: L'Image Finale ---
-# On repart d'une image "slim" propre pour un résultat minimaliste.
+# --- STAGE 2: The Final Image ---
 FROM python:3.12-slim
 
-# Créer un utilisateur non-root pour plus de sécurité
+# Create a non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser
-USER appuser
+# We will switch to this user later
+
 WORKDIR /home/appuser/app
 
-# Copier les paquets Python installés depuis l'étape "builder"
+# Copy installed packages and binaries from the builder stage
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-
-# Copier l'exécutable 'git' installé depuis l'étape "builder"
 COPY --from=builder /usr/bin/git /usr/bin/git
 
-# Copier tout le code du projet
+# Copy all project code
 COPY . .
 
-# La commande pour lancer le bot
+# --- THIS IS THE FIX ---
+# Change the ownership of all files in the app directory to our new user.
+# This ensures that 'appuser' can write to the 'logs' and 'db' subdirectories.
+RUN chown -R appuser:appuser /home/appuser/app
+
+# Now, switch to the non-root user
+USER appuser
+
+# The command to run the bot
 CMD ["python", "bot.py"]
