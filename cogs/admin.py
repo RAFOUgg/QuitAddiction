@@ -1,4 +1,4 @@
-# --- cogs/admin.py ---
+# --- Fichier : cogs/admin.py ---
 
 import discord
 from discord.ext import commands
@@ -9,10 +9,35 @@ import hashlib
 import datetime
 import math
 from typing import List, Tuple, Dict, Optional
+import os # Nécessaire pour .env
+import dotenv # Nécessaire pour charger .env
+import config # Pour les constantes comme create_styled_embed, GITHUB_REPO_NAME etc.
+
+try:
+    from config import create_styled_embed, GITHUB_REPO_NAME, Logger
+except ImportError:
+    # Fallback si les constantes ne sont pas là
+    print("WARNING: Cannot import create_styled_embed, GITHUB_REPO_NAME, Logger from config. Using fallbacks.")
+    def create_styled_embed(title, description, color):
+        embed = discord.Embed(title=title, description=description, color=color)
+        return embed
+    GITHUB_REPO_NAME = "Unknown Project"
+    class Logger:
+        @staticmethod
+        def error(message: str):
+            print(f"ERROR: {message}")
+        @staticmethod
+        def info(message: str):
+            print(f"INFO: {message}")
 
 # Constante pour le nombre maximum d'options par page
 MAX_OPTIONS_PER_PAGE = 25 # Discord limite à 25 options par SelectMenu
 MAX_COMPONENTS_PER_ROW = 5
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER")
+GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME")
+
 class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
     def __init__(self, bot):
@@ -201,15 +226,86 @@ class AdminCog(commands.Cog):
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) 
         view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=0, cog=self)) 
         
-        # Ligne 1 : Notifications, Statistiques
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1, cog=self)) 
-        # --- AJOUT DU BOUTON POUR LES STATS PROJET ---
-        view.add_item(self.ProjectStatsButton("📊 Stats Projet", guild_id, discord.ButtonStyle.secondary, row=1, cog=self)) 
+        # Ligne 1 : Notifications, Statistiques, Stats Projet
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.primary, row=1, cog=self)) 
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) 
+        # --- Le bouton pour les stats du projet ---
+        view.add_item(self.ProjectStatsButton("📈 Stats Projet", guild_id, discord.ButtonStyle.secondary, row=1, cog=self)) 
         
         # Ligne 2 : Bouton retour final
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=2, cog=self)) 
        
         return view
+
+    # --- Classe ProjectStatsButton (celle que nous avons définie précédemment) ---
+    class ProjectStatsButton(ui.Button):
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
+            super().__init__(label=label, style=style, row=row)
+            self.guild_id = guild_id
+            self.cog = cog
+
+        async def callback(self, interaction: discord.Interaction):
+            bot = interaction.client 
+            dev_stats_cog = bot.get_cog("DevStatsCog") # Assurez-vous que le nom du cog est correct
+
+            if not dev_stats_cog:
+                await interaction.response.send_message("Erreur: Cog DevStatsCog non trouvé.", ephemeral=True)
+                return
+
+            await interaction.response.defer(thinking=True, ephemeral=True)
+
+            try:
+                commit_data = await dev_stats_cog.get_commit_stats()
+                loc_data = dev_stats_cog.get_loc_stats()
+
+                if "error" in commit_data:
+                    await interaction.followup.send(f"❌ Erreur GitHub : {commit_data['error']}", ephemeral=True)
+                    return
+                if "error" in loc_data:
+                    await interaction.followup.send(f"❌ Erreur Locale : {loc_data['error']}", ephemeral=True)
+                    return
+
+                # Utilisation de create_styled_embed importé de config
+                embed = create_styled_embed(
+                    title=f"📊 Statistiques du Projet - {GITHUB_REPO_NAME}",
+                    description="Un aperçu de l'activité de développement du projet.",
+                    color=discord.Color.dark_green()
+                )
+
+                first_commit_ts = int(commit_data['first_commit_date'].timestamp())
+                last_commit_ts = int(commit_data['last_commit_date'].timestamp())
+
+                project_duration = commit_data['last_commit_date'] - commit_data['first_commit_date']
+                project_duration_days = project_duration.days
+                
+                commit_text = (
+                    f"**Nombre total de commits :** `{commit_data['total_commits']}`\n"
+                    f"**Premier commit :** <t:{first_commit_ts}:D>\n"
+                    f"**Dernier commit :** <t:{last_commit_ts}:R>\n"
+                    f"**Durée du projet :** `{project_duration_days} jours`"
+                )
+                embed.add_field(name="⚙️ Activité des Commits", value=commit_text, inline=False)
+                
+                loc_text = (
+                    f"**Lignes de code :** `{loc_data['total_lines']:,}`\n"
+                    f"**Caractères :** `{loc_data['total_chars']:,}`\n"
+                    f"**Fichiers Python :** `{loc_data['total_files']}`"
+                )
+                embed.add_field(name="💻 Code Source (.py)", value=loc_text, inline=True)
+
+                total_seconds = commit_data['estimated_duration'].total_seconds()
+                total_hours = total_seconds / 3600
+                time_text = f"**Estimation :**\n`{total_hours:.2f} heures`"
+                embed.add_field(name="⏱️ Amplitude de Développement", value=time_text, inline=True)
+
+                embed.set_footer(text="Données via API GitHub & commandes git locales.")
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+
+            except Exception as e:
+                Logger.error(f"Erreur dans le callback de ProjectStatsButton : {e}")
+                traceback.print_exc()
+                await interaction.followup.send("❌ Une erreur critique est survenue lors de la récupération des statistiques du projet.", ephemeral=True)
     
     def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
         """
