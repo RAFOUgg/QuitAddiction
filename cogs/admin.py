@@ -85,7 +85,22 @@ class AdminCog(commands.Cog):
         db.close()
 
     # --- Méthodes pour Générer les Embeds et Vues de Configuration ---
-    
+        # Méthode principale pour générer la vue du menu de configuration
+    def generate_config_menu_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
+        view = discord.ui.View(timeout=None)
+        
+        # Ligne 0 : Mode/Durée, Lancer/Réinitialiser, Rôles & Salons
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
+        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) 
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=0, cog=self)) 
+        
+        # Ligne 1 : Notifications, Statistiques, Sauvegarder
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1, cog=self)) 
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) 
+        # Ligne 2 : Bouton retour final
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=2, cog=self)) 
+       
+        return view
     def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
         """
         Crée des options hiérarchisées et lisibles pour les SelectMenus (rôles ou salons).
@@ -734,24 +749,6 @@ class NotificationToggle(ui.Button):
         view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Ajustez le row si nécessaire
 
         return view
-    
-    # Méthode principale pour générer la vue du menu de configuration
-    def generate_config_menu_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
-        
-        # Ligne 0 : Mode/Durée, Lancer/Réinitialiser, Rôles & Salons
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
-        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) 
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=0, cog=self)) 
-        
-        # Ligne 1 : Notifications, Statistiques, Sauvegarder
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.green, row=1, cog=self)) 
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) 
-        # Ligne 2 : Bouton retour final
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=2, cog=self)) 
-       
-        return view
-
 class PaginatedSelect(discord.ui.Select):
         def __init__(self, guild_id: str, select_type: str, options: list[discord.SelectOption], id_mapping: dict, page: int, cog: 'AdminCog'):
             self.guild_id = guild_id
