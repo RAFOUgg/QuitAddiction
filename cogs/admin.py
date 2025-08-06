@@ -648,105 +648,105 @@ class AdminCog(commands.Cog):
     # --- Classe pour gérer la vue paginée des salons ---
     class PaginatedViewManager(ui.View):
     # Add 'select_type' to the __init__ signature
-    def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, select_type: str, initial_page: int = 0, cog: 'AdminCog'=None):
-        super().__init__(timeout=180)
-        self.guild_id = guild_id
-        self.all_options = all_options
-        self.id_mapping = id_mapping
-        self.select_type = select_type # Store select_type here
-        self.current_page = initial_page
-        self.cog = cog
+        def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, select_type: str, initial_page: int = 0, cog: 'AdminCog'=None):
+            super().__init__(timeout=180)
+            self.guild_id = guild_id
+            self.all_options = all_options
+            self.id_mapping = id_mapping
+            self.select_type = select_type # Store select_type here
+            self.current_page = initial_page
+            self.cog = cog
 
-        # Create the appropriate SelectMenu based on select_type
-        if self.select_type in ('admin_role', 'notification_role'):
-            self.selection_menu = AdminCog.RoleSelect( # Use RoleSelect for roles
-                guild_id=self.guild_id,
-                select_type=self.select_type, # Pass select_type to RoleSelect
-                row=0,
-                options=self.all_options,
-                id_mapping=self.id_mapping,
-                cog=self.cog
-            )
-        elif self.select_type == 'channel':
-            self.selection_menu = AdminCog.ChannelSelect( # Use ChannelSelect for channels
-                guild_id=self.guild_id,
-                select_type=self.select_type, # Pass select_type to ChannelSelect
-                row=0,
-                options=self.all_options,
-                id_mapping=self.id_mapping,
-                page=self.current_page,
-                cog=self.cog
-            )
-        else:
-            # Handle unknown select_type, though this shouldn't happen with current usage
-            raise ValueError(f"Unknown select_type: {self.select_type}")
-
-        # Buttons are generic, so their definition can remain similar
-        self.prev_button = ui.Button(
-            label="⬅ Précédent",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}", # Use select_type in custom_id for better scoping
-            disabled=self.current_page == 0,
-            row=1
-        )
-        self.next_button = ui.Button(
-            label="Suivant ➡",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"pagination_{self.select_type}_next_{self.guild_id}", # Use select_type in custom_id
-            disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options),
-            row=1
-        )
-        
-        self.prev_button.callback = self.handle_page_change
-        self.next_button.callback = self.handle_page_change
-
-    def update_components(self, interaction: discord.Interaction):
-        # Remove old menu
-        self.remove_item(self.selection_menu)
-
-        # Create new menu for the updated page
-        if self.select_type in ('admin_role', 'notification_role'):
-            self.selection_menu = AdminCog.RoleSelect(
-                guild_id=self.guild_id,
-                select_type=self.select_type,
-                row=0,
-                options=self.all_options,
-                id_mapping=self.id_mapping,
-                cog=self.cog
-            )
-        elif self.select_type == 'channel':
-            self.selection_menu = AdminCog.ChannelSelect(
-                guild_id=self.guild_id,
-                select_type=self.select_type,
-                row=0,
-                options=self.all_options,
-                id_mapping=self.id_mapping,
-                page=self.current_page,
-                cog=self.cog
-            )
-        else:
-            raise ValueError(f"Unknown select_type: {self.select_type}")
-        self.add_item(self.selection_menu)
-
-        # Update button states
-        self.prev_button.disabled = self.current_page == 0
-        self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
-
-    async def handle_page_change(self, interaction: discord.Interaction):
-        if interaction.data['custom_id'].endswith('_prev'):
-            if self.current_page > 0:
-                self.current_page -= 1
-                self.update_components(interaction)
-                await interaction.response.edit_message(view=self)
+            # Create the appropriate SelectMenu based on select_type
+            if self.select_type in ('admin_role', 'notification_role'):
+                self.selection_menu = AdminCog.RoleSelect( # Use RoleSelect for roles
+                    guild_id=self.guild_id,
+                    select_type=self.select_type, # Pass select_type to RoleSelect
+                    row=0,
+                    options=self.all_options,
+                    id_mapping=self.id_mapping,
+                    cog=self.cog
+                )
+            elif self.select_type == 'channel':
+                self.selection_menu = AdminCog.ChannelSelect( # Use ChannelSelect for channels
+                    guild_id=self.guild_id,
+                    select_type=self.select_type, # Pass select_type to ChannelSelect
+                    row=0,
+                    options=self.all_options,
+                    id_mapping=self.id_mapping,
+                    page=self.current_page,
+                    cog=self.cog
+                )
             else:
-                await interaction.response.send_message("C'est la première page.", ephemeral=True)
-        else: # next
-            if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
-                self.current_page += 1
-                self.update_components(interaction)
-                await interaction.response.edit_message(view=self)
+                # Handle unknown select_type, though this shouldn't happen with current usage
+                raise ValueError(f"Unknown select_type: {self.select_type}")
+
+            # Buttons are generic, so their definition can remain similar
+            self.prev_button = ui.Button(
+                label="⬅ Précédent",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}", # Use select_type in custom_id for better scoping
+                disabled=self.current_page == 0,
+                row=1
+            )
+            self.next_button = ui.Button(
+                label="Suivant ➡",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"pagination_{self.select_type}_next_{self.guild_id}", # Use select_type in custom_id
+                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options),
+                row=1
+            )
+            
+            self.prev_button.callback = self.handle_page_change
+            self.next_button.callback = self.handle_page_change
+
+        def update_components(self, interaction: discord.Interaction):
+            # Remove old menu
+            self.remove_item(self.selection_menu)
+
+            # Create new menu for the updated page
+            if self.select_type in ('admin_role', 'notification_role'):
+                self.selection_menu = AdminCog.RoleSelect(
+                    guild_id=self.guild_id,
+                    select_type=self.select_type,
+                    row=0,
+                    options=self.all_options,
+                    id_mapping=self.id_mapping,
+                    cog=self.cog
+                )
+            elif self.select_type == 'channel':
+                self.selection_menu = AdminCog.ChannelSelect(
+                    guild_id=self.guild_id,
+                    select_type=self.select_type,
+                    row=0,
+                    options=self.all_options,
+                    id_mapping=self.id_mapping,
+                    page=self.current_page,
+                    cog=self.cog
+                )
             else:
-                await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
+                raise ValueError(f"Unknown select_type: {self.select_type}")
+            self.add_item(self.selection_menu)
+
+            # Update button states
+            self.prev_button.disabled = self.current_page == 0
+            self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
+
+        async def handle_page_change(self, interaction: discord.Interaction):
+            if interaction.data['custom_id'].endswith('_prev'):
+                if self.current_page > 0:
+                    self.current_page -= 1
+                    self.update_components(interaction)
+                    await interaction.response.edit_message(view=self)
+                else:
+                    await interaction.response.send_message("C'est la première page.", ephemeral=True)
+            else: # next
+                if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
+                    self.current_page += 1
+                    self.update_components(interaction)
+                    await interaction.response.edit_message(view=self)
+                else:
+                    await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
     def generate_stats_embed(self, guild_id: str) -> discord.Embed:
