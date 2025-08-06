@@ -175,7 +175,7 @@ class AdminCog(commands.Cog):
             self.cog = cog # Stocker l'instance du cog
 
         async def callback(self, interaction: discord.Interaction):
-            selected_mode = self.values
+            selected_mode = self.values[0] # Assurez-vous que c'est bien self.values[0]
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -209,7 +209,7 @@ class AdminCog(commands.Cog):
             self.cog = cog # Stocker l'instance du cog
 
         async def callback(self, interaction: discord.Interaction):
-            selected_duration_key = self.values
+            selected_duration_key = self.values[0] # Assurez-vous que c'est bien self.values[0]
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -410,7 +410,7 @@ class AdminCog(commands.Cog):
         view.add_item(channel_pagination_manager.channel_select) # Le Select va sur row=0
         if len(channel_options_all) > MAX_OPTIONS_PER_PAGE:
             view.add_item(channel_pagination_manager.prev_button) # Bouton Précédent sur row=1
-            view.add_item(channel_pagination_manager.next_button) # Bouton Suivant sur row=1
+            view.add_item(channel_pagination_manager.next_button) # Bouton Suivant sur la ligne 1
         
         # Le bouton de retour doit être sur une ligne distincte, par exemple row=3
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Passer self
@@ -432,11 +432,11 @@ class AdminCog(commands.Cog):
                 await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
                 return
 
-            if not self.values or self.values in ["no_items", "error_guild"]:
+            if not self.values or self.values[0] in ["no_items", "error_guild"]:
                 await interaction.response.send_message("Veuillez sélectionner un rôle valide.", ephemeral=True)
                 return
 
-            selected_short_id = self.values
+            selected_short_id = self.values[0]
             selected_role_id = self.id_mapping.get(selected_short_id)
 
             if not selected_role_id:
@@ -496,11 +496,11 @@ class AdminCog(commands.Cog):
                 await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
                 return
 
-            if not self.values or self.values in ["no_channels", "error_guild", "no_items"]:
+            if not self.values or self.values[0] in ["no_channels", "error_guild", "no_items"]:
                 await interaction.response.send_message("Veuillez sélectionner un salon valide.", ephemeral=True)
                 return
 
-            selected_short_id = self.values
+            selected_short_id = self.values[0]
             selected_channel_id = self.id_mapping.get(selected_short_id)
 
             if not selected_channel_id:
@@ -593,7 +593,6 @@ class AdminCog(commands.Cog):
             self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
 
         # Callbacks pour les boutons de navigation
-        # Les custom_id ici doivent correspondre exactement à ceux des instances de boutons.
         @ui.button(custom_id=f"channel_prev_page_{self.guild_id}") # Correspond au custom_id de self.prev_button
         async def prev_button_callback(self, interaction: discord.Interaction):
             if interaction.user.id != interaction.guild.owner_id: 
