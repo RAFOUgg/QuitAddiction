@@ -947,7 +947,7 @@ class AdminCog(commands.Cog):
             db.close()
 
     # --- LA VUE POUR LES PRÉFÉRENCES DE NOTIFICATIONS ---
-    def generate_notifications_view(self, guild_id: str) -> discord.ui.View: # L'argument guild n'est pas nécessaire ici si on récupère le guild via guild_id
+    def generate_notifications_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=180)
 
         db = SessionLocal()
@@ -955,70 +955,49 @@ class AdminCog(commands.Cog):
         db.close()
 
         if not state:
-            # Gérer le cas où l'état n'est pas trouvé, peut-être en renvoyant une vue vide ou une erreur.
-            # Ici, je retourne une vue avec juste le bouton retour.
             view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=0, cog=self))
             return view
 
-        # --- Ajout des boutons Toggle ---
-        # On récupère l'état actuel pour construire dynamiquement les boutons
-        # Assurez-vous que ces attributs existent dans votre modèle ServerState (notify_on_low_vital_stat, etc.)
+        # --- Ajout des boutons Toggle avec des lignes correctes ---
+        # IMPORTANT : Les boutons dans une même ligne doivent avoir le même 'row' pour être côte à côte.
+        # Discord limite à 5 composants par ligne.
+
+        # Ligne 0: Jauges Basses (généralement critique, donc danger)
         view.add_item(self.NotificationToggle("🔴 Jauges Basses", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, cog=self, row=0))
+        # Ligne 1: Événement Critique ET Envie de Fumer (deux boutons sur la même ligne)
         view.add_item(self.NotificationToggle("🔴 Événement Critique", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, cog=self, row=1))
         view.add_item(self.NotificationToggle("🚬 Envie de Fumer", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, cog=self, row=1))
+        
+        # Ligne 2: Message Ami/Quiz ET Promo Boutique
         view.add_item(self.NotificationToggle("💬 Message Ami/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, cog=self, row=2))
         view.add_item(self.NotificationToggle("🟠 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.warning if state.notify_on_shop_promo else discord.ButtonStyle.secondary, cog=self, row=2))
         
-        # --- Ajout du SelectMenu pour le rôle de notification ---
-        # Ici, il faut accéder au guild pour obtenir la liste des rôles.
-        # Le callback de ProjectStatsButton montre comment obtenir le guild.
-        # Il faudra passer l'objet guild ou le récuperer ici.
-        # Comme on est dans admin.py, on peut le récupérer depuis l'interaction stockée ou passer guild_id à la création de la vue.
-        # Dans generate_config_menu_view, vous passez `interaction.guild`. On pourrait faire pareil ici.
-        # Pour simplifier, je vais supposer que 'guild' peut être récupéré.
-        # Si vous passez guild_id à generate_notifications_view, vous devrez utiliser discord.utils.get(guild.roles, id=...)
-        
-        # Il est plus propre de passer le guild à cette méthode.
-        # Si generate_notifications_view est appelée par un bouton (comme ConfigButton),
-        # ce bouton doit passer le guild. L'appel actuel est :
-        # view=self.cog.generate_notifications_view(self.guild_id) 
-        # Il faudrait passer guild ici aussi, ou le récupérer.
-        # Si on le récupère depuis l'ID :
-        guild = discord.utils.get(self.bot.guilds, id=int(guild_id)) # Si guild_id est un string
+        # --- Ajout du SelectMenu pour le rôle de notification général ---
+        # Il faut le placer sur une ligne libre, par exemple row=3
+        guild = discord.utils.get(self.bot.guilds, id=int(guild_id))
         if guild:
             all_roles = guild.roles
             role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
             
-            # Rôle général de notification
             general_notif_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
-            general_notif_select.row = 0 # Mettre sur la première ligne disponible
+            general_notif_select.row = 3 # Placer sur une nouvelle ligne
             view.add_item(general_notif_select)
+
+            # Si vous avez d'autres sélecteurs de rôle spécifiques, ajoutez-les ici en respectant les lignes.
+            # Par exemple, pour les rôles spécifiques de notification :
+            # vital_low_role_select = NotificationRoleSelect(guild_id, "notify_vital_low_role_id", row=4, options=role_options, id_mapping=role_id_mapping, cog=self)
+            # view.add_item(vital_low_role_select)
+            # etc.
             
-            # Rôles spécifiques (exemple pour 'notify_vital_low_role_id')
-            vital_low_role_select = NotificationRoleSelect(guild_id, "notify_vital_low_role_id", row=1, options=role_options, id_mapping=role_id_mapping, cog=self)
-            view.add_item(vital_low_role_select)
-            
-            crit_role_select = NotificationRoleSelect(guild_id, "notify_critical_role_id", row=1, options=role_options, id_mapping=role_id_mapping, cog=self)
-            view.add_item(crit_role_select)
-            
-            envie_role_select = NotificationRoleSelect(guild_id, "notify_envie_fumer_role_id", row=2, options=role_options, id_mapping=role_id_mapping, cog=self)
-            view.add_item(envie_role_select)
-            
-            friend_role_select = NotificationRoleSelect(guild_id, "notify_friend_message_role_id", row=2, options=role_options, id_mapping=role_id_mapping, cog=self)
-            view.add_item(friend_role_select)
-            
-            shop_role_select = NotificationRoleSelect(guild_id, "notify_shop_promo_role_id", row=3, options=role_options, id_mapping=role_id_mapping, cog=self)
-            view.add_item(shop_role_select)
         else:
-            # Si le guild n'a pas pu être trouvé, afficher un message d'erreur
+            # Si le guild n'a pas pu être trouvé
             error_embed = discord.Embed(title="Erreur", description="Impossible de trouver le serveur pour charger les rôles.", color=discord.Color.red())
-            # Vous devriez retourner une vue avec au moins un bouton retour ici
-            view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=0, cog=self))
-            return view
+            view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3, cog=self))
+            return view # Retourne la vue avec juste le bouton retour si le guild n'est pas trouvé
 
 
         # Bouton retour
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=4, cog=self)) # Ajustez le row si nécessaire
+        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=4, cog=self)) # Placez-le sur une ligne libre après les selectmenus
 
         return view
         
@@ -1074,9 +1053,8 @@ class AdminCog(commands.Cog):
 
     # --- La classe NotificationToggle est aussi ici ---
     class NotificationToggle(ui.Button):
-        # ... (votre code pour NotificationToggle, qui semble correct) ...
-        def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog'):
-            super().__init__(label=label, style=style, row=0)
+        def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog', row: int): # <-- AJOUT DE 'row' ICI
+            super().__init__(label=label, style=style, row=row) # <-- Utilisation de 'row'
             self.toggle_key = toggle_key
             self.guild_id = guild_id
             self.cog = cog
