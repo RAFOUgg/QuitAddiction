@@ -685,14 +685,14 @@ class AdminCog(commands.Cog):
             self.prev_button = ui.Button(
                 label="⬅ Précédent",
                 style=discord.ButtonStyle.secondary,
-                custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}", # Use select_type in custom_id for better scoping
+                custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}",
                 disabled=self.current_page == 0,
                 row=1
             )
             self.next_button = ui.Button(
                 label="Suivant ➡",
                 style=discord.ButtonStyle.secondary,
-                custom_id=f"pagination_{self.select_type}_next_{self.guild_id}", # Use select_type in custom_id
+                custom_id=f"pagination_{self.select_type}_next_{self.guild_id}",
                 disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options),
                 row=1
             )

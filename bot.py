@@ -12,6 +12,7 @@ from db.database import init_db # On importera la fonction pour initialiser la D
 # Configure le logging pour avoir des infos claires dans la console
 logging.basicConfig(level=logging.INFO)
 
+
 # Le dossier où se trouvent nos modules de commandes
 COGS_DIR = "cogs"
 
