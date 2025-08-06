@@ -32,6 +32,14 @@ class ServerState(Base):
     # Taux de dégradation par "tick" (basés sur le game_mode choisi)
     game_tick_interval_minutes = Column(Integer, default=30) # Durée d'une unité de temps de jeu (en minutes)
     
+    # Notifications et alertes
+    notify_on_low_vital_stat = Column(Boolean, nullable=False, default=True) # Ex: Si PHYS < 15%
+    notify_on_critical_event = Column(Boolean, nullable=False, default=True) # Ex: Mort, perte de conscience
+    notify_on_envie_fumer = Column(Boolean, nullable=False, default=True) # Si le cuisinier a envie
+    notify_on_friend_message = Column(Boolean, nullable=False, default=True) # Messages d'amis / quiz
+    notify_on_shop_promo = Column(Boolean, nullable=False, default=False) # Promotions de la boutique
+
+    # Taux de dégradation des besoins vitaux (peut être ajusté par le game_mode)
     degradation_rate_hunger = Column(Float, default=10.0)
     degradation_rate_thirst = Column(Float, default=8.0)
     degradation_rate_bladder = Column(Float, default=15.0)
