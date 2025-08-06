@@ -86,6 +86,90 @@ class AdminCog(commands.Cog):
 
     # --- Méthodes pour Générer les Embeds et Vues de Configuration ---
     
+    def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
+        """
+        Crée des listes d'options Discord (discord.SelectOption) et un mapping ID pour les menus déroulants.
+        Permet de convertir des objets (rôles, canaux) en options sélectionnables.
+
+        Args:
+            items (list): Une liste d'objets Discord (ex: discord.Role, discord.TextChannel).
+            item_type (str): Le type d'objet pour adapter le tri et la logique ('role' ou 'channel').
+            guild (discord.Guild | None): L'objet Guild pour accéder aux propriétés spécifiques comme la position des rôles ou des canaux.
+
+        Returns:
+            Tuple[List[discord.SelectOption], Dict[str, str]]: 
+            Une paire contenant:
+            1. Une liste d'objets discord.SelectOption prêts à être utilisés dans un menu déroulant.
+            2. Un dictionnaire mappant les valeurs hachées uniques (short_id) aux IDs originaux des objets (item_id).
+        """
+        options = []
+        id_mapping = {}
+        
+        # Gestion d'erreur si la guild n'est pas trouvée (ex: dans certains contextes de test ou de réponse différée)
+        if not guild:
+            return [discord.SelectOption(label="Erreur serveur", value="error_guild", default=True)], {}
+
+        try:
+            # Tri des éléments pour une meilleure organisation dans le menu déroulant.
+            if item_type == "role":
+                # Les rôles sont triés par position, du plus élevé (haut du serveur) au plus bas.
+                sorted_items = sorted(items, key=lambda x: x.position, reverse=True)
+            elif item_type == "channel":
+                # Les canaux sont triés d'abord par catégorie (les canaux sans catégorie en dernier),
+                # puis par position au sein de leur catégorie.
+                sorted_items = sorted(items, key=lambda x: (getattr(x, 'category_id', float('inf')), x.position))
+            else:
+                # Pas de tri spécifique pour d'autres types d'éléments.
+                sorted_items = items
+        except Exception as e:
+            # En cas d'erreur lors du tri, log l'erreur et continue avec les éléments non triés.
+            print(f"Error sorting {item_type}s: {e}")
+            sorted_items = items
+
+        # Limites pour les labels et valeurs des options de SelectMenu selon Discord API
+        MAX_OPTION_LENGTH = 25 # Max 25 caractères pour label et value
+        MIN_OPTION_LENGTH = 1  # Min 1 caractère
+
+        # Itération sur les éléments triés pour créer les options du menu.
+        for item in sorted_items:
+            # Ignorer les éléments qui n'ont pas d'ID ou dont le nom n'est pas valide.
+            item_id = str(item.id)
+            item_name = item.name
+            if item_id is None or not isinstance(item_name, str) or not item_name:
+                continue
+
+            # Créer le label : on tronque le nom de l'élément à la longueur maximale.
+            label = item_name[:MAX_OPTION_LENGTH]
+            # Si le label tronqué est vide, utiliser l'ID tronqué (cas très rare).
+            if not label:
+                label = item_id[:MAX_OPTION_LENGTH]
+            if not label: # Si même l'ID tronqué est vide, on ignore cet élément.
+                continue
+
+            # Créer une valeur unique et hachée pour l'option.
+            # Cela permet de créer une valeur courte et unique pour Discord.
+            # Le hachage SHA256 est utilisé pour garantir l'unicité et la sécurité.
+            hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
+            value = hashed_id[:MAX_OPTION_LENGTH] # Tronquer la valeur hachée.
+            if not value: # Si la valeur hachée tronquée est vide, on ignore.
+                continue
+
+            # Vérifier que le label et la valeur respectent les contraintes de longueur.
+            if not (MIN_OPTION_LENGTH <= len(label) <= MAX_OPTION_LENGTH and MIN_OPTION_LENGTH <= len(value) <= MAX_OPTION_LENGTH):
+                continue
+
+            # Ajouter l'option à la liste. Le 'description' inclut l'ID original pour référence.
+            options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
+            # Mappage de la valeur hachée (value) à l'ID original (item_id).
+            id_mapping[value] = item_id
+
+        # Si aucun élément valide n'a été trouvé, ajouter une option indiquant cela.
+        if not options:
+            options.append(discord.SelectOption(label="Aucun élément trouvé", value="no_items", default=True))
+
+        # Retourner la liste d'options et le mapping d'IDs.
+        return options, id_mapping
+    
     def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(
             title="⚙️ Configuration du Bot et du Jeu",
@@ -342,21 +426,46 @@ class AdminCog(commands.Cog):
 
         def add_component_to_view(component: discord.ui.Item):
             """Helper to add a component to the view, managing rows up to MAX_COMPONENTS_PER_ROW."""
-            # Existing logic for row assignment
             if component.row is None or component.row >= 5: # If row is not set or invalid
+                # Find the next available row
                 for r in range(5):
                     if rows_item_count[r] < MAX_COMPONENTS_PER_ROW:
-                        component.row = r
+                        component.row = r # Assign the component to this row
                         break
-                else:
-                    print(f"WARNING: Could not add component {getattr(component, 'label', 'unknown')} to view - all rows full.")
-                    return # Don't add if no row found
+                else: # No available row found
+                    print(f"WARNING: Could not add component {getattr(component, 'label', 'unknown')} to view - all rows full (5 items per row).")
+                    return # Don't add the component
 
+            # Now that component.row is guaranteed to be set (0-4) and valid
             if rows_item_count[component.row] < MAX_COMPONENTS_PER_ROW:
                 view.add_item(component)
                 rows_item_count[component.row] += 1
             else:
-                print(f"WARNING: Component {getattr(component, 'label', 'unknown')} already assigned to row {component.row} which is full.")
+                # This should ideally not happen if the above logic correctly assigns rows,
+                # but as a fallback: try finding a new row if the intended one is full.
+                # For robust row management, we should always try to find a row first.
+                # Let's refine this logic.
+
+                # --- Revised Row Assignment Strategy ---
+                # We need to find the best row for the component.
+                # Priority:
+                # 1. If component.row is already set and valid, check if it has space.
+                # 2. If not, find the first row with space.
+                found_row = -1
+                if component.row is not None and component.row < 5 and rows_item_count[component.row] < MAX_COMPONENTS_PER_ROW:
+                    found_row = component.row
+                else:
+                    for r in range(5):
+                        if rows_item_count[r] < MAX_COMPONENTS_PER_ROW:
+                            found_row = r
+                            break
+                
+                if found_row != -1:
+                    component.row = found_row # Assign the found row
+                    view.add_item(component)
+                    rows_item_count[found_row] += 1
+                else:
+                    print(f"WARNING: Could not add component {getattr(component, 'label', 'unknown')} to view - all rows full.")
 
 
         # --- Prepare Data ---
@@ -367,7 +476,7 @@ class AdminCog(commands.Cog):
         channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
 
         # --- Create Pagination Managers ---
-        # These managers will hold their respective select menus and buttons
+        # These managers will hold their respective select menus and buttons.
         admin_role_manager = self.PaginationManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="admin_role", cog=self, initial_page=0
@@ -382,31 +491,33 @@ class AdminCog(commands.Cog):
         )
 
         # --- Add Components FROM MANAGERS to View using the helper for row management ---
-        # Add Admin Role Select Menu
-        add_component_to_view(admin_role_manager.select_menu) # This select_menu already has row=0
+        # Add Admin Role Select Menu and its pagination buttons
+        # The select_menu inside each manager already has row=0, and buttons have row=1.
+        # The add_component_to_view helper handles placing them correctly in the main view.
+        add_component_to_view(admin_role_manager.select_menu)
         if admin_role_manager.total_pages > 1:
-            add_component_to_view(admin_role_manager.prev_button) # This button already has row=1
-            add_component_to_view(admin_role_manager.next_button) # This button already has row=1
+            add_component_to_view(admin_role_manager.prev_button)
+            add_component_to_view(admin_role_manager.next_button)
 
-        # Add Notification Role Select Menu
-        add_component_to_view(notification_role_manager.select_menu) # This select_menu already has row=0
+        # Add Notification Role Select Menu and its pagination buttons
+        add_component_to_view(notification_role_manager.select_menu)
         if notification_role_manager.total_pages > 1:
-            add_component_to_view(notification_role_manager.prev_button) # This button already has row=1
-            add_component_to_view(notification_role_manager.next_button) # This button already has row=1
+            add_component_to_view(notification_role_manager.prev_button)
+            add_component_to_view(notification_role_manager.next_button)
 
-        # Add Channel Select Menu
-        add_component_to_view(channel_manager.select_menu) # This select_menu already has row=0
+        # Add Channel Select Menu and its pagination buttons
+        add_component_to_view(channel_manager.select_menu)
         if channel_manager.total_pages > 1:
-            add_component_to_view(channel_manager.prev_button) # This button already has row=1
-            add_component_to_view(channel_manager.next_button) # This button already has row=1
+            add_component_to_view(channel_manager.prev_button)
+            add_component_to_view(channel_manager.next_button)
 
         # Back Button
+        # Ensure cog=self is passed to BackButton as it's required by its callback.
         back_button = self.BackButton(
-            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, cog=self # BackButton init also takes cog
+            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, cog=self
         )
-        add_component_to_view(back_button) # Add the back button
+        add_component_to_view(back_button)
 
-        # The view object now contains all managed components with assigned rows.
         return view
 
     # --- Classe de Menu pour la sélection des Rôles ---
