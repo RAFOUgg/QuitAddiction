@@ -175,7 +175,7 @@ class AdminCog(commands.Cog):
             self.cog = cog # Stocker l'instance du cog
 
         async def callback(self, interaction: discord.Interaction):
-            selected_mode = self.values[0]
+            selected_mode = self.values
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -209,7 +209,7 @@ class AdminCog(commands.Cog):
             self.cog = cog # Stocker l'instance du cog
 
         async def callback(self, interaction: discord.Interaction):
-            selected_duration_key = self.values[0]
+            selected_duration_key = self.values
             db = SessionLocal()
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
 
@@ -403,155 +403,139 @@ class AdminCog(commands.Cog):
         view.add_item(role_select_notif)
 
         # --- Logique de pagination pour les salons ---
-        # Ajouter les composants Select et Buttons directement à la vue principale.
-
-        # Créer le Select pour les salons (row=0)
-        channel_select_element = self.ChannelSelect(
-            guild_id=guild_id,
-            select_type="game_channel",
-            row=0, # Select sur la ligne 0
-            options=channel_options_all,
-            id_mapping=channel_id_mapping,
-            page=0, # Page initiale
-            cog=self # Passer self
-        )
-        view.add_item(channel_select_element)
-
-        # Créer les boutons de navigation (row=1)
-        if len(channel_options_all) > MAX_OPTIONS_PER_PAGE:
-            prev_button = ui.Button(
-                label="⬅ Précédent",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"channel_prev_page_{guild_id}_0", # Inclure la page pour le callback
-                disabled=True, # Désactivé au début si page 0
-                row=1 # Bouton précédent sur la ligne 1
-            )
-            next_button = ui.Button(
-                label="Suivant ➡",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"channel_next_page_{guild_id}_0", # Inclure la page pour le callback
-                disabled=False, # Activé s'il y a plus d'une page
-                row=1 # Bouton suivant sur la ligne 1
-            )
-            # Il faut ici lier les callbacks aux boutons.
-            # Comme nous n'avons plus de ChannelSelectView séparée, les callbacks des boutons doivent être
-            # implémentés d'une autre manière, soit en attenant un `ui.Button` avec son callback,
-            # soit en utilisant une logique d'interaction globale (plus complexe).
-
-            # Option la plus simple : créer des instances de Button avec des callbacks associés
-            # et les ajouter à la vue. Cela évite les problèmes avec les `@ui.button` et les `custom_id` dynamiques.
-            
-            # Redéfinissons ici les boutons avec leurs callbacks attachés directement.
-            
-            # Le `custom_id` est nécessaire pour que Discord sache à quel élément l'interaction appartient.
-            # Les callbacks pour la navigation de page seront directement associés à ces boutons.
-
-            # Le callback pour le bouton précédent
-            async def prev_button_callback(interaction: discord.Interaction, guild_id=guild_id, current_page=0):
-                if interaction.user.id != interaction.guild.owner_id: 
-                    await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
-                    return
-                
-                # Il faut ici accéder à l'état de la page actuelle. Comme on ne passe pas la vue,
-                # il faut trouver le moyen d'y accéder. La manière la plus propre est de
-                # ne pas ajouter les boutons directement ici, mais de les gérer via une vue parente
-                # qui maintient l'état.
-
-                # OK, je vais réintroduire ChannelSelectView pour gérer l'état de la pagination.
-                # La raison est que la vue principale (config_menu_view) n'a pas de moyen facile
-                # de maintenir l'état de la page pour le select de salon.
-
-                # Retour à l'idée initiale : ChannelSelectView gère les éléments paginés.
-                # Mais comment l'ajouter correctement à la vue principale sans que les lignes se chevauchent ?
-
-                # La solution est que ChannelSelectView contienne UNIQUEMENT le Select et les boutons de pagination,
-                # et que ces éléments soient ajoutés à la vue principale avec leurs `row` appropriés.
-                # Dans generate_general_config_view:
-                # On crée le Select (row=0)
-                # On crée les Buttons (row=1)
-                # On ajoute ces éléments à la vue principale.
-
-                # Il faut que les callbacks de ces boutons soient directement sur la vue principale.
-                # C'est ce que faisait la `ChannelSelectView` avec ses méthodes `@ui.button`.
-                # Mais `ChannelSelectView` n'existe plus.
-
-                # SOLUTION REVISITÉE :
-                # Les boutons de navigation doivent être gérés avec des callbacks qui
-                # modifient l'état de la page et rééditent le message.
-                # Comme les vues ne se réinitialisent pas facilement pour les éléments dynamiques,
-                # il est plus simple d'avoir un `View` qui gère ça.
-
-                # Je vais donc réintroduire une structure similaire à ChannelSelectView, mais en m'assurant
-                # que ses éléments sont bien ajoutés à la vue principale.
-
-                # Réintroduisons ChannelSelectView dans le scope de AdminCog.
-                # Et dans generate_general_config_view:
-                # On crée le ChannelSelect (row=0).
-                # On crée les Buttons (row=1).
-                # On crée une instance de ChannelSelectView (qui contiendra le Select et les Buttons).
-                # ET on ajoute les éléments de ChannelSelectView à la vue principale.
-                # C'est le bon pattern.
-
-            # Je vais donc réintroduire ChannelSelectView comme une classe imbriquée interne
-            # et la générer correctement.
-            
-            # Réimplémentation de la logique de pagination :
-            # On crée le Select pour les salons (row=0).
-            # On crée les Buttons (row=1).
-            # On crée une instance de ChannelSelectView (qui gérera l'état et les callbacks).
-            # Et on ajoute les éléments de cette ChannelSelectView à la vue principale.
-
-            # Donc, la ligne qui causait l'erreur :
-            # channel_pagination_view = self.ChannelPaginationView(guild_id, channel_options_all, channel_id_mapping, cog=self)
-            # DOIT être remplacée par l'ajout DIRECT des composants créés ici.
-            # Et il faut que les callbacks des boutons soient correctement gérés.
-
-            # Le callback doit être attenant au bouton.
-            # Donc :
-            # prev_button = ui.Button(...)
-            # prev_button.callback = lambda interaction: self.handle_channel_page_change(interaction, guild_id, -1)
-            # next_button.callback = lambda interaction: self.handle_channel_page_change(interaction, guild_id, 1)
-            # Ce qui est aussi un peu lourd.
-
-            # La meilleure pratique est d'avoir une classe `View` qui contient les éléments et leurs callbacks.
-            # Ce que faisait `ChannelSelectView`.
-
-            # Retour à la solution où `ChannelSelectView` est une classe imbriquée qui est instanciée
-            # et ses éléments (Select et Buttons) sont ajoutés à la vue principale.
-            # Je vais donc réintégrer ChannelSelectView dans le code ci-dessous.
-            # Le problème d'attribut `ChannelPaginationView` était un artefact de cette révision.
-
-            pass # Ceci est un placeholder, le vrai callback sera attaché.
-
-        # Il FAUT que les callbacks des boutons soient gérés.
-        # Dans la dernière correction, j'avais réintroduit ChannelSelectView avec ses propres callbacks `@ui.button`.
-        # Il semble que cette structure ait été mal interprétée ou supprimée.
-        # Je vais donc réintégrer la logique ChannelSelectView comme il faut.
-
-        # LA BONNE STRUCTURE :
-        # 1. generate_general_config_view crée le Select et les Buttons.
-        # 2. Ces Select et Buttons sont ajoutés à la vue principale.
-        # 3. Les callbacks pour ces Buttons doivent être gérés.
-        # Cela se fait le plus proprement via une classe `View` qui encapsule ces éléments.
-        # Donc, je vais réintroduire ChannelSelectView.
-
-        # Créer la vue pour la pagination des salons
+        # Utiliser ChannelPaginationManager pour gérer le Select et les boutons de navigation
         channel_pagination_manager = self.ChannelPaginationManager(guild_id, channel_options_all, channel_id_mapping, cog=self)
         
         # Ajouter les éléments gérés par ChannelPaginationManager à la vue principale.
-        # Ces éléments sont le Select et les deux boutons.
-        view.add_item(channel_pagination_manager.channel_select)
+        view.add_item(channel_pagination_manager.channel_select) # Le Select va sur row=0
         if len(channel_options_all) > MAX_OPTIONS_PER_PAGE:
-            view.add_item(channel_pagination_manager.prev_button)
-            view.add_item(channel_pagination_manager.next_button)
+            view.add_item(channel_pagination_manager.prev_button) # Bouton Précédent sur row=1
+            view.add_item(channel_pagination_manager.next_button) # Bouton Suivant sur row=1
         
         # Le bouton de retour doit être sur une ligne distincte, par exemple row=3
         view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Passer self
         return view
 
+    # --- Classe de Menu pour la sélection des Rôles ---
+    class RoleSelect(ui.Select): # <<< ASSUREZ-VOUS QUE CETTE CLASSE EST BIEN DANS AdminCog
+        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict, cog: 'AdminCog'): # Ajout de cog
+            placeholder = f"Sélectionnez le rôle pour {'l\'admin' if select_type == 'admin_role' else 'les notifications'}..."
+            placeholder = placeholder[:100] 
+            super().__init__(placeholder=placeholder, options=options, custom_id=f"select_role_{select_type}_{guild_id}", row=row)
+            self.guild_id = guild_id
+            self.select_type = select_type
+            self.id_mapping = id_mapping 
+            self.cog = cog # Stocker l'instance du cog
+
+        async def callback(self, interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
+                return
+
+            if not self.values or self.values in ["no_items", "error_guild"]:
+                await interaction.response.send_message("Veuillez sélectionner un rôle valide.", ephemeral=True)
+                return
+
+            selected_short_id = self.values
+            selected_role_id = self.id_mapping.get(selected_short_id)
+
+            if not selected_role_id:
+                await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du rôle.", ephemeral=True)
+                return
+
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+
+            if state:
+                if self.select_type == "admin_role":
+                    state.admin_role_id = selected_role_id
+                elif self.select_type == "notification_role":
+                    state.notification_role_id = selected_role_id
+                
+                try:
+                    db.commit()
+                    db.refresh(state) 
+
+                    await interaction.response.edit_message(
+                        embed=self.cog.generate_role_and_channel_config_embed(state), # Utiliser self.cog
+                        view=self.cog.generate_general_config_view(self.guild_id, interaction.guild) # Utiliser self.cog
+                    )
+                    await interaction.followup.send(f"Rôle pour {'l\'administration' if self.select_type == 'admin_role' else 'les notifications'} mis à jour.", ephemeral=True)
+                except Exception as e:
+                    db.rollback()
+                    await interaction.response.send_message(f"Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            else:
+                await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
+            
+            db.close()
+
+    # --- Classe pour la sélection des Salons avec Pagination ---
+    class ChannelSelect(ui.Select): # <<< ASSUREZ-VOUS QUE CETTE CLASSE EST BIEN DANS AdminCog
+        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict, page: int = 0, cog: 'AdminCog'=None): # Ajout de cog
+            self.guild_id = guild_id
+            self.select_type = select_type
+            self.id_mapping = id_mapping
+            self.page = page
+            self.cog = cog # Stocker l'instance du cog
+
+            # Filtrer les options pour la page actuelle
+            start_index = page * MAX_OPTIONS_PER_PAGE
+            end_index = start_index + MAX_OPTIONS_PER_PAGE
+            current_page_options = options[start_index:end_index]
+
+            if not current_page_options:
+                current_page_options.append(discord.SelectOption(label="Aucun salon sur cette page", value="no_channels", default=True))
+
+            placeholder = f"Sélectionnez le salon pour le jeu (Page {page + 1})..."
+            placeholder = placeholder[:100]
+            # Le custom_id doit inclure la page pour être unique par page
+            super().__init__(placeholder=placeholder, options=current_page_options, custom_id=f"select_channel_{select_type}_{guild_id}_page{page}", row=row)
+
+        async def callback(self, interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant pour cette action.", ephemeral=True)
+                return
+
+            if not self.values or self.values in ["no_channels", "error_guild", "no_items"]:
+                await interaction.response.send_message("Veuillez sélectionner un salon valide.", ephemeral=True)
+                return
+
+            selected_short_id = self.values
+            selected_channel_id = self.id_mapping.get(selected_short_id)
+
+            if not selected_channel_id:
+                await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du salon.", ephemeral=True)
+                return
+
+            db = SessionLocal()
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+
+            if state:
+                if self.select_type == "game_channel":
+                    state.game_channel_id = selected_channel_id
+                
+                try:
+                    db.commit()
+                    db.refresh(state)
+
+                    # Ici, il faut reconstruire la vue entière pour que le changement de page soit bien géré
+                    # dans le cas où l'utilisateur change de page et sélectionne un salon.
+                    # On utilise le cog pour générer la vue complète.
+                    await interaction.response.edit_message(
+                        embed=self.cog.generate_role_and_channel_config_embed(state), # Utiliser self.cog
+                        view=self.cog.generate_general_config_view(self.guild_id, interaction.guild) # Utiliser self.cog
+                    )
+                    await interaction.followup.send(f"Salon de jeu mis à jour.", ephemeral=True)
+                except Exception as e:
+                    db.rollback()
+                    await interaction.response.send_message(f"Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            else:
+                await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur pour sauvegarder la configuration.", ephemeral=True)
+            
+            db.close()
+
     # --- Classe pour gérer la vue paginée des salons ---
-    # Elle gérera le Select et les boutons de navigation.
-    class ChannelPaginationManager(ui.View):
+    class ChannelPaginationManager(ui.View): # <<< ASSUREZ-VOUS QUE CETTE CLASSE EST BIEN DANS AdminCog
         def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, initial_page: int = 0, cog: 'AdminCog'=None): # Ajout de cog
             super().__init__(timeout=None)
             self.guild_id = guild_id
@@ -608,46 +592,33 @@ class AdminCog(commands.Cog):
             self.prev_button.disabled = self.current_page == 0
             self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
 
-            # IMPORTANT : Les callbacks des boutons doivent être gérés.
-            # Puisque ChannelPaginationManager est une `ui.View`, nous pouvons utiliser `@ui.button`
-            # mais il faut s'assurer que les `custom_id` correspondent.
-
         # Callbacks pour les boutons de navigation
-        @ui.button(label="⬅ Précédent", style=discord.ButtonStyle.secondary, custom_id="channel_prev_page_callback") # custom_id générique ici
+        # Les custom_id ici doivent correspondre exactement à ceux des instances de boutons.
+        @ui.button(custom_id=f"channel_prev_page_{self.guild_id}") # Correspond au custom_id de self.prev_button
         async def prev_button_callback(self, interaction: discord.Interaction):
-            # Il faut vérifier le custom_id réel de l'interaction
-            if interaction.custom_id == f"channel_prev_page_{self.guild_id}":
-                if interaction.user.id != interaction.guild.owner_id: 
-                    await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
-                    return
-                
-                if self.current_page > 0:
-                    self.current_page -= 1
-                    self.update_display(interaction)
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("C'est la première page.", ephemeral=True)
+            if interaction.user.id != interaction.guild.owner_id: 
+                await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
+                return
+            
+            if self.current_page > 0:
+                self.current_page -= 1
+                self.update_display(interaction)
+                await interaction.response.edit_message(view=self)
+            else:
+                await interaction.response.send_message("C'est la première page.", ephemeral=True)
 
-        @ui.button(label="Suivant ➡", style=discord.ButtonStyle.secondary, custom_id="channel_next_page_callback") # custom_id générique ici
+        @ui.button(custom_id=f"channel_next_page_{self.guild_id}") # Correspond au custom_id de self.next_button
         async def next_button_callback(self, interaction: discord.Interaction):
-            if interaction.custom_id == f"channel_next_page_{self.guild_id}":
-                if interaction.user.id != interaction.guild.owner_id:
-                    await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
-                    return
+            if interaction.user.id != interaction.guild.owner_id:
+                await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
+                return
 
-                if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
-                    self.current_page += 1
-                    self.update_display(interaction)
-                    await interaction.response.edit_message(view=self)
-                else:
-                    await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
-
-        # Il faut que les custom_id des boutons dans __init__ correspondent à ceux des `@ui.button`.
-        # Pour que cela fonctionne, il faut que les custom_id soient définis une seule fois pour chaque type de bouton.
-        # Dans le cas de navigation, les custom_id sont liés au guild_id, ce qui est correct.
-        # Le `custom_id` dans les `@ui.button` est une convention, ce sont les `custom_id` des instances qui sont prioritaires.
-        # Si cela ne fonctionne pas, il faudra peut-être les lier manuellement ou utiliser une autre approche.
-        # Mais `discord.py` est censé trouver les callbacks par `custom_id`.
+            if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
+                self.current_page += 1
+                self.update_display(interaction)
+                await interaction.response.edit_message(view=self)
+            else:
+                await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
     def generate_stats_embed(self, guild_id: str) -> discord.Embed:
