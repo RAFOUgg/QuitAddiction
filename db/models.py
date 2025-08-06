@@ -2,8 +2,8 @@
 try:
     from db.database import Base
 except ImportError:
-    print("ERREUR CRITIQUE DANS MODELS.PY: IMPOSSIBLE D'IMPORTER Base DE db.database.py !")
-    print("--> Vérifiez le chemin de l'importation dans db/models.py et assurez-vous que db/database.py exporte 'Base'.")
+    print("CRITICAL ERROR IN MODELS.PY: CANNOT IMPORT Base FROM db.database.py!")
+    print("--> Check import paths and ensure no circular dependencies.")
     raise
 
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, ForeignKey, UniqueConstraint

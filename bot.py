@@ -1,59 +1,63 @@
-# bot.py
+# --- bot.py (Corrected) ---
 import discord
 from discord.ext import commands
 import os
 import asyncio
-import logging
 
-# Importe notre configuration
+# --- Our custom modules ---
 from config import BOT_TOKEN, GUILD_ID
-from db.database import init_db # On importera la fonction pour initialiser la DB
+from db.database import init_db
+from utils.logger import get_logger # +++ CORRECT: Import your custom logger factory
 
-# Configure le logging pour avoir des infos claires dans la console
-logging.basicConfig(level=logging.INFO)
+# --- Setup ---
+# - OLD: logging.basicConfig(level=logging.INFO) 
+# --- This line was overriding your custom logger! It has been removed.
 
+logger = get_logger(__name__) # +++ CORRECT: Get a logger for this specific file
 
-# Le dossier où se trouvent nos modules de commandes
 COGS_DIR = "cogs"
 
 class QuitAddictionBot(commands.Bot):
     def __init__(self):
-        # ... (vos intents et initialisation) ...
         intents = discord.Intents.default()
         intents.message_content = True
-        intents.members = True # Ajout pour certains événements si nécessaire
+        intents.members = True
 
         super().__init__(command_prefix="!", intents=intents)
         self.test_guild = discord.Object(id=GUILD_ID) if GUILD_ID else None
 
     async def on_ready(self):
-        logging.info(f'Connecté en tant que {self.user} (ID: {self.user.id})')
-        logging.info('------')
+        logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
+        logger.info('------')
 
     async def setup_hook(self):
         """
-        Un crochet qui s'exécute avant que le bot ne soit complètement connecté.
-        C'est l'endroit idéal pour charger les cogs, initialiser la DB, etc.
+        A hook that runs before the bot is fully connected.
+        This is the perfect place to load cogs and initialize the DB.
         """
-        # >>> FAIT : Ceci est l'endroit idéal pour appeler init_db() <<<
+        # >>> CORRECT: This is the ideal place to call init_db() <<<
+        logger.info("Initializing database from setup_hook...")
         init_db()
-        logging.info("Base de données initialisée.")
+        logger.info("Database initialization check complete.")
 
-        # ... (chargement des cogs et synchronisation des commandes) ...
+        # Load all cogs from the cogs directory
         for filename in os.listdir(f'./{COGS_DIR}'):
-            if filename.endswith('.py') and filename != '__init__.py':
+            if filename.endswith('.py') and not filename.startswith('__'):
                 try:
-                    # Assurez-vous que le chargement de scheduler est inclus ici !
                     await self.load_extension(f'{COGS_DIR}.{filename[:-3]}')
-                    logging.info(f'✅ Cog chargé : {filename}')
+                    logger.info(f'✅ Cog loaded: {filename}')
                 except Exception as e:
-                    logging.error(f'❌ Erreur de chargement du cog {filename}: {type(e).__name__} - {e}')
-        # Et surtout :
+                    logger.error(f'❌ Failed to load cog {filename}: {type(e).__name__} - {e}', exc_info=True)
+        
+        # Sync slash commands for faster testing on a specific guild, or globally
         if self.test_guild:
-            self.tree.copy_global_to(guild=self.test_guild) # Important pour TEST RAPIDE
+            logger.info(f"Copying global commands to test guild: {self.test_guild.id}")
+            self.tree.copy_global_to(guild=self.test_guild)
             await self.tree.sync(guild=self.test_guild)
+            logger.info("Slash commands synced to test guild.")
         else:
-            await self.tree.sync() # Sync global (plus lent)
+            await self.tree.sync()
+            logger.info("Global slash commands synced.")
 
 async def main():
     bot = QuitAddictionBot()
@@ -63,4 +67,4 @@ if __name__ == '__main__':
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Arrêt du bot.")
+        logger.info("Bot shutting down by KeyboardInterrupt.")

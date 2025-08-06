@@ -1,38 +1,26 @@
-# --- Fichier : cogs/admin.py ---
+# --- cogs/admin.py (Corrected and Refactored) ---
 
 import discord
 from discord.ext import commands
 from discord import app_commands, ui
-from db.database import SessionLocal
-from db.models import ServerState, PlayerProfile
 import hashlib
 import datetime
 import math
-from typing import List, Tuple, Dict, Optional
-import os # Nécessaire pour .env
-import dotenv # Nécessaire pour charger .env
-import config # Pour les constantes comme create_styled_embed, GITHUB_REPO_NAME etc.
+from typing import List, Tuple, Dict
+import os
+import traceback # +++ IMPORT: Added missing traceback import
 
-try:
-    from config import create_styled_embed, GITHUB_REPO_NAME, Logger
-except ImportError:
-    # Fallback si les constantes ne sont pas là
-    print("WARNING: Cannot import create_styled_embed, GITHUB_REPO_NAME, Logger from config. Using fallbacks.")
-    def create_styled_embed(title, description, color):
-        embed = discord.Embed(title=title, description=description, color=color)
-        return embed
-    GITHUB_REPO_NAME = "Unknown Project"
-    class Logger:
-        @staticmethod
-        def error(message: str):
-            print(f"ERROR: {message}")
-        @staticmethod
-        def info(message: str):
-            print(f"INFO: {message}")
+# --- CORRECT: Centralized Imports ---
+from db.database import get_db # +++ CORRECT: Import get_db for safe session management
+from db.models import ServerState, PlayerProfile
+from utils.logger import get_logger # +++ CORRECT: Use the central logger
+from config import create_styled_embed, GITHUB_REPO_NAME
 
-# Constante pour le nombre maximum d'options par page
-MAX_OPTIONS_PER_PAGE = 25 # Discord limite à 25 options par SelectMenu
-MAX_COMPONENTS_PER_ROW = 5
+# --- Setup Logger for this Cog ---
+logger = get_logger(__name__)
+
+# --- Constants ---
+MAX_OPTIONS_PER_PAGE = 25
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER")
