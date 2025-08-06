@@ -421,9 +421,31 @@ class AdminCog(commands.Cog):
 
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
-        # Créez la vue principale qui contiendra tous les éléments.
-        view = discord.ui.View(timeout=180) 
+        view = discord.ui.View(timeout=180)
+        # Initialiser un compteur pour chaque ligne, pour savoir combien de composants y sont déjà placés.
+        # Ce compteur sera utilisé par la fonction find_and_assign_row.
+        row_counts = [0] * 5 
 
+        # Une fonction helper pour trouver la prochaine ligne disponible et assigner le row au composant
+        # Cette fonction modifie le row du composant et met à jour row_counts.
+        def find_and_assign_row(component: discord.ui.Item):
+            if component.row is not None and component.row < 5: # Si un row est déjà spécifié et valide
+                target_row = component.row
+            else: # Sinon, chercher la première ligne disponible
+                target_row = -1
+                for r in range(5):
+                    if row_counts[r] < MAX_COMPONENTS_PER_ROW:
+                        target_row = r
+                        break
+            
+            if target_row != -1:
+                component.row = target_row # Assigner le row au composant
+                row_counts[target_row] += 1
+                return True # Indique que le row a été assigné avec succès
+            else:
+                print(f"WARNING: Could not find a free row for component '{getattr(component, 'label', 'unknown')}' with initial row {component.row}.")
+                return False # Indique qu'aucune ligne n'a pu être trouvée
+        
         # --- Prepare Data ---
         all_roles = guild.roles if guild else []
         role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
@@ -432,8 +454,7 @@ class AdminCog(commands.Cog):
         channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
 
         # --- Create Pagination Managers ---
-        # Chaque manager va contenir son propre menu et ses propres boutons de pagination,
-        # avec leurs lignes déjà assignées (row=0 pour le menu, row=1 pour les boutons).
+        # Chaque manager crée ses composants avec des rows initiaux (0 pour le menu, 1 pour les boutons).
         admin_role_manager = self.PaginatedViewManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="admin_role", cog=self, initial_page=0
@@ -447,35 +468,43 @@ class AdminCog(commands.Cog):
             select_type="channel", cog=self, initial_page=0
         )
 
-        # --- Add Components FROM MANAGERS to the main view ---
-        # Maintenant, au lieu d'appeler add_component_to_view pour chaque élément,
-        # on ajoute simplement les composants du manager à la vue principale.
-        # La logique de row=0 et row=1 est gérée DANS chaque manager.
-        # Discord gère automatiquement le placement des composants s'ils ont leurs lignes bien définies.
+        # --- Add Components FROM MANAGERS to View ---
+        # Pour chaque composant, on utilise find_and_assign_row pour déterminer sa ligne,
+        # puis on l'ajoute à la vue principale.
 
-        # Ajout du menu et des boutons de pagination pour les rôles admin
-        view.add_item(admin_role_manager.selection_menu)
+        # Composants du premier manager (Admin Role)
+        if find_and_assign_row(admin_role_manager.selection_menu):
+            view.add_item(admin_role_manager.selection_menu)
         if admin_role_manager.total_pages > 1:
-            view.add_item(admin_role_manager.prev_button)
-            view.add_item(admin_role_manager.next_button)
+            if find_and_assign_row(admin_role_manager.prev_button):
+                view.add_item(admin_role_manager.prev_button)
+            if find_and_assign_row(admin_role_manager.next_button):
+                view.add_item(admin_role_manager.next_button)
 
-        # Ajout du menu et des boutons de pagination pour les rôles de notification
-        view.add_item(notification_role_manager.selection_menu)
+        # Composants du second manager (Notification Role)
+        if find_and_assign_row(notification_role_manager.selection_menu):
+            view.add_item(notification_role_manager.selection_menu)
         if notification_role_manager.total_pages > 1:
-            view.add_item(notification_role_manager.prev_button)
-            view.add_item(notification_role_manager.next_button)
+            if find_and_assign_row(notification_role_manager.prev_button):
+                view.add_item(notification_role_manager.prev_button)
+            if find_and_assign_row(notification_role_manager.next_button):
+                view.add_item(notification_role_manager.next_button)
 
-        # Ajout du menu et des boutons de pagination pour les salons
-        view.add_item(channel_manager.selection_menu)
+        # Composants du troisième manager (Channel)
+        if find_and_assign_row(channel_manager.selection_menu):
+            view.add_item(channel_manager.selection_menu)
         if channel_manager.total_pages > 1:
-            view.add_item(channel_manager.prev_button)
-            view.add_item(channel_manager.next_button)
+            if find_and_assign_row(channel_manager.prev_button):
+                view.add_item(channel_manager.prev_button)
+            if find_and_assign_row(channel_manager.next_button):
+                view.add_item(channel_manager.next_button)
 
-        # Ajout du bouton retour
+        # Bouton retour - lui donner une ligne initiale (row=2) pour aider find_and_assign_row
         back_button = self.BackButton(
-            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, cog=self
+            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2, cog=self
         )
-        view.add_item(back_button) # Ajout direct du bouton retour
+        if find_and_assign_row(back_button):
+            view.add_item(back_button)
 
         return view
 
@@ -611,10 +640,12 @@ class AdminCog(commands.Cog):
             self.guild_id = guild_id
             self.all_options = all_options
             self.id_mapping = id_mapping
-            self.select_type = select_type 
+            self.select_type = select_type
             self.current_page = initial_page
             self.cog = cog
 
+            # Création des composants avec des lignes initiales.
+            # Le menu est sur la ligne 0.
             if self.select_type in ('admin_role', 'notification_role'):
                 self.selection_menu = AdminCog.RoleSelect(
                     guild_id=self.guild_id, select_type=self.select_type, row=0, 
@@ -629,30 +660,28 @@ class AdminCog(commands.Cog):
             else:
                 raise ValueError(f"Unknown select_type: {self.select_type}")
 
-            # Boutons de pagination
+            # Les boutons de pagination sont sur la ligne 1.
             self.prev_button = ui.Button(
                 label="⬅ Précédent", style=discord.ButtonStyle.secondary,
                 custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}",
-                disabled=self.current_page == 0, row=1 # Le bouton préc. est sur la ligne 1
+                disabled=self.current_page == 0, row=1 
             )
             self.next_button = ui.Button(
                 label="Suivant ➡", style=discord.ButtonStyle.secondary,
                 custom_id=f"pagination_{self.select_type}_next_{self.guild_id}",
-                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options), row=1 # Le bouton suiv. est aussi sur la ligne 1
+                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options), row=1
             )
             
             self.prev_button.callback = self.handle_page_change
             self.next_button.callback = self.handle_page_change
 
-            # Calculer le nombre total de pages ici, pour une utilisation correcte des boutons
-            # Assurez-vous que MAX_OPTIONS_PER_PAGE est bien défini
+            # Calculer le nombre total de pages
             self.total_pages = math.ceil(len(self.all_options) / MAX_OPTIONS_PER_PAGE) if MAX_OPTIONS_PER_PAGE else 1
-            if self.all_options and self.total_pages == 0: # Si il y a des options mais que le calcul donne 0 pages
+            if self.all_options and self.total_pages == 0:
                 self.total_pages = 1
             
             # Ajuster l'état initial des boutons après calcul de total_pages
             self.prev_button.disabled = self.current_page == 0
-            # Le bouton suivant est désactivé si on est sur la dernière page ou s'il n'y a qu'une page
             self.next_button.disabled = self.current_page >= self.total_pages - 1 if self.total_pages > 0 else True
 
 
@@ -660,7 +689,7 @@ class AdminCog(commands.Cog):
             # Suppression de l'ancien menu pour le remplacer par celui de la nouvelle page
             self.remove_item(self.selection_menu)
 
-            # Création du nouveau menu pour la page mise à jour
+            # Création du nouveau menu pour la page mise à jour (row=0)
             if self.select_type in ('admin_role', 'notification_role'):
                 self.selection_menu = AdminCog.RoleSelect(
                     guild_id=self.guild_id, select_type=self.select_type, row=0, 
@@ -676,7 +705,7 @@ class AdminCog(commands.Cog):
                 raise ValueError(f"Unknown select_type: {self.select_type}")
             self.add_item(self.selection_menu) # Ajout du nouveau menu
 
-            # Mise à jour de l'état des boutons de pagination
+            # Mise à jour de l'état des boutons de pagination (row=1)
             self.prev_button.disabled = self.current_page == 0
             self.next_button.disabled = self.current_page >= self.total_pages - 1 if self.total_pages > 0 else True
 
