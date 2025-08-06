@@ -700,6 +700,17 @@ class AdminCog(commands.Cog):
             self.prev_button.callback = self.handle_page_change
             self.next_button.callback = self.handle_page_change
 
+            # Calculer le nombre total de pages
+            # Assurez-vous que MAX_OPTIONS_PER_PAGE est bien défini (il l'est en tant que constante de classe)
+            self.total_pages = math.ceil(len(self.all_options) / MAX_OPTIONS_PER_PAGE) if MAX_OPTIONS_PER_PAGE else 1
+            # Si aucun élément, total_pages sera 0 ou 1 selon le cas. Si > 0 options, on s'assure que ça soit au moins 1 page.
+            if self.all_options and self.total_pages == 0:
+                self.total_pages = 1
+            
+            # Corriger l'état initial des boutons en fonction du nombre total de pages
+            self.prev_button.disabled = self.current_page == 0
+            self.next_button.disabled = self.current_page >= self.total_pages - 1 if self.total_pages > 0 else True
+
         def update_components(self, interaction: discord.Interaction):
             # Remove old menu
             self.remove_item(self.selection_menu)
