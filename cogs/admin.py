@@ -535,6 +535,7 @@ class AdminCog(commands.Cog):
             db.close()
 
     # --- Classe pour gérer la vue paginée des salons ---
+        # --- Classe pour gérer la vue paginée des salons ---
     class ChannelPaginationManager(ui.View): # <<< ASSUREZ-VOUS QUE CETTE CLASSE EST BIEN DANS AdminCog
         def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, initial_page: int = 0, cog: 'AdminCog'=None): # Ajout de cog
             super().__init__(timeout=None)
@@ -570,6 +571,10 @@ class AdminCog(commands.Cog):
                 disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options),
                 row=1 # Bouton suivant sur la ligne 1
             )
+            
+            # Attacher manuellement les callbacks aux boutons
+            self.prev_button.callback = self.handle_prev_page
+            self.next_button.callback = self.handle_next_page
 
         # Méthodes pour mettre à jour l'affichage (channels)
         def update_display(self, interaction: discord.Interaction):
@@ -592,9 +597,8 @@ class AdminCog(commands.Cog):
             self.prev_button.disabled = self.current_page == 0
             self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
 
-        # Callbacks pour les boutons de navigation
-        @ui.button(custom_id=f"channel_prev_page_{self.guild_id}") # Correspond au custom_id de self.prev_button
-        async def prev_button_callback(self, interaction: discord.Interaction):
+        # Callbacks pour les boutons de navigation (définis ici comme des méthodes, pas avec @ui.button)
+        async def handle_prev_page(self, interaction: discord.Interaction):
             if interaction.user.id != interaction.guild.owner_id: 
                 await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
                 return
@@ -606,8 +610,7 @@ class AdminCog(commands.Cog):
             else:
                 await interaction.response.send_message("C'est la première page.", ephemeral=True)
 
-        @ui.button(custom_id=f"channel_next_page_{self.guild_id}") # Correspond au custom_id de self.next_button
-        async def next_button_callback(self, interaction: discord.Interaction):
+        async def handle_next_page(self, interaction: discord.Interaction):
             if interaction.user.id != interaction.guild.owner_id:
                 await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
                 return
