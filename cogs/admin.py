@@ -338,64 +338,57 @@ class AdminCog(commands.Cog):
     # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
+        
+        # Garder une trace des composants par ligne pour respecter la limite de 5 par ligne.
+        components_per_row = [0] * 5 # Initialiser avec 5 lignes, 0 composants chacune
 
+        def add_item_to_view(item):
+            """Helper pour ajouter un item en trouvant la prochaine ligne disponible."""
+            for row_index in range(5):
+                if components_per_row[row_index] < 5:
+                    item.row = row_index # Assigner le row à l'item
+                    view.add_item(item)
+                    components_per_row[row_index] += 1
+                    return True
+            print(f"AVERTISSEMENT: Impossible d'ajouter l'item {item.label} car toutes les lignes sont pleines.")
+            return False
+
+        # --- Création des options et mapping ---
         # Helper function to create options and a mapping
         def create_options_and_mapping(items, item_type):
             options = []
             id_mapping = {}
 
             if guild:
-                # Trier les rôles par position (pour avoir l'ordre de Discord)
-                # Trier les salons par position (pour avoir l'ordre de Discord)
                 try:
                     if item_type == "role":
                         sorted_items = sorted(items, key=lambda x: x.position, reverse=True)
                     elif item_type == "channel":
-                        # Les salons ont aussi une position, mais c'est plus complexe car ils sont dans des catégories.
-                        # On peut les trier par nom si la position n'est pas fiable partout, ou par ID.
-                        # Pour simplifier, on va trier par position si disponible, sinon par nom.
                         sorted_items = sorted(items, key=lambda x: (getattr(x, 'category_id', float('inf')), x.position))
                     else:
-                        sorted_items = items # Pas de tri spécifique
+                        sorted_items = items
                 except Exception as e:
                     print(f"Erreur lors du tri des {item_type}s: {e}")
-                    sorted_items = items # Fallback au tri par défaut si le tri échoue
+                    sorted_items = items
 
                 for item in sorted_items:
                     item_id = str(item.id)
                     item_name = item.name
 
-                    if item_id is None or not isinstance(item_name, str) or not item_name:
-                        # print(f"DEBUG: Ignoré item (type: {item_type}) car ID nul ou nom invalide: ID={item_id}, Nom={item_name}")
-                        continue
+                    if item_id is None or not isinstance(item_name, str) or not item_name: continue
 
-                    # Générer le label (doit faire au max 25 caractères)
                     label = item_name[:self.MAX_OPTION_LENGTH]
-                    if not label: # Si le nom était trop court ou vide après troncation
-                        label = item_id[:self.MAX_OPTION_LENGTH]
-                        if not label:
-                            # print(f"DEBUG: Ignoré item (type: {item_type}) car aucun label valide généré: ID={item_id}, Nom='{item_name}'")
-                            continue
+                    if not label: label = item_id[:self.MAX_OPTION_LENGTH]
+                    if not label: continue
 
-                    # Générer la value (doit faire au max 25 caractères et être unique)
-                    # Utiliser un hash SHA256 du vrai ID pour avoir une valeur de 64 caractères, puis la tronquer.
-                    # C'est une bonne pratique pour éviter les collisions si les noms sont tronqués différemment.
                     hashed_id = hashlib.sha256(item_id.encode()).hexdigest()
                     value = hashed_id[:self.MAX_OPTION_LENGTH]
-                    if not value:
-                        # print(f"DEBUG: Ignoré item (type: {item_type}) car aucune value valide générée: ID={item_id}, Nom='{item_name}'")
-                        continue
+                    if not value: continue
 
-                    # Vérification finale des longueurs avant d'ajouter
-                    if not (self.MIN_OPTION_LENGTH <= len(label) <= self.MAX_OPTION_LENGTH and self.MIN_OPTION_LENGTH <= len(value) <= self.MAX_OPTION_LENGTH):
-                        # print(f"DEBUG: ERREUR DE LONGUEUR - Ignoré item (type: {item_type})")
-                        # print(f"  -> Item original: ID='{item_id}', Nom='{item_name}'")
-                        # print(f"  -> Label généré : '{label}' (longueur: {len(label)})")
-                        # print(f"  -> Value générée: '{value}' (longueur: {len(value)})")
-                        continue # Ignorer si les longueurs ne sont pas bonnes malgré tout
+                    if not (self.MIN_OPTION_LENGTH <= len(label) <= self.MAX_OPTION_LENGTH and self.MIN_OPTION_LENGTH <= len(value) <= self.MAX_OPTION_LENGTH): continue
 
                     options.append(discord.SelectOption(label=label, value=value, description=f"ID: {item_id}"))
-                    id_mapping[value] = item_id # Mapper la valeur tronquée vers l'ID réel
+                    id_mapping[value] = item_id
 
                 if not options:
                     options.append(discord.SelectOption(label="Aucun trouvé", value="no_items", description="Aucun élément trouvé.", default=True))
@@ -404,63 +397,62 @@ class AdminCog(commands.Cog):
             
             return options, id_mapping
 
-        # Générer les options et le mapping pour les rôles
-        # Si vous avez plus de 25 rôles, vous devrez implémenter une pagination pour les rôles aussi.
         all_roles = guild.roles if guild else []
         role_options, role_id_mapping = create_options_and_mapping(all_roles, "role")
 
-        # Générer les options et le mapping pour les canaux textuels
         text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
         all_channel_options, channel_id_mapping = create_options_and_mapping(text_channels, "channel")
 
         # --- Création des composants pour les Rôles ---
-        # Les rôles ne sont généralement pas aussi nombreux que les canaux, donc une seule page suffit souvent.
-        # Si vous avez beaucoup de rôles, vous devrez réutiliser la logique de ChannelPaginationManager ici.
-        
-        # Select pour le Rôle Admin (row=0)
-        # S'il y a plus de MAX_OPTIONS_PER_PAGE rôles, vous devrez créer plusieurs select menus ou utiliser la pagination.
-        # Pour simplifier, nous supposons ici qu'il y a moins de 25 rôles pour l'admin.
+        # Select pour le Rôle Admin
         role_select_admin = self.RoleSelect(
             guild_id=guild_id,
             select_type="admin_role",
-            row=0, # Sur la première ligne disponible
-            options=role_options,
+            # row=0, # On va laisser add_item_to_view s'en occuper
+            options=role_options[:self.MAX_OPTION_LENGTH], # Tronquer au cas où il y aurait plus de 25 rôles
             id_mapping=role_id_mapping,
-            cog=self # Passer self
+            cog=self
         )
-        view.add_item(role_select_admin)
+        add_item_to_view(role_select_admin)
 
-        # Select pour le Rôle de Notification (row=1)
+        # Select pour le Rôle de Notification
         role_select_notif = self.RoleSelect(
             guild_id=guild_id,
             select_type="notification_role",
-            row=1, # Sur la deuxième ligne disponible
-            options=role_options,
+            # row=1,
+            options=role_options[:self.MAX_OPTION_LENGTH],
             id_mapping=role_id_mapping,
-            cog=self # Passer self
+            cog=self
         )
-        view.add_item(role_select_notif)
+        add_item_to_view(role_select_notif)
 
         # --- Logique de pagination pour les salons ---
-        # Utiliser ChannelPaginationManager pour gérer le Select et les boutons de navigation
-        # Le ChannelPaginationManager crée sa propre vue interne pour le Select et les boutons.
         channel_pagination_manager = self.ChannelPaginationManager(
             guild_id=guild_id,
             all_options=all_channel_options,
             id_mapping=channel_id_mapping,
-            cog=self # Passer self
+            cog=self
         )
         
-        # Ajouter le SelectMenu de la première page et les boutons de pagination à la vue principale.
-        view.add_item(channel_pagination_manager.channel_select) # Le Select va sur row=0 (ou une ligne disponible)
-        if len(all_channel_options) > MAX_OPTIONS_PER_PAGE:
-            # Si plus de 25 options, on ajoute les boutons de navigation.
-            # Ils seront placés sur la ligne suivante.
-            view.add_item(channel_pagination_manager.prev_button) # Bouton Précédent sur row=1
-            view.add_item(channel_pagination_manager.next_button) # Bouton Suivant sur la même ligne (row=1)
+        # Ajout du SelectMenu pour les salons (il sera placé sur la première ligne libre par add_item_to_view)
+        add_item_to_view(channel_pagination_manager.channel_select)
+
+        # Ajout des boutons de pagination (si nécessaire)
+        if len(all_channel_options) > self.MAX_OPTIONS_PER_PAGE:
+            add_item_to_view(channel_pagination_manager.prev_button) # S'ajoutera sur la ligne libre
+            add_item_to_view(channel_pagination_manager.next_button) # S'ajoutera sur la même ligne si possible, sinon sur la suivante
+
+        # Bouton de retour
+        # Assurons-nous qu'il y a une ligne libre pour le bouton de retour,
+        # sinon il ne sera pas affiché. Le mieux est de le placer sur une ligne spécifique si possible.
+        # On peut le placer manuellement après avoir ajouté les autres items, en vérifiant qu'il y a de la place.
         
-        # Le bouton de retour doit être sur une ligne distincte pour ne pas interférer avec la pagination.
-        view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Passer self
+        # Pour simplifier, plaçons le bouton de retour explicitement sur la dernière ligne possible.
+        # Si la ligne 3 est déjà pleine, il ne sera pas ajouté.
+        # Le mieux serait de le rendre flexible.
+        back_button = self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, cog=self)
+        add_item_to_view(back_button) # Il sera ajouté à la première ligne disponible
+
         return view
 
     # --- Classe de Menu pour la sélection des Rôles ---
