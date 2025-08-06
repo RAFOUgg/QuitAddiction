@@ -477,15 +477,15 @@ class AdminCog(commands.Cog):
 
         # --- Create Pagination Managers ---
         # These managers will hold their respective select menus and buttons.
-        admin_role_manager = self.ChannelPaginationManager(
+        admin_role_manager = self.PaginatedViewManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="admin_role", cog=self, initial_page=0
         )
-        notification_role_manager = self.ChannelPaginationManager(
+        notification_role_manager = self.PaginatedViewManager(
             guild_id=guild_id, all_options=role_options, id_mapping=role_id_mapping,
             select_type="notification_role", cog=self, initial_page=0
         )
-        channel_manager = self.ChannelPaginationManager(
+        channel_manager = self.PaginatedViewManager(
             guild_id=guild_id, all_options=channel_options, id_mapping=channel_id_mapping,
             select_type="channel", cog=self, initial_page=0
         )
@@ -646,96 +646,104 @@ class AdminCog(commands.Cog):
             db.close()
 
     # --- Classe pour gérer la vue paginée des salons ---
-    class ChannelPaginationManager(ui.View):
-        def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, initial_page: int = 0, cog: 'AdminCog'=None):
-            super().__init__(timeout=180) # Définir un timeout pour la vue
-            self.guild_id = guild_id
-            self.all_options = all_options
-            self.id_mapping = id_mapping
-            self.current_page = initial_page
-            self.cog = cog # Stocker l'instance du cog
+    class PaginatedViewManager(ui.View):
+    # Add 'select_type' to the __init__ signature
+    def __init__(self, guild_id: str, all_options: list[discord.SelectOption], id_mapping: dict, select_type: str, initial_page: int = 0, cog: 'AdminCog'=None):
+        super().__init__(timeout=180)
+        self.guild_id = guild_id
+        self.all_options = all_options
+        self.id_mapping = id_mapping
+        self.select_type = select_type # Store select_type here
+        self.current_page = initial_page
+        self.cog = cog
 
-            # Créer le SelectMenu pour la page initiale.
-            # Le row sera géré lorsque ce SelectMenu est ajouté à la vue principale.
-            self.channel_select = AdminCog.ChannelSelect( # Utilisation de AdminCog.ChannelSelect
+        # Create the appropriate SelectMenu based on select_type
+        if self.select_type in ('admin_role', 'notification_role'):
+            self.selection_menu = AdminCog.RoleSelect( # Use RoleSelect for roles
                 guild_id=self.guild_id,
-                select_type="game_channel",
-                row=0, # Ce row sera écrasé par la vue principale qui l'ajoute
+                select_type=self.select_type, # Pass select_type to RoleSelect
+                row=0,
+                options=self.all_options,
+                id_mapping=self.id_mapping,
+                cog=self.cog
+            )
+        elif self.select_type == 'channel':
+            self.selection_menu = AdminCog.ChannelSelect( # Use ChannelSelect for channels
+                guild_id=self.guild_id,
+                select_type=self.select_type, # Pass select_type to ChannelSelect
+                row=0,
                 options=self.all_options,
                 id_mapping=self.id_mapping,
                 page=self.current_page,
-                cog=self.cog # Passer self.cog
+                cog=self.cog
             )
-            
-            # Créer les boutons de navigation. Les custom_ids sont statiques pour être trouvés par les listeners.
-            self.prev_button = ui.Button(
-                label="⬅ Précédent",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"channel_prev_page_{self.guild_id}", # Static custom_id pour la navigation
-                disabled=self.current_page == 0, # Désactiver si c'est la première page
-                row=1 # Les boutons seront placés sur la ligne 1
-            )
-            self.next_button = ui.Button(
-                label="Suivant ➡",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"channel_next_page_{self.guild_id}", # Static custom_id pour la navigation
-                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options), # Désactiver si c'est la dernière page
-                row=1 # Les boutons seront placés sur la ligne 1
-            )
-            
-            # Attacher manuellement les callbacks aux boutons. Ceci est une alternative à l'utilisation de @ui.button
-            # pour les vues qui gèrent elles-mêmes la logique de mise à jour.
-            self.prev_button.callback = self.handle_prev_page
-            self.next_button.callback = self.handle_next_page
+        else:
+            # Handle unknown select_type, though this shouldn't happen with current usage
+            raise ValueError(f"Unknown select_type: {self.select_type}")
 
-        # Méthode pour mettre à jour les composants de la vue (Select et Boutons)
-        def update_components(self, interaction: discord.Interaction):
-            # Pour mettre à jour la vue, nous devons la modifier.
-            # On retire l'ancien SelectMenu et on ajoute le nouveau.
-            self.remove_item(self.channel_select) # Retirer l'ancien Select
+        # Buttons are generic, so their definition can remain similar
+        self.prev_button = ui.Button(
+            label="⬅ Précédent",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"pagination_{self.select_type}_prev_{self.guild_id}", # Use select_type in custom_id for better scoping
+            disabled=self.current_page == 0,
+            row=1
+        )
+        self.next_button = ui.Button(
+            label="Suivant ➡",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"pagination_{self.select_type}_next_{self.guild_id}", # Use select_type in custom_id
+            disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options),
+            row=1
+        )
+        
+        self.prev_button.callback = self.handle_page_change
+        self.next_button.callback = self.handle_page_change
 
-            # Créer le nouveau SelectMenu pour la page mise à jour.
-            self.channel_select = AdminCog.ChannelSelect( # Utilisation de AdminCog.ChannelSelect
+    def update_components(self, interaction: discord.Interaction):
+        # Remove old menu
+        self.remove_item(self.selection_menu)
+
+        # Create new menu for the updated page
+        if self.select_type in ('admin_role', 'notification_role'):
+            self.selection_menu = AdminCog.RoleSelect(
                 guild_id=self.guild_id,
-                select_type="game_channel",
-                row=0, # Le row est important car le SelectMenu est ajouté dans la vue principale.
-                       # On le remet à 0 ici pour qu'il s'insère correctement.
+                select_type=self.select_type,
+                row=0,
+                options=self.all_options,
+                id_mapping=self.id_mapping,
+                cog=self.cog
+            )
+        elif self.select_type == 'channel':
+            self.selection_menu = AdminCog.ChannelSelect(
+                guild_id=self.guild_id,
+                select_type=self.select_type,
+                row=0,
                 options=self.all_options,
                 id_mapping=self.id_mapping,
                 page=self.current_page,
-                cog=self.cog # Passer self.cog
+                cog=self.cog
             )
-            self.add_item(self.channel_select) # Ajouter le nouveau Select
+        else:
+            raise ValueError(f"Unknown select_type: {self.select_type}")
+        self.add_item(self.selection_menu)
 
-            # Mettre à jour l'état désactivé des boutons de pagination.
-            self.prev_button.disabled = self.current_page == 0
-            self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
+        # Update button states
+        self.prev_button.disabled = self.current_page == 0
+        self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
 
-        # Callback pour le bouton "Précédent"
-        async def handle_prev_page(self, interaction: discord.Interaction):
-            # On vérifie si l'utilisateur qui clique est bien celui qui a ouvert la config.
-            # Ou, si vous voulez une sécurité plus stricte, vérifiez s'il est admin.
-            # Pour l'instant, on suppose que tout utilisateur interagissant avec la vue peut naviguer.
-            # Si vous voulez restreindre, ajoutez une vérification ici. Par exemple:
-            # if interaction.user.id != self.interaction_user_id: # Nécessite de stocker l'ID de l'utilisateur initial
-            #     await interaction.response.send_message("Vous n'êtes pas autorisé à naviguer.", ephemeral=True)
-            #     return
-
+    async def handle_page_change(self, interaction: discord.Interaction):
+        if interaction.data['custom_id'].endswith('_prev'):
             if self.current_page > 0:
                 self.current_page -= 1
-                self.update_components(interaction) # Mettre à jour les composants (Select et boutons)
-                # Éditer le message avec la vue mise à jour.
+                self.update_components(interaction)
                 await interaction.response.edit_message(view=self)
             else:
                 await interaction.response.send_message("C'est la première page.", ephemeral=True)
-
-        # Callback pour le bouton "Suivant"
-        async def handle_next_page(self, interaction: discord.Interaction):
-            # Similaire à handle_prev_page pour les vérifications d'utilisateur.
+        else: # next
             if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
                 self.current_page += 1
-                self.update_components(interaction) # Mettre à jour les composants (Select et boutons)
-                # Éditer le message avec la vue mise à jour.
+                self.update_components(interaction)
                 await interaction.response.edit_message(view=self)
             else:
                 await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
