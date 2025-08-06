@@ -1,20 +1,27 @@
-# Correct Docker-compose.yml
+# Utilise la version 3.8 de la syntaxe, qui est moderne et stable.
 version: '3.8'
 
 services:
+  # Définition du service pour notre bot
   quitaddictionbot:
+    # Construit l'image en utilisant le Dockerfile dans le répertoire courant (.)
     build: .
+    # Donne un nom fixe et facile à retrouver au conteneur
     container_name: quitaddictionbot
+    # Redémarre toujours le conteneur s'il s'arrête (crash, redémarrage du serveur, etc.)
     restart: always
+    # Charge les variables d'environnement depuis le fichier .env
     env_file:
       - .env
+    # Monte des volumes pour la persistance des données. C'est CRUCIAL.
+    # Ce qui est écrit dans /app/db à l'intérieur du conteneur sera sauvegardé dans ./db à l'extérieur.
     volumes:
-      - ./data:/app/data
-      - ./db:/app/db
-      - ./logs:/app/logs
-      - ./config:/app/config # This was a guess, ensure it's correct
+      - ./db:/home/appuser/app/db          # Persistance de la base de données
+      - ./logs:/home/appuser/app/logs      # Persistance des logs
+      - ./data:/home/appuser/app/data      # Persistance des fichiers de données (json, etc.)
+    # Configure la rotation des logs pour éviter que le fichier de log ne devienne énorme.
     logging:
-      driver: json-file
+      driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "10m" # Taille maximale de 10 Mo par fichier
+        max-file: "3"   # Garde les 3 derniers fichiers de log

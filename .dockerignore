@@ -1,0 +1,30 @@
+# Ignorer le dossier git
+.git
+.gitignore
+
+# Ignorer les environnements virtuels Python
+.venv
+venv
+*/.venv
+*/venv
+
+# Ignorer les fichiers de cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorer les fichiers de configuration locaux et les secrets
+.env
+*.env.local
+config.py # Si config.py contient des secrets, sinon retirez cette ligne
+
+# Ignorer les bases de données locales et les logs
+*.db
+*.sqlite3
+logs/
+*.log
+
+# Dossiers d'IDE
+.vscode/
+.idea/

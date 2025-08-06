@@ -1,30 +1,41 @@
-# Utilise une image Python légère
-FROM python:3.12-slim
+# --- STAGE 1: Le Builder ---
+# On utilise une image python "slim" comme base, qui contient les outils pour installer des paquets.
+FROM python:3.12-slim as builder
 
-# --- AJOUTÉ : Installer les dépendances système (git) ---
-# Met à jour la liste des paquets et installe git.
-# --no-install-recommends réduit la taille de l'image finale.
-# Les commandes de nettoyage sont une bonne pratique pour garder l'image petite.
+# Mettre à jour les paquets et installer 'git', qui est une dépendance système pour dev_stats_cog.py
+# --no-install-recommends évite d'installer des paquets inutiles.
+# Les commandes de nettoyage réduisent la taille de cette couche.
 RUN apt-get update && apt-get install -y git --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory in the container
+# Définir le répertoire de travail
 WORKDIR /app
 
-# Copy only the requirements file first to leverage Docker's layer caching
+# Copier uniquement le fichier des dépendances pour profiter du cache Docker
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# Installer les dépendances Python
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the project files
-# IMPORTANT : Ceci copie aussi le dossier .git, ce qui est nécessaire pour la commande
+
+# --- STAGE 2: L'Image Finale ---
+# On repart d'une image "slim" propre pour un résultat minimaliste.
+FROM python:3.12-slim
+
+# Créer un utilisateur non-root pour plus de sécurité
+RUN useradd --create-home --shell /bin/bash appuser
+USER appuser
+WORKDIR /home/appuser/app
+
+# Copier les paquets Python installés depuis l'étape "builder"
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+
+# Copier l'exécutable 'git' installé depuis l'étape "builder"
+COPY --from=builder /usr/bin/git /usr/bin/git
+
+# Copier tout le code du projet
 COPY . .
 
-# Environment variable for the token (can be overridden by docker-compose)
-ENV DISCORD_TOKEN=changeme
-
-# The command to run the bot
+# La commande pour lancer le bot
 CMD ["python", "bot.py"]
