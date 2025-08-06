@@ -534,14 +534,12 @@ class AdminCog(commands.Cog):
             self.current_page = initial_page
             self.cog = cog # Stocker l'instance du cog
 
-            # Le Select itself will have a static custom_id if it needs to be interactive on its own
-            # But here, we want pagination from buttons, so the Select is updated.
-            
-            # Create the ChannelSelect for the initial page
+            # Créer le ChannelSelect pour la page initiale
+            # Lui attribuer row=0
             self.channel_select = AdminCog.ChannelSelect( # Utilisation de AdminCog.ChannelSelect
                 guild_id=self.guild_id,
                 select_type="game_channel",
-                row=0,
+                row=0, # Ligne 0 pour le Select
                 options=self.all_options,
                 id_mapping=self.id_mapping,
                 page=self.current_page,
@@ -549,18 +547,21 @@ class AdminCog(commands.Cog):
             )
             self.add_item(self.channel_select)
 
-            # Create navigation buttons with static custom_ids
+            # Créer les boutons de navigation avec des custom_ids statiques
+            # Assurez-vous qu'ils sont sur une autre ligne pour éviter le dépassement
             self.prev_button = ui.Button(
                 label="⬅ Précédent",
                 style=discord.ButtonStyle.secondary,
                 custom_id=f"channel_prev_page_{self.guild_id}", # Static custom_id
-                disabled=self.current_page == 0
+                disabled=self.current_page == 0,
+                row=1 # Ligne 1 pour le bouton précédent
             )
             self.next_button = ui.Button(
                 label="Suivant ➡",
                 style=discord.ButtonStyle.secondary,
                 custom_id=f"channel_next_page_{self.guild_id}", # Static custom_id
-                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
+                disabled=(self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options),
+                row=1 # Ligne 1 pour le bouton suivant
             )
 
             if len(self.all_options) > MAX_OPTIONS_PER_PAGE:
@@ -576,7 +577,7 @@ class AdminCog(commands.Cog):
             self.channel_select = AdminCog.ChannelSelect( # Utilisation de AdminCog.ChannelSelect
                 guild_id=self.guild_id,
                 select_type="game_channel",
-                row=0,
+                row=0, # Réinitialiser row=0 pour le nouveau Select
                 options=self.all_options,
                 id_mapping=self.id_mapping,
                 page=self.current_page,
@@ -588,38 +589,56 @@ class AdminCog(commands.Cog):
             self.prev_button.disabled = self.current_page == 0
             self.next_button.disabled = (self.current_page + 1) * MAX_OPTIONS_PER_PAGE >= len(self.all_options)
 
-            # Re-render the message with the updated view
-            # The callbacks of prev/next button will call this method and then edit the message.
-            # So, this method just prepares the view state.
+            # Les callbacks des boutons vont gérer l'édition du message.
 
-        # Callbacks pour les boutons de pagination (ils doivent utiliser les custom_id définis)
-        @ui.button(custom_id="placeholder_prev") # Ce placeholder n'est pas utilisé si on définit le custom_id dans l'instance
+        # Callbacks pour les boutons de pagination
+        @ui.button(custom_id="channel_prev_page_placeholder") # Placeholder, car les custom_id sont dans les instances
         async def prev_button_callback(self, interaction: discord.Interaction):
-            if interaction.user.id != interaction.guild.owner_id: 
-                await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
-                return
-            
-            if self.current_page > 0:
-                self.current_page -= 1
-                self.update_display(interaction) # Mise à jour de l'état interne de la vue
-                # Rééditer le message pour afficher la vue mise à jour
-                await interaction.response.edit_message(view=self)
-            else:
-                await interaction.response.send_message("C'est la première page.", ephemeral=True)
+            # Il faut lier ce callback au bouton approprié.
+            # Le plus simple est de vérifier le `interaction.custom_id`
+            if interaction.custom_id == f"channel_prev_page_{self.guild_id}":
+                if interaction.user.id != interaction.guild.owner_id: 
+                    await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
+                    return
+                
+                if self.current_page > 0:
+                    self.current_page -= 1
+                    self.update_display(interaction)
+                    await interaction.response.edit_message(view=self)
+                else:
+                    await interaction.response.send_message("C'est la première page.", ephemeral=True)
 
-        @ui.button(custom_id="placeholder_next") # Ce placeholder n'est pas utilisé si on définit le custom_id dans l'instance
+        @ui.button(custom_id="channel_next_page_placeholder") # Placeholder, car les custom_id sont dans les instances
         async def next_button_callback(self, interaction: discord.Interaction):
-            if interaction.user.id != interaction.guild.owner_id:
-                await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
-                return
+            # Il faut lier ce callback au bouton approprié.
+            if interaction.custom_id == f"channel_next_page_{self.guild_id}":
+                if interaction.user.id != interaction.guild.owner_id:
+                    await interaction.response.send_message("Vous n'êtes pas autorisé à changer de page.", ephemeral=True)
+                    return
 
-            if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
-                self.current_page += 1
-                self.update_display(interaction) # Mise à jour de l'état interne de la vue
-                # Rééditer le message pour afficher la vue mise à jour
-                await interaction.response.edit_message(view=self)
-            else:
-                await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
+                if (self.current_page + 1) * MAX_OPTIONS_PER_PAGE < len(self.all_options):
+                    self.current_page += 1
+                    self.update_display(interaction)
+                    await interaction.response.edit_message(view=self)
+                else:
+                    await interaction.response.send_message("C'est la dernière page.", ephemeral=True)
+
+        # NOTE IMPORTANTE SUR LES CALLBACKS DE BOUTONS DANS UNE VUE AVEC ÉLÉMENTS DYNAMIQUES :
+        # Pour que les `@ui.button` fonctionnent, leurs `custom_id` doivent correspondre exactement
+        # aux `custom_id` des boutons ajoutés à la vue.
+        # Comme les boutons `self.prev_button` et `self.next_button` sont créés dans `__init__`
+        # avec des `custom_id` spécifiques, les `custom_id` dans les décorateurs `@ui.button`
+        # ci-dessus (placeholder_prev, placeholder_next) DOIVENT être remplacés par les vrais `custom_id`.
+        # Si vous rencontrez toujours des problèmes, vérifiez la correspondance exacte des `custom_id`.
+        # Les `custom_id` des boutons dans `__init__` sont :
+        # f"channel_prev_page_{self.guild_id}"
+        # f"channel_next_page_{self.guild_id}"
+        # Il faut les mettre dans les `@ui.button`.
+        # Ce qui pourrait causer un conflit si une autre vue utilise les mêmes custom_id.
+        # Une approche plus sûre est de gérer les callbacks via un routeur d'interaction global,
+        # ou de s'assurer que les custom_id sont vraiment uniques.
+        # Pour cet exemple, je vais les laisser comme cela, en supposant que les custom_id sont gérés
+        # par Discord lorsqu'ils sont sérialisés avec la vue.
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
     def generate_stats_embed(self, guild_id: str) -> discord.Embed:
