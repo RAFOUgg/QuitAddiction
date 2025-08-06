@@ -882,9 +882,9 @@ class AdminCog(commands.Cog):
             value=(
                 f"📉 Jauges Basses : {f'<@&{state.notify_vital_low_role_id}>' if state.notify_vital_low_role_id else 'Non défini'}\n"
                 f"🚨 Critique : {f'<@&{state.notify_critical_role_id}>' if state.notify_critical_role_id else 'Non défini'}\n"
-                f"🚬 Envie de Fumer : {f'<@&{state.notify_envie_fumer_role_id}>' if state.notify_envie_fumer_role_id else 'Non défini'}\n"
-                f"💬 Message Ami/Quiz : {f'<@&{state.notify_friend_message_role_id}>' if state.notify_friend_message_role_id else 'Non défini'}\n"
-                f"🛒 Promo Boutique : {f'<@&{state.notify_shop_promo_role_id}>' if state.notify_shop_promo_role_id else 'Non défini'}"
+                f"🚬 Envies de Fumer : {f'<@&{state.notify_envie_fumer_role_id}>' if state.notify_envie_fumer_role_id else 'Non défini'}\n"
+                f"💬 Messages Amis/Quiz : {f'<@&{state.notify_friend_message_role_id}>' if state.notify_friend_message_role_id else 'Non défini'}\n"
+                f"🛒 Promos Boutique : {f'<@&{state.notify_shop_promo_role_id}>' if state.notify_shop_promo_role_id else 'Non défini'}"
             ),
             inline=False
         )
@@ -968,7 +968,7 @@ class AdminCog(commands.Cog):
         
         # Ligne 2: Message Ami/Quiz ET Promo Boutique
         view.add_item(self.NotificationToggle("💬 Message Ami/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, cog=self, row=2))
-        view.add_item(self.NotificationToggle("💛 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.secondary, cog=self, row=2))
+        view.add_item(self.NotificationToggle("💛 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.primary, cog=self, row=2))
         
         # --- Ajout du SelectMenu pour le rôle de notification général ---
         # Il faut le placer sur une ligne libre, par exemple row=3
