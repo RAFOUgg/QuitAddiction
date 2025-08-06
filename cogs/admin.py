@@ -224,11 +224,11 @@ class AdminCog(commands.Cog):
         # Ligne 0 : Mode/Durée, Lancer/Réinitialiser, Rôles & Salons
         view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
         view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) 
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.grey, row=0, cog=self)) 
+        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
         
         # Ligne 1 : Notifications, Statistiques, Stats Projet
         view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.primary, row=1, cog=self)) 
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.gray, row=1, cog=self)) 
+        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.primary, row=1, cog=self)) 
         # --- Le bouton pour les stats du projet ---
         view.add_item(self.ProjectStatsButton("📈 Stats Projet", guild_id, discord.ButtonStyle.secondary, row=1, cog=self)) 
         
