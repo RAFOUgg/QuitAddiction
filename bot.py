@@ -51,10 +51,10 @@ class QuitAddictionBot(commands.Bot):
         
         # Sync slash commands for faster testing on a specific guild, or globally
         if self.test_guild:
-            logger.info(f"Copying global commands to test guild: {self.test_guild.id}")
+            logger.info(f"Syncing commands to test guild: {self.test_guild.id}")
             self.tree.copy_global_to(guild=self.test_guild)
             await self.tree.sync(guild=self.test_guild)
-            logger.info("Slash commands synced to test guild.")
+            logger.info("Commands synced to test guild.")
         else:
             await self.tree.sync()
             logger.info("Global slash commands synced.")
