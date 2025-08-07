@@ -448,10 +448,6 @@ class AdminCog(commands.Cog):
             view.add_item(self.NotificationToggle("🚬 Cravings", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, self, 1))
             view.add_item(self.NotificationToggle("💬 Friend/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, self, 2))
             view.add_item(self.NotificationToggle("💛 Shop Promo", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.secondary, self, 2))
-            guild = self.bot.get_guild(int(guild_id))
-            if guild:
-                role_options, role_id_mapping = self.create_options_and_mapping(guild.roles, "role", guild)
-                view.add_item(PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, 0, self, row=3))
             view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=4, cog=self))
             return view
         finally: db.close()
