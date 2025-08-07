@@ -6,7 +6,7 @@ except ImportError:
     print("--> Check import paths and ensure no circular dependencies.")
     raise
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, BigInteger, UniqueConstraint
 import datetime
 
 class ServerState(Base):
@@ -16,8 +16,9 @@ class ServerState(Base):
     guild_id = Column(String, unique=True, nullable=False) # Identifiant unique du serveur Discord
     
     # Configuration du Bot
-    admin_role_id = Column(String, nullable=True)       # ID du rôle admin
-    game_channel_id = Column(String, nullable=True)     # ID du salon où le bot affiche les infos du jeu
+    admin_role_id = Column(BigInteger, nullable=True)       # ID du rôle admin
+    game_channel_id = Column(BigInteger, nullable=True) # Utilisez BigInteger pour les ID Discord
+    game_message_id = Column(BigInteger, nullable=True) # <--- AJOUTEZ CETTE LIGNE
     notification_role_id = Column(String, nullable=True) # ID du rôle pour les notifications (AJOUTÉ)
 
     # Statut du jeu
