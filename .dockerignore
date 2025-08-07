@@ -1,27 +1,21 @@
-# Ignorer le dossier git
-.gitignore
+# .dockerignore (Version finale pour que votre bot fonctionne)
 
 # Ignorer les environnements virtuels Python
 .venv
 venv
-*/.venv
-*/venv
 
 # Ignorer les fichiers de cache Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# Ignorer les fichiers de configuration locaux et les secrets
+# Ignorer les fichiers secrets locaux
 .env
-*.env.local
-config.py # Si config.py contient des secrets, sinon retirez cette ligne
 
-# Ignorer les bases de données locales et les logs
+# Ignorer les données qui seront montées par volume
+logs/
+data/
 *.db
 *.sqlite3
-logs/
 *.log
 
 # Dossiers d'IDE
