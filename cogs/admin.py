@@ -2,6 +2,7 @@
 
 import discord
 from discord.ext import commands
+from discord.errors import Forbidden, NotFound
 from discord import app_commands, ui
 import hashlib
 import datetime
@@ -166,23 +167,40 @@ class StopGameConfirmationModal(ui.Modal, title="Confirm Game Stop"):
         await interaction.response.defer(ephemeral=True, thinking=True)
         
         db = SessionLocal()
-        try:
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-            if not state or not state.game_started:
-                await interaction.followup.send("The game is not currently running or was already stopped.", ephemeral=True)
-                return
+        await interaction.edit_original_response(
+            embed=self.cog.generate_config_menu_embed(state),
+            view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
+        )
 
-            state.game_started = False
-            state.game_start_time = None
-            db.commit()
-            db.refresh(state)
+        # --- AJOUTEZ CETTE PARTIE ---
+        # Essayer de modifier/supprimer l'ancien message de jeu
+        if state.game_message_id and state.game_channel_id:
+            try:
+                game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
+                game_message = await game_channel.fetch_message(state.game_message_id)
+                
+                # Option 1: Modifier le message pour indiquer la fin
+                game_over_embed = discord.Embed(
+                    title="🏁 Partie Terminée",
+                    description="Cette session de jeu est terminée. Un administrateur peut en lancer une nouvelle via la commande `/config`.",
+                    color=discord.Color.dark_grey()
+                )
+                await game_message.edit(embed=game_over_embed, view=None) # view=None pour supprimer les boutons
+                
+                # Option 2: Supprimer complètement le message
+                # await game_message.delete()
 
-            # Mettre à jour le message de configuration original
-            await interaction.edit_original_response(
-                embed=self.cog.generate_config_menu_embed(state),
-                view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
-            )
-            await interaction.followup.send("✅ The game has been successfully stopped.", ephemeral=True)
+            except (NotFound, Forbidden):
+                logger.warning(f"Impossible de trouver ou modifier le message de jeu {state.game_message_id} dans le salon {state.game_channel_id}")
+            except Exception as e:
+                logger.error(f"Erreur lors de la modification du message de fin de jeu: {e}", exc_info=True)
+
+        # Réinitialiser l'ID du message dans la DB
+        state.game_message_id = None
+        db.commit()
+        # --- FIN DE L'AJOUT ---
+
+        await interaction.followup.send("✅ The game has been successfully stopped.", ephemeral=True)
 
         except Exception as e:
             db.rollback()
@@ -410,23 +428,82 @@ class AdminCog(commands.Cog):
                 
                 # Si on clique sur "Start Game", on démarre le jeu directement
                 elif "Start Game" in self.label:
+                    # 1. Vérifier si un salon de jeu est configuré
+                    if not state.game_channel_id:
+                        await interaction.response.send_message(
+                            "❌ **Erreur :** Veuillez d'abord configurer un salon de jeu via `⚙️ Roles & Channels`.",
+                            ephemeral=True
+                        )
+                        return
+
+                    # 2. Essayer de récupérer le salon de jeu
+                    try:
+                        game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
+                    except (NotFound, Forbidden):
+                        await interaction.response.send_message(
+                            "❌ **Erreur :** Le salon de jeu configuré n'a pas été trouvé ou je n'ai pas les permissions pour y accéder.",
+                            ephemeral=True
+                        )
+                        return
+
+                    # 3. Récupérer le cog qui gère l'embed du jeu
+                    main_embed_cog = self.cog.bot.get_cog("MainEmbed")
+                    if not main_embed_cog:
+                        await interaction.response.send_message(
+                            "❌ **Erreur Critique :** Le module de jeu (`MainEmbed`) n'est pas chargé.",
+                            ephemeral=True
+                        )
+                        return
+
+                    # 4. Démarrer la transaction de base de données
                     state.game_started = True
                     state.game_start_time = datetime.datetime.utcnow()
+                    
+                    # On met à jour l'état avant de l'envoyer à l'embed
                     db.commit()
                     db.refresh(state)
-                    await interaction.response.edit_message(
-                        embed=self.cog.generate_config_menu_embed(state), 
-                        view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
-                    )
-                    await interaction.followup.send("The game has been started.", ephemeral=True)
-                
-                # Logique pour les autres boutons
-                elif self.label == "📊 View Stats": 
-                    await interaction.response.edit_message(embed=self.cog.generate_stats_embed(self.guild_id), view=self.cog.generate_stats_view(self.guild_id))
-                elif self.label == "🔔 Notifications": 
-                    await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
-            finally:
-                db.close()
+
+                    try:
+                        # 5. Créer et envoyer l'embed du jeu
+                        game_embed = main_embed_cog.generate_menu_embed(state)
+                        game_view = main_embed_cog.generate_main_menu(str(self.guild_id))
+                        game_message = await game_channel.send(embed=game_embed, view=game_view)
+                        
+                        # 6. Sauvegarder l'ID du message de jeu
+                        state.game_message_id = game_message.id
+                        db.commit()
+                        db.refresh(state)
+
+                        # 7. Mettre à jour le panneau de configuration
+                        await interaction.response.edit_message(
+                            embed=self.cog.generate_config_menu_embed(state), 
+                            view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
+                        )
+                        # Envoyer une confirmation claire à l'admin
+                        await interaction.followup.send(
+                            f"✅ Le jeu a démarré ! L'interface a été postée dans {game_channel.mention}.",
+                            ephemeral=True
+                        )
+
+                    except Forbidden:
+                        await interaction.followup.send(
+                            f"❌ **Erreur :** Je n'ai pas la permission d'envoyer des messages dans {game_channel.mention}.",
+                            ephemeral=True
+                        )
+                        # Annuler le démarrage du jeu si on ne peut pas poster le message
+                        state.game_started = False
+                        state.game_start_time = None
+                        state.game_message_id = None
+                        db.commit()
+                    except Exception as e:
+                        logger.error(f"Erreur inattendue lors du démarrage du jeu: {e}", exc_info=True)
+                        await interaction.followup.send("Une erreur inattendue est survenue.", ephemeral=True)
+                        # On rollback
+                        state.game_started = False
+                        state.game_start_time = None
+                        state.game_message_id = None
+                        db.commit()
+                    finally: db.close() 
 
     # --- NOUVELLE LOGIQUE POUR ROLES & CHANNELS ---
     class GeneralConfigButton(ui.Button):
