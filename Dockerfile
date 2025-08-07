@@ -29,9 +29,11 @@ COPY . .
 # --- THIS IS THE FIX ---
 # Change the ownership of all files in the app directory to our new user.
 # This ensures that 'appuser' can write to the 'logs' and 'db' subdirectories.
+RUN mkdir -p /home/appuser/app/data/logs \
+    && chown -R appuser:appuser /home/appuser/app/data
+
 RUN chown -R appuser:appuser /home/appuser/app
 
-# Now, switch to the non-root user
 USER appuser
 
 # The command to run the bot

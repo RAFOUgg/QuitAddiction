@@ -1,15 +1,20 @@
-# --- db/database.py ---
+# --- db/database.py (Corrected) ---
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
-from utils.logger import get_logger # Use our new logger
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# -- Détermination du chemin de la base de données --
-CURRENT_DIR_PATH = os.path.dirname(os.path.abspath(__file__))
+# -- CORRECTED: Centralize data in a top-level 'data' directory for easier volume mounting --
+# The Dockerfile is now responsible for creating this directory and setting its permissions.
+APP_ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+DATA_DIR = os.path.join(APP_ROOT_DIR, 'data')
 DB_FILE_NAME = 'quit_addiction.db'
-DB_PATH = os.path.join(CURRENT_DIR_PATH, DB_FILE_NAME)
+DB_PATH = os.path.join(DATA_DIR, DB_FILE_NAME)
+
+# This line is a safeguard, but the Dockerfile should handle creation and permissions.
+os.makedirs(DATA_DIR, exist_ok=True)
 
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
@@ -40,8 +45,6 @@ def init_db():
 
     logger.info("init_db(): Attempting to initialize tables...")
     try:
-        # This pattern (importing models inside the function) is ESSENTIAL 
-        # to prevent circular import errors where models.py might need Base.
         from db.models import ServerState, PlayerProfile, ActionLog 
         
         logger.info("init_db(): Models (ServerState, PlayerProfile, ActionLog) imported successfully.")
