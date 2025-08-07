@@ -14,7 +14,8 @@ import traceback # +++ IMPORT: Added missing traceback import
 from db.database import get_db # +++ CORRECT: Import get_db for safe session management
 from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger # +++ CORRECT: Use the central logger
-from config import create_styled_embed, GITHUB_REPO_NAME
+from utils.embed_builder import create_styled_embed
+
 
 # --- Setup Logger for this Cog ---
 logger = get_logger(__name__)
@@ -167,7 +168,7 @@ class AdminCog(commands.Cog):
                 logger.error(f"Erreur dans le callback de ProjectStatsButton : {e}") # Use the logger from the top
                 traceback.print_exc()
                 await interaction.followup.send("❌ Une erreur critique est survenue lors de la récupération des statistiques du projet.", ephemeral=True)
-                
+
     # --- Modification de generate_config_menu_view pour inclure le bouton ---
     def generate_config_menu_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
