@@ -1,5 +1,4 @@
 # Ignorer le dossier git
-.git
 .gitignore
 
 # Ignorer les environnements virtuels Python
