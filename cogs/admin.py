@@ -455,4 +455,28 @@ class AdminCog(commands.Cog):
             #     role_options, role_id_mapping = self.create_options_and_mapping(guild.roles, "role", guild)
             #     # view.add_item(PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, 0, self, row=3)) # <-- THIS IS BROKEN
 
-            view.add_item(self.BackButton("⬅ Back", 
+            view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=4, cog=self))
+            return view
+        finally: db.close()
+
+    class NotificationToggle(ui.Button):
+        # ... (Aucun changement nécessaire)
+        def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog', row: int):
+            super().__init__(label=label, style=style, row=row); self.toggle_key = toggle_key; self.guild_id = guild_id; self.cog = cog
+        async def callback(self, interaction: discord.Interaction):
+            db = SessionLocal()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if not state: await interaction.response.send_message("Error: Server state not found.", ephemeral=True); return
+                if state.game_started: await interaction.response.send_message("Cannot change notification settings while a game is in progress.", ephemeral=True); return
+                new_value = not getattr(state, self.toggle_key); setattr(state, self.toggle_key, new_value)
+                db.commit(); db.refresh(state)
+                # The view needs to be regenerated, but since it's partially broken, this might fail
+                # await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
+                await interaction.response.defer()
+                await interaction.followup.send(f"Notifications for '{self.toggle_key.replace('_', ' ').title()}' set to {'Enabled' if new_value else 'Disabled'}.", ephemeral=True)
+            finally: db.close()
+
+
+async def setup(bot):
+    await bot.add_cog(AdminCog(bot))
