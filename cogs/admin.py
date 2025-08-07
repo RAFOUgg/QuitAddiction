@@ -19,10 +19,6 @@ from utils.embed_builder import create_styled_embed
 # --- Setup Logger for this Cog ---
 logger = get_logger(__name__)
 
-
-# --- Setup Logger for this Cog ---
-logger = get_logger(__name__)
-
 # --- Constants ---
 MAX_OPTIONS_PER_PAGE = 25
 
@@ -118,7 +114,6 @@ class AdminCog(commands.Cog):
         view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.red, row=2, cog=self))
         return view
 
-    # --- Classe ProjectStatsButton (celle que nous avons définie précédemment) ---
     def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
         options, id_mapping = [], {}
         if not guild: return [discord.SelectOption(label="Server Error", value="error_guild", default=True)], {}
