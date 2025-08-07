@@ -444,17 +444,14 @@ class AdminCog(commands.Cog):
                 view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=0, cog=self)); return view
 
             view.add_item(self.NotificationToggle("🔴 Low Vitals", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, self, 0))
-            # ... other toggles ...
-            
-            # This part is broken because PaginatedSelect is gone.
-            # You would need to add a button "Set General Notification Role"
-            # that opens the PaginatedViewManager.
-            
-            # guild = self.bot.get_guild(int(guild_id))
-            # if guild:
-            #     role_options, role_id_mapping = self.create_options_and_mapping(guild.roles, "role", guild)
-            #     # view.add_item(PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, 0, self, row=3)) # <-- THIS IS BROKEN
-
+            view.add_item(self.NotificationToggle("🔴 Critical Event", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, self, 1))
+            view.add_item(self.NotificationToggle("🚬 Cravings", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, self, 1))
+            view.add_item(self.NotificationToggle("💬 Friend/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, self, 2))
+            view.add_item(self.NotificationToggle("💛 Shop Promo", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.secondary, self, 2))
+            guild = self.bot.get_guild(int(guild_id))
+            if guild:
+                role_options, role_id_mapping = self.create_options_and_mapping(guild.roles, "role", guild)
+                view.add_item(PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, 0, self, row=3))
             view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=4, cog=self))
             return view
         finally: db.close()
