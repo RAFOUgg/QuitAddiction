@@ -14,11 +14,11 @@ import dotenv
 # --- Imports ---
 from utils.embed_builder import create_styled_embed
 from utils.logger import get_logger
-from config import GITHUB_REPO_NAME
 
 # --- Setup ---
 dotenv.load_dotenv()
 logger = get_logger(__name__)
+GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER")
 
