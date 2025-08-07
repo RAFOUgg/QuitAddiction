@@ -49,9 +49,12 @@ class BackToMainButton(ui.Button):
         self.cog = cog
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        # CORRECTION : Simplification du callback.
+        # Il n'est pas nécessaire de defer() si l'opération est rapide.
+        # interaction.response.edit_message est la manière directe de mettre à jour le message.
         view = MainConfigView(self.cog)
-        await interaction.edit_original_response(embed=view.create_embed(interaction.guild), view=view)
+        # On modifie le message pour afficher l'embed et la vue du menu principal, ce qui correspond à un "retour".
+        await interaction.response.edit_message(embed=view.create_embed(interaction.guild), view=view)
 
 class PaginatedSelect(ui.Select):
     """A reusable paginated select menu that correctly interacts with its parent view."""
@@ -79,6 +82,7 @@ class PaginatedSelect(ui.Select):
 
         if selected_value in ["__next_page__", "__first_page__"]:
             new_page = 0 if selected_value == "__first_page__" else self.current_page + 1
+            # Délègue la gestion de la pagination à la vue parente. C'est la bonne approche.
             await self.view.handle_pagination(interaction, self.select_type, new_page)
             return
 
@@ -93,6 +97,7 @@ class PaginatedSelect(ui.Select):
                 setattr(state, self.select_type, selected_item_id)
                 db.commit()
             
+            # Rafraîchit la vue parente pour afficher le statut mis à jour dans l'embed.
             await self.view.refresh(interaction)
             await interaction.followup.send("✅ Selection updated.", ephemeral=True)
         except Exception as e:
@@ -125,6 +130,10 @@ class MainConfigView(ui.View):
     @ui.button(label="⚙️ Roles & Channels", style=discord.ButtonStyle.primary, row=0)
     async def roles_channels(self, interaction: discord.Interaction, button: ui.Button):
         view = RolesChannelsView(self.cog)
+        # CORRECTION : On peuple les items de la vue AVANT de l'envoyer.
+        # La vue doit être entièrement construite avant l'envoi. La méthode `create_embed`
+        # ne doit pas être responsable de la construction des composants de l'interface.
+        view.populate_items(interaction.guild)
         await interaction.response.edit_message(embed=view.create_embed(interaction.guild), view=view)
 
     @ui.button(label="🔔 Notifications", style=discord.ButtonStyle.primary, row=1)
@@ -140,6 +149,9 @@ class RolesChannelsView(ui.View):
         self.page_notif = page_notif
         self.page_channel = page_channel
 
+    # CORRECTION : La méthode `create_embed` est maintenant propre.
+    # Elle est uniquement responsable de la création de l'embed, pas de la modification de l'état de la vue.
+    # Cela évite les effets de bord et rend le code plus facile à suivre.
     def create_embed(self, guild: discord.Guild) -> discord.Embed:
         db = SessionLocal()
         try:
@@ -151,8 +163,6 @@ class RolesChannelsView(ui.View):
             embed.add_field(name="👑 Admin Role", value=f"Current: {admin_role}", inline=False)
             embed.add_field(name="🔔 Notification Role", value=f"Current: {notif_role}", inline=False)
             embed.add_field(name="🎮 Game Channel", value=f"Current: {game_chan}", inline=False)
-            # This is called here to ensure the view's components are created before the message is sent
-            self.populate_items(guild)
             return embed
         finally:
             db.close()
@@ -175,6 +185,9 @@ class RolesChannelsView(ui.View):
         elif select_type == "game_channel": self.page_channel = new_page
         await self.refresh(interaction)
 
+    # CORRECTION : La logique de rafraîchissement est maintenant plus propre et robuste.
+    # Elle peuple explicitement les items, puis crée l'embed, et enfin envoie la mise à jour.
+    # Cela résout le bug de la pagination.
     async def refresh(self, interaction: discord.Interaction):
         """Fully redraws the view and embed."""
         self.populate_items(interaction.guild)
