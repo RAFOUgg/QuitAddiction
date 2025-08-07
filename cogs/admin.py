@@ -103,108 +103,71 @@ class AdminCog(commands.Cog):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
             super().__init__(label=label, style=style, row=row)
             self.guild_id = guild_id
-            self.cog = cog # Référence au cog AdminCog
+            self.cog = cog
 
         async def callback(self, interaction: discord.Interaction):
-            # Trouver la commande slash '/project_stats' dans le bot
-            # Cela nécessite d'avoir accès au bot depuis le cog.
-            
-            # Tentative 1: Accéder au bot via self.cog.bot
-            # bot = self.cog.bot 
-            
-            # Tentative 2: Accéder au bot via interaction.client (plus sûr car souvent accessible)
             bot = interaction.client 
-            
-            if not bot:
-                await interaction.response.send_message("Erreur: Impossible de trouver le client bot.", ephemeral=True)
+            dev_stats_cog = bot.get_cog("DevStatsCog")
+
+            if not dev_stats_cog:
+                await interaction.response.send_message("Erreur: Cog DevStatsCog non trouvé.", ephemeral=True)
                 return
 
-            # Chercher la commande slash '/project_stats'
-            # Les commandes slash sont généralement accessibles via bot.tree.get_command
-            project_stats_command = bot.tree.get_command("project_stats")
+            await interaction.response.defer(thinking=True, ephemeral=True)
 
-            if project_stats_command:
-                # Il faut simuler une interaction pour appeler la commande.
-                # C'est un peu complexe car une vraie interaction vient de l'utilisateur.
-                # Une manière plus simple est de faire en sorte que le bouton appelle directement 
-                # les fonctions de génération d'embed/vue de DevStatsCog.
+            try:
+                commit_data = await dev_stats_cog.get_commit_stats()
+                loc_data = dev_stats_cog.get_loc_stats()
 
-                # --- RECOMMANDATION : Appeler directement les méthodes de DevStatsCog ---
-                # C'est une approche plus simple et moins sujette aux problèmes d'interaction simulation.
-                # Si DevStatsCog est déjà chargé et a les méthodes get_commit_stats/get_loc_stats,
-                # alors AdminCog peut les appeler directement.
-
-                # On a besoin d'accéder au cog DevStatsCog
-                dev_stats_cog = bot.get_cog("DevStatsCog") # Assurez-vous que le nom du cog est correct
-
-                if not dev_stats_cog:
-                    await interaction.response.send_message("Erreur: Cog DevStatsCog non trouvé.", ephemeral=True)
+                if "error" in commit_data:
+                    await interaction.followup.send(f"❌ Erreur GitHub : {commit_data['error']}", ephemeral=True)
+                    return
+                if "error" in loc_data:
+                    await interaction.followup.send(f"❌ Erreur Locale : {loc_data['error']}", ephemeral=True)
                     return
 
-                await interaction.response.defer(thinking=True, ephemeral=True) # Déferler la réponse car l'appel aux fonctions peut prendre du temps
+                # CORRECT: create_styled_embed is now available because it was imported at the top of the file.
+                embed = create_styled_embed(
+                    title=f"📊 Statistiques du Projet - {GITHUB_REPO_NAME}",
+                    description="Un aperçu de l'activité de développement du projet.",
+                    color=discord.Color.dark_green()
+                )
 
-                try:
-                    # Récupérer les données
-                    commit_data = await dev_stats_cog.get_commit_stats()
-                    loc_data = dev_stats_cog.get_loc_stats() # Cette fonction n'est pas async, donc pas besoin d'await
+                first_commit_ts = int(commit_data['first_commit_date'].timestamp())
+                last_commit_ts = int(commit_data['last_commit_date'].timestamp())
 
-                    # Vérifier les erreurs
-                    if "error" in commit_data:
-                        await interaction.followup.send(f"❌ Erreur GitHub : {commit_data['error']}", ephemeral=True)
-                        return
-                    if "error" in loc_data:
-                        await interaction.followup.send(f"❌ Erreur Locale : {loc_data['error']}", ephemeral=True)
-                        return
+                project_duration = commit_data['last_commit_date'] - commit_data['first_commit_date']
+                project_duration_days = project_duration.days
+                
+                commit_text = (
+                    f"**Nombre total de commits :** `{commit_data['total_commits']}`\n"
+                    f"**Premier commit :** <t:{first_commit_ts}:D>\n"
+                    f"**Dernier commit :** <t:{last_commit_ts}:R>\n"
+                    f"**Durée du projet :** `{project_duration_days} jours`"
+                )
+                embed.add_field(name="⚙️ Activité des Commits", value=commit_text, inline=False)
+                
+                loc_text = (
+                    f"**Lignes de code :** `{loc_data['total_lines']:,}`\n"
+                    f"**Caractères :** `{loc_data['total_chars']:,}`\n"
+                    f"**Fichiers Python :** `{loc_data['total_files']}`"
+                )
+                embed.add_field(name="💻 Code Source (.py)", value=loc_text, inline=True)
 
-                    # Générer l'embed à partir de DevStatsCog
-                    # Il faudrait que DevStatsCog ait une méthode qui génère l'embed à partir des données
-                    # ou que AdminCog génère l'embed en utilisant les données brutes.
-                    # Faisons simple : AdminCog génère l'embed en utilisant les données brutes.
-                    
-                    # On a besoin des constantes de shared_utils
-                    from shared_utils import create_styled_embed, GITHUB_REPO_NAME, Logger
+                total_seconds = commit_data['estimated_duration'].total_seconds()
+                total_hours = total_seconds / 3600
+                time_text = f"**Estimation :**\n`{total_hours:.2f} heures`"
+                embed.add_field(name="⏱️ Amplitude de Développement", value=time_text, inline=True)
 
-                    embed = create_styled_embed(
-                        title=f"📊 Statistiques du Projet - {GITHUB_REPO_NAME}",
-                        description="Un aperçu de l'activité de développement du projet.",
-                        color=discord.Color.dark_green()
-                    )
+                embed.set_footer(text="Données via API GitHub & commandes git locales.")
 
-                    first_commit_ts = int(commit_data['first_commit_date'].timestamp())
-                    last_commit_ts = int(commit_data['last_commit_date'].timestamp())
+                await interaction.followup.send(embed=embed, ephemeral=True)
 
-                    project_duration = commit_data['last_commit_date'] - commit_data['first_commit_date']
-                    project_duration_days = project_duration.days
-                    
-                    commit_text = (
-                        f"**Nombre total de commits :** `{commit_data['total_commits']}`\n"
-                        f"**Premier commit :** <t:{first_commit_ts}:D>\n"
-                        f"**Dernier commit :** <t:{last_commit_ts}:R>\n"
-                        f"**Durée du projet :** `{project_duration_days} jours`"
-                    )
-                    embed.add_field(name="⚙️ Activité des Commits", value=commit_text, inline=False)
-                    
-                    loc_text = (
-                        f"**Lignes de code :** `{loc_data['total_lines']:,}`\n"
-                        f"**Caractères :** `{loc_data['total_chars']:,}`\n"
-                        f"**Fichiers Python :** `{loc_data['total_files']}`"
-                    )
-                    embed.add_field(name="💻 Code Source (.py)", value=loc_text, inline=True)
-
-                    total_seconds = commit_data['estimated_duration'].total_seconds()
-                    total_hours = total_seconds / 3600
-                    time_text = f"**Estimation :**\n`{total_hours:.2f} heures`"
-                    embed.add_field(name="⏱️ Amplitude de Développement", value=time_text, inline=True)
-
-                    embed.set_footer(text="Données via API GitHub & commandes git locales.")
-
-                    await interaction.followup.send(embed=embed, ephemeral=True)
-
-                except Exception as e:
-                    Logger.error(f"Erreur lors de l'appel des stats projet depuis admin cog : {e}")
-                    traceback.print_exc()
-                    await interaction.followup.send("❌ Une erreur critique est survenue lors de la récupération des statistiques du projet.", ephemeral=True)
-
+            except Exception as e:
+                logger.error(f"Erreur dans le callback de ProjectStatsButton : {e}") # Use the logger from the top
+                traceback.print_exc()
+                await interaction.followup.send("❌ Une erreur critique est survenue lors de la récupération des statistiques du projet.", ephemeral=True)
+                
     # --- Modification de generate_config_menu_view pour inclure le bouton ---
     def generate_config_menu_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
