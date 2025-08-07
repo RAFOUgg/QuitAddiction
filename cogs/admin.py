@@ -1,4 +1,4 @@
-# --- cogs/admin.py (Corrected and Refactored) ---
+# --- cogs/admin.py (FULLY CORRECTED) ---
 
 import discord
 from discord.ext import commands
@@ -8,13 +8,16 @@ import datetime
 import math
 from typing import List, Tuple, Dict
 import os
-import traceback # +++ IMPORT: Added missing traceback import
+import traceback
 
 # --- CORRECT: Centralized Imports ---
-from db.database import get_db # +++ CORRECT: Import get_db for safe session management
+from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
-from utils.logger import get_logger # +++ CORRECT: Use the central logger
+from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
+
+# --- Setup Logger for this Cog ---
+logger = get_logger(__name__)
 
 
 # --- Setup Logger for this Cog ---
@@ -32,42 +35,8 @@ class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # --- Préréglages des Modes de Jeu ---
-    GAME_MODES = {
-        "peaceful": {
-            "tick_interval_minutes": 60,
-            "rates": {
-                "hunger": 5.0, "thirst": 4.0, "bladder": 5.0,
-                "energy": 3.0, "stress": 1.0, "boredom": 2.0,
-                "addiction_base": 0.05, "toxins_base": 0.1,
-            }
-        },
-        "medium": {
-            "tick_interval_minutes": 30,
-            "rates": {
-                "hunger": 10.0, "thirst": 8.0, "bladder": 15.0,
-                "energy": 5.0, "stress": 3.0, "boredom": 7.0,
-                "addiction_base": 0.1, "toxins_base": 0.5,
-            }
-        },
-        "hard": {
-            "tick_interval_minutes": 15,
-            "rates": {
-                "hunger": 20.0, "thirst": 16.0, "bladder": 30.0,
-                "energy": 10.0, "stress": 6.0, "boredom": 14.0,
-                "addiction_base": 0.2, "toxins_base": 1.0,
-            }
-        }
-    }
-    
-    # --- Préréglages des Durées de Partie ---
-    GAME_DURATIONS = {
-        "short": {"days": 14, "label": "Court (14 jours)"},
-        "medium": {"days": 31, "label": "Moyen (31 jours)"},
-        "long": {"days": 72, "label": "Long (72 jours)"},
-    }
-
-    # Limites pour les labels et valeurs des options de SelectMenu selon Discord API
+    GAME_MODES = { "peaceful": { "tick_interval_minutes": 60, "rates": { "hunger": 5.0, "thirst": 4.0, "bladder": 5.0, "energy": 3.0, "stress": 1.0, "boredom": 2.0, "addiction_base": 0.05, "toxins_base": 0.1, } }, "medium": { "tick_interval_minutes": 30, "rates": { "hunger": 10.0, "thirst": 8.0, "bladder": 15.0, "energy": 5.0, "stress": 3.0, "boredom": 7.0, "addiction_base": 0.1, "toxins_base": 0.5, } }, "hard": { "tick_interval_minutes": 15, "rates": { "hunger": 20.0, "thirst": 16.0, "bladder": 30.0, "energy": 10.0, "stress": 6.0, "boredom": 14.0, "addiction_base": 0.2, "toxins_base": 1.0, } } }
+    GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, }
     MAX_OPTION_LENGTH = 25
     MIN_OPTION_LENGTH = 1
 
@@ -105,498 +74,183 @@ class AdminCog(commands.Cog):
             super().__init__(label=label, style=style, row=row)
             self.guild_id = guild_id
             self.cog = cog
-
         async def callback(self, interaction: discord.Interaction):
-            bot = interaction.client 
-            dev_stats_cog = bot.get_cog("DevStatsCog")
-
-            if not dev_stats_cog:
-                await interaction.response.send_message("Erreur: Cog DevStatsCog non trouvé.", ephemeral=True)
-                return
-
             await interaction.response.defer(thinking=True, ephemeral=True)
-
             try:
+                bot = interaction.client
+                dev_stats_cog = bot.get_cog("DevStatsCog")
+                if not dev_stats_cog:
+                    await interaction.followup.send("Error: DevStatsCog not found.", ephemeral=True)
+                    return
                 commit_data = await dev_stats_cog.get_commit_stats()
                 loc_data = dev_stats_cog.get_loc_stats()
-
                 if "error" in commit_data:
-                    await interaction.followup.send(f"❌ Erreur GitHub : {commit_data['error']}", ephemeral=True)
+                    await interaction.followup.send(f"❌ GitHub Error: {commit_data['error']}", ephemeral=True)
                     return
                 if "error" in loc_data:
-                    await interaction.followup.send(f"❌ Erreur Locale : {loc_data['error']}", ephemeral=True)
+                    await interaction.followup.send(f"❌ Local Error: {loc_data['error']}", ephemeral=True)
                     return
-
-                # CORRECT: create_styled_embed is now available because it was imported at the top of the file.
-                embed = create_styled_embed(
-                    title=f"📊 Statistiques du Projet - {GITHUB_REPO_NAME}",
-                    description="Un aperçu de l'activité de développement du projet.",
-                    color=discord.Color.dark_green()
-                )
-
-                first_commit_ts = int(commit_data['first_commit_date'].timestamp())
-                last_commit_ts = int(commit_data['last_commit_date'].timestamp())
-
-                project_duration = commit_data['last_commit_date'] - commit_data['first_commit_date']
-                project_duration_days = project_duration.days
-                
-                commit_text = (
-                    f"**Nombre total de commits :** `{commit_data['total_commits']}`\n"
-                    f"**Premier commit :** <t:{first_commit_ts}:D>\n"
-                    f"**Dernier commit :** <t:{last_commit_ts}:R>\n"
-                    f"**Durée du projet :** `{project_duration_days} jours`"
-                )
-                embed.add_field(name="⚙️ Activité des Commits", value=commit_text, inline=False)
-                
-                loc_text = (
-                    f"**Lignes de code :** `{loc_data['total_lines']:,}`\n"
-                    f"**Caractères :** `{loc_data['total_chars']:,}`\n"
-                    f"**Fichiers Python :** `{loc_data['total_files']}`"
-                )
-                embed.add_field(name="💻 Code Source (.py)", value=loc_text, inline=True)
-
-                total_seconds = commit_data['estimated_duration'].total_seconds()
-                total_hours = total_seconds / 3600
-                time_text = f"**Estimation :**\n`{total_hours:.2f} heures`"
-                embed.add_field(name="⏱️ Amplitude de Développement", value=time_text, inline=True)
-
-                embed.set_footer(text="Données via API GitHub & commandes git locales.")
-
+                embed = create_styled_embed(title=f"📊 Project Stats - {GITHUB_REPO_NAME}", description="A snapshot of the project's development activity.", color=discord.Color.dark_green())
+                first_commit_ts, last_commit_ts = int(commit_data['first_commit_date'].timestamp()), int(commit_data['last_commit_date'].timestamp())
+                project_duration_days = (commit_data['last_commit_date'] - commit_data['first_commit_date']).days
+                commit_text = (f"**Total commits:** `{commit_data['total_commits']}`\n" f"**First commit:** <t:{first_commit_ts}:D>\n" f"**Last commit:** <t:{last_commit_ts}:R>\n" f"**Project duration:** `{project_duration_days} days`")
+                embed.add_field(name="⚙️ Commit Activity", value=commit_text, inline=False)
+                loc_text = (f"**Lines of code:** `{loc_data['total_lines']:,}`\n" f"**Characters:** `{loc_data['total_chars']:,}`\n" f"**Python files:** `{loc_data['total_files']}`")
+                embed.add_field(name="💻 Source Code (.py)", value=loc_text, inline=True)
+                total_hours = commit_data['estimated_duration'].total_seconds() / 3600
+                time_text = f"**Estimation:**\n`{total_hours:.2f} hours`"
+                embed.add_field(name="⏱️ Development Time", value=time_text, inline=True)
+                embed.set_footer(text="Data via GitHub API & local git commands.")
                 await interaction.followup.send(embed=embed, ephemeral=True)
-
             except Exception as e:
-                logger.error(f"Erreur dans le callback de ProjectStatsButton : {e}") # Use the logger from the top
-                traceback.print_exc()
-                await interaction.followup.send("❌ Une erreur critique est survenue lors de la récupération des statistiques du projet.", ephemeral=True)
+                logger.error(f"Error in ProjectStatsButton callback: {e}", exc_info=True)
+                await interaction.followup.send("A critical error occurred while fetching project stats.", ephemeral=True)
 
     # --- Modification de generate_config_menu_view pour inclure le bouton ---
     def generate_config_menu_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        
-        # Ligne 0 : Mode/Durée, Lancer/Réinitialiser, Rôles & Salons
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Durée", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
-        view.add_item(self.ConfigButton("🎮 Lancer/Reinitialiser Partie", guild_id, discord.ButtonStyle.success, row=0, cog=self)) 
-        view.add_item(self.GeneralConfigButton("⚙️ Rôles & Salons", guild_id, discord.ButtonStyle.primary, row=0, cog=self)) 
-        
-        # Ligne 1 : Notifications, Statistiques, Stats Projet
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.primary, row=1, cog=self)) 
-        view.add_item(self.ConfigButton("📊 Voir Statistiques", guild_id, discord.ButtonStyle.primary, row=1, cog=self)) 
-        # --- Le bouton pour les stats du projet ---
-        view.add_item(self.ProjectStatsButton("📈 Stats Projet", guild_id, discord.ButtonStyle.secondary, row=1, cog=self)) 
-        
-        # Ligne 2 : Bouton retour final
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.red, row=2, cog=self)) 
-       
+        view.add_item(self.SetupGameModeButton("🕹️ Mode & Duration", guild_id, discord.ButtonStyle.primary, row=0, cog=self))
+        view.add_item(self.ConfigButton("🎮 Start/Reset Game", guild_id, discord.ButtonStyle.success, row=0, cog=self))
+        view.add_item(self.GeneralConfigButton("⚙️ Roles & Channels", guild_id, discord.ButtonStyle.primary, row=0, cog=self))
+        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
+        view.add_item(self.ConfigButton("📊 View Stats", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
+        view.add_item(self.ProjectStatsButton("📈 Project Stats", guild_id, discord.ButtonStyle.secondary, row=1, cog=self))
+        view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.red, row=2, cog=self))
         return view
 
     # --- Classe ProjectStatsButton (celle que nous avons définie précédemment) ---
-    class ProjectStatsButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
-            super().__init__(label=label, style=style, row=row)
-            self.guild_id = guild_id
-            self.cog = cog
-
-        async def callback(self, interaction: discord.Interaction):
-            bot = interaction.client 
-            dev_stats_cog = bot.get_cog("DevStatsCog") # Assurez-vous que le nom du cog est correct
-
-            if not dev_stats_cog:
-                await interaction.response.send_message("Erreur: Cog DevStatsCog non trouvé.", ephemeral=True)
-                return
-
-            await interaction.response.defer(thinking=True, ephemeral=True)
-
-            try:
-                commit_data = await dev_stats_cog.get_commit_stats()
-                loc_data = dev_stats_cog.get_loc_stats()
-
-                if "error" in commit_data:
-                    await interaction.followup.send(f"❌ Erreur GitHub : {commit_data['error']}", ephemeral=True)
-                    return
-                if "error" in loc_data:
-                    await interaction.followup.send(f"❌ Erreur Locale : {loc_data['error']}", ephemeral=True)
-                    return
-
-                # Utilisation de create_styled_embed importé de config
-                embed = create_styled_embed(
-                    title=f"📊 Statistiques du Projet - {GITHUB_REPO_NAME}",
-                    description="Un aperçu de l'activité de développement du projet.",
-                    color=discord.Color.dark_green()
-                )
-
-                first_commit_ts = int(commit_data['first_commit_date'].timestamp())
-                last_commit_ts = int(commit_data['last_commit_date'].timestamp())
-
-                project_duration = commit_data['last_commit_date'] - commit_data['first_commit_date']
-                project_duration_days = project_duration.days
-                
-                commit_text = (
-                    f"**Nombre total de commits :** `{commit_data['total_commits']}`\n"
-                    f"**Premier commit :** <t:{first_commit_ts}:D>\n"
-                    f"**Dernier commit :** <t:{last_commit_ts}:R>\n"
-                    f"**Durée du projet :** `{project_duration_days} jours`"
-                )
-                embed.add_field(name="⚙️ Activité des Commits", value=commit_text, inline=False)
-                
-                loc_text = (
-                    f"**Lignes de code :** `{loc_data['total_lines']:,}`\n"
-                    f"**Caractères :** `{loc_data['total_chars']:,}`\n"
-                    f"**Fichiers Python :** `{loc_data['total_files']}`"
-                )
-                embed.add_field(name="💻 Code Source (.py)", value=loc_text, inline=True)
-
-                total_seconds = commit_data['estimated_duration'].total_seconds()
-                total_hours = total_seconds / 3600
-                time_text = f"**Estimation :**\n`{total_hours:.2f} heures`"
-                embed.add_field(name="⏱️ Amplitude de Développement", value=time_text, inline=True)
-
-                embed.set_footer(text="Données via API GitHub & commandes git locales.")
-
-                await interaction.followup.send(embed=embed, ephemeral=True)
-
-            except Exception as e:
-                Logger.error(f"Erreur dans le callback de ProjectStatsButton : {e}")
-                traceback.print_exc()
-                await interaction.followup.send("❌ Une erreur critique est survenue lors de la récupération des statistiques du projet.", ephemeral=True)
-    
     def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
-        """
-        Crée des options hiérarchisées et lisibles pour les SelectMenus (rôles ou salons).
-        - Ajoute des icônes (📁 pour catégories, # pour salons, 🔹 pour rôles)
-        - Ignore les éléments non pertinents (comme @everyone pour les rôles)
-        - Fournit un mapping ID haché -> ID réel
-        """
-        options = []
-        id_mapping = {}
-
-        if not guild:
-            return [discord.SelectOption(label="Erreur serveur", value="error_guild", default=True)], {}
-
+        options, id_mapping = [], {}
+        if not guild: return [discord.SelectOption(label="Server Error", value="error_guild", default=True)], {}
         try:
-            # --- Trier les items ---
-            if item_type == "role":
-                # Les rôles triés du plus élevé au plus bas
-                sorted_items = sorted(items, key=lambda x: x.position, reverse=True)
-            elif item_type == "channel":
-                # Trier par catégorie puis par position
-                sorted_items = sorted(items, key=lambda x: (getattr(x, 'category_id', float('inf')), x.position))
-            else:
-                sorted_items = items
+            if item_type == "role": sorted_items = sorted(items, key=lambda x: x.position, reverse=True)
+            elif item_type == "channel": sorted_items = sorted(items, key=lambda x: (getattr(x, 'category_id', float('inf')), x.position))
+            else: sorted_items = items
         except Exception as e:
-            print(f"Error sorting {item_type}s: {e}")
-            sorted_items = items
-
-        # --- Construire les options ---
+            logger.error(f"Error sorting {item_type}s: {e}"); sorted_items = items
         for item in sorted_items:
-            item_id = str(item.id)
-            item_name = item.name if hasattr(item, 'name') else None
-
-            if not item_id or not item_name:
-                continue
-
-            # --- Filtrage pour éviter le spam ---
+            if not (hasattr(item, 'id') and hasattr(item, 'name')): continue
+            item_id, item_name = str(item.id), item.name
             if item_type == "role":
-                # Ignore @everyone
-                if item.is_default():
-                    continue
+                if item.is_default(): continue
                 label = f"🔹 {item_name}"
             elif item_type == "channel":
-                # Ignore les salons vocaux, threads ou catégories directes
-                if isinstance(item, discord.CategoryChannel):
-                    continue
-                if not isinstance(item, discord.TextChannel):
-                    continue
-
-                # Ajout hiérarchique : Catégorie | #Nom
-                category_name = item.category.name if item.category else "Sans catégorie"
+                if not isinstance(item, discord.TextChannel): continue
+                category_name = item.category.name if item.category else "No Category"
                 label = f"📁 {category_name} | #{item_name}"
-            else:
-                label = item_name
-
-            # Tronquer à 25 caractères (limite Discord)
-            label = label[:25]
-
-            # --- Hachage pour value ---
-            hashed_id = hashlib.sha256(item_id.encode()).hexdigest()[:25]
-
-            # --- Ajouter à la liste ---
-            options.append(discord.SelectOption(
-                label=label,
-                value=hashed_id,
-                description=f"ID: {item_id}"  # affiché en petit sous le label
-            ))
+            else: label = item_name
+            label = label[:self.MAX_OPTION_LENGTH]
+            hashed_id = hashlib.sha256(item_id.encode()).hexdigest()[:self.MAX_OPTION_LENGTH]
+            options.append(discord.SelectOption(label=label, value=hashed_id, description=f"ID: {item_id}"))
             id_mapping[hashed_id] = item_id
-
-        if not options:
-            options.append(discord.SelectOption(label="Aucun élément trouvé", value="no_items", default=True))
-
+        if not options: options.append(discord.SelectOption(label="No items found", value="no_items", default=True))
         return options, id_mapping
-    
+
     def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
-        embed = discord.Embed(
-            title="⚙️ Configuration du Bot et du Jeu",
-            description="Utilisez les boutons ci-dessous pour ajuster les paramètres du serveur.",
-            color=discord.Color.blue()
-        )
-
-        embed.add_field(
-            name="▶️ **Statut Général**",
-            value=f"**Jeu :** `{'En cours' if state.game_started else 'Non lancée'}`\n"
-                  f"**Mode :** `{state.game_mode.capitalize() if state.game_mode else 'Medium (Standard)'}`\n"
-                  f"**Durée :** `{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Moyen (31 jours)') if state.duration_key else 'Moyen (31 jours)'}`",
-            inline=False
-        )
-
-        admin_role_mention = f"<@&{state.admin_role_id}>" if state.admin_role_id else "Non défini"
-        notification_role_mention = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
-        game_channel_mention = f"<#{state.game_channel_id}>" if state.game_channel_id else "Non défini"
-        
-        embed.add_field(
-            name="📍 **Configuration du Serveur**",
-            value=f"**Rôle Admin :** {admin_role_mention}\n"
-                  f"**Rôle Notification :** {notification_role_mention}\n"
-                  f"**Salon de Jeu :** {game_channel_mention}",
-            inline=False
-        )
-
-        tick_interval = state.game_tick_interval_minutes if state.game_tick_interval_minutes is not None else 30
-        
-        embed.add_field(
-            name="⏱️ **Paramètres du Jeu**",
-            value=f"**Intervalle Tick (min) :** `{tick_interval}`",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="📉 **Taux de Dégradation / Tick**",
-            value=f"**Faim :** `{state.degradation_rate_hunger:.1f}` | **Soif :** `{state.degradation_rate_thirst:.1f}` \n **Vessie :** `{state.degradation_rate_bladder:.1f}`"
-                  f"**| Énergie :** `{state.degradation_rate_energy:.1f}` \n **Stress :** `{state.degradation_rate_stress:.1f}` | **Ennui :** `{state.degradation_rate_boredom:.1f}`",
-            inline=False
-        )
-        
-        embed.set_footer(text="Utilisez les boutons ci-dessous pour naviguer et modifier les paramètres.")
+        embed = discord.Embed(title="⚙️ Bot & Game Configuration", description="Use the buttons below to adjust server settings.", color=discord.Color.blue())
+        embed.add_field(name="▶️ **General Status**", value=f"**Game:** `{'In Progress' if state.game_started else 'Not Started'}`\n**Mode:** `{state.game_mode.capitalize() if state.game_mode else 'Medium (Default)'}`\n**Duration:** `{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Medium (31 days)')}`", inline=False)
+        admin_role, notif_role, game_channel = (f"<@&{state.admin_role_id}>" if state.admin_role_id else "Not set"), (f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"), (f"<#{state.game_channel_id}>" if state.game_channel_id else "Not set")
+        embed.add_field(name="📍 **Server Config**", value=f"**Admin Role:** {admin_role}\n**Notification Role:** {notif_role}\n**Game Channel:** {game_channel}", inline=False)
+        embed.add_field(name="⏱️ **Game Parameters**", value=f"**Tick Interval (min):** `{state.game_tick_interval_minutes or 30}`", inline=False)
+        embed.add_field(name="📉 **Degradation Rates / Tick**", value=f"**Hunger:** `{state.degradation_rate_hunger:.1f}` | **Thirst:** `{state.degradation_rate_thirst:.1f}` | **Bladder:** `{state.degradation_rate_bladder:.1f}`\n**Energy:** `{state.degradation_rate_energy:.1f}` | **Stress:** `{state.degradation_rate_stress:.1f}` | **Boredom:** `{state.degradation_rate_boredom:.1f}`", inline=False)
+        embed.set_footer(text="Use the buttons below to navigate and modify settings.")
         return embed
 
-    # --- Bouton pour lancer la sous-vue de sélection du Mode et Durée ---
     class SetupGameModeButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'): # Ajout de cog
-            super().__init__(label=label, style=style, row=row) 
-            self.guild_id = guild_id
-            self.cog = cog # Stocker l'instance du cog
-
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
+            super().__init__(label=label, style=style, row=row); self.guild_id = guild_id; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.edit_message(
-                embed=self.cog.generate_setup_game_mode_embed(),
-                view=self.cog.generate_setup_game_mode_view(self.guild_id)
-            )
+            await interaction.response.edit_message(embed=self.cog.generate_setup_game_mode_embed(), view=self.cog.generate_setup_game_mode_view(self.guild_id))
 
-    # --- Embed pour la sélection du Mode de Jeu et Durée ---
     def generate_setup_game_mode_embed(self) -> discord.Embed:
-        embed = discord.Embed(
-            title="🎮 Configuration du Mode et de la Durée",
-            description="Sélectionnez un mode de difficulté et une durée pour la partie.",
-            color=discord.Color.teal()
-        )
-        return embed
+        return discord.Embed(title="🎮 Mode & Duration Setup", description="Select a difficulty and duration for the game.", color=discord.Color.teal())
 
-    # --- View pour la sélection du Mode de Jeu et Durée ---
     def generate_setup_game_mode_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        view.add_item(self.GameModeSelect(guild_id, "mode", row=0, cog=self)) # Passer self
-        view.add_item(self.GameDurationSelect(guild_id, "duration", row=1, cog=self)) # Passer self
-        view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=2, cog=self)) # Passer self
+        view.add_item(self.GameModeSelect(guild_id, "mode", 0, self)); view.add_item(self.GameDurationSelect(guild_id, "duration", 1, self)); view.add_item(self.BackButton("⬅ Back to Settings", guild_id, discord.ButtonStyle.secondary, 2, self))
         return view
 
-    # --- Classe de Menu: Mode de Difficulté (Peaceful, Medium, Hard) ---
     class GameModeSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int, cog: 'AdminCog'): # Ajout de cog
-            options = [
-                discord.SelectOption(label="Peaceful", description="Taux de dégradation bas.", value="peaceful"),
-                discord.SelectOption(label="Medium (Standard)", description="Taux de dégradation standard.", value="medium"),
-                discord.SelectOption(label="Hard", description="Taux de dégradation élevés. Plus difficile.", value="hard")
-            ]
-            super().__init__(placeholder="Choisissez le mode de difficulté...", options=options, custom_id=f"select_gamemode_{guild_id}", row=row)
-            self.guild_id = guild_id
-            self.cog = cog # Stocker l'instance du cog
-
+        def __init__(self, guild_id: str, select_type: str, row: int, cog: 'AdminCog'):
+            options = [discord.SelectOption(label="Peaceful", description="Low degradation rates.", value="peaceful"), discord.SelectOption(label="Medium (Default)", description="Standard degradation rates.", value="medium"), discord.SelectOption(label="Hard", description="High degradation rates. More challenging.", value="hard")]
+            super().__init__(placeholder="Choose a difficulty mode...", options=options, custom_id=f"select_gamemode_{guild_id}", row=row); self.guild_id = guild_id; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
-            selected_mode = self.values[0] # Assurez-vous que c'est bien self.values[0]
             db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-
-            if state:
-                mode_data = self.cog.GAME_MODES.get(selected_mode) # Utiliser self.cog
-
-                if mode_data:
-                    state.game_mode = selected_mode
-                    state.game_tick_interval_minutes = mode_data["tick_interval_minutes"]
-                    for key, value in mode_data["rates"].items():
-                        setattr(state, f"degradation_rate_{key}", value)
-                
+            try:
+                selected_mode = self.values[0]; state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if state and (mode_data := self.cog.GAME_MODES.get(selected_mode)):
+                    state.game_mode, state.game_tick_interval_minutes = selected_mode, mode_data["tick_interval_minutes"]
+                    for key, value in mode_data["rates"].items(): setattr(state, f"degradation_rate_{key}", value)
                     db.commit()
-                    
-                    embed = self.cog.generate_setup_game_mode_embed() # Utiliser self.cog
-                    embed.description = f"✅ Mode de difficulté défini sur **{selected_mode.capitalize()}**.\n" + embed.description
-                    
-                    await interaction.response.edit_message(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id)) # Utiliser self.cog
-            
-            db.close()
+                    embed = self.cog.generate_setup_game_mode_embed(); embed.description = f"✅ Difficulty set to **{selected_mode.capitalize()}**.\n{embed.description}"
+                    await interaction.response.edit_message(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
+            finally: db.close()
 
-    # --- Classe de Menu: Durée de Partie (Short, Medium, Long) ---
     class GameDurationSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int, cog: 'AdminCog'): # Ajout de cog
-            options = [
-                discord.SelectOption(label=data["label"], value=key)
-                for key, data in AdminCog.GAME_DURATIONS.items()
-            ]
-            super().__init__(placeholder="Choisissez la durée de la partie...", options=options, custom_id=f"select_gameduration_{guild_id}", row=row)
-            self.guild_id = guild_id
-            self.cog = cog # Stocker l'instance du cog
-
-        async def callback(self, interaction: discord.Interaction):
-            selected_duration_key = self.values[0] # Assurez-vous que c'est bien self.values[0]
-            db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-
-            if state:
-                duration_data = self.cog.GAME_DURATIONS.get(selected_duration_key) # Utiliser self.cog
-                
-                if duration_data:
-                    state.duration_key = selected_duration_key 
-                    db.commit()
-                    
-                    embed = self.cog.generate_setup_game_mode_embed() # Utiliser self.cog
-                    embed.description = f"✅ Durée de la partie définie sur **{duration_data['label']}**.\n" + embed.description
-                    await interaction.response.edit_message(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id)) # Utiliser self.cog
-
-            db.close()
-            
-    # --- Bouton de retour vers le Menu Principal des Paramètres ---
-    class BackButton(ui.Button): 
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0, cog: 'AdminCog'=None): # Ajout de cog
-            super().__init__(label=label, style=style, row=row)
-            self.guild_id = guild_id
-            self.cog = cog # Stocker l'instance du cog
-            
+        def __init__(self, guild_id: str, select_type: str, row: int, cog: 'AdminCog'):
+            options = [discord.SelectOption(label=data["label"], value=key) for key, data in AdminCog.GAME_DURATIONS.items()]
+            super().__init__(placeholder="Choose the game duration...", options=options, custom_id=f"select_gameduration_{guild_id}", row=row); self.guild_id = guild_id; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
-            
-            await interaction.response.edit_message(
-                embed=self.cog.generate_config_menu_embed(state), # Utiliser self.cog
-                view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild) # Utiliser self.cog
-            )
-            db.close()
+            try:
+                selected_key = self.values[0]; state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if state and (duration_data := self.cog.GAME_DURATIONS.get(selected_key)):
+                    state.duration_key = selected_key; db.commit()
+                    embed = self.cog.generate_setup_game_mode_embed(); embed.description = f"✅ Game duration set to **{duration_data['label']}**.\n{embed.description}"
+                    await interaction.response.edit_message(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
+            finally: db.close()
 
-    # --- Classe générique pour les boutons de configuration ---
+    class BackButton(ui.Button):
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0, cog: 'AdminCog'=None):
+            super().__init__(label=label, style=style, row=row); self.guild_id = guild_id; self.cog = cog
+        async def callback(self, interaction: discord.Interaction):
+            db = SessionLocal()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
+                await interaction.response.edit_message(embed=self.cog.generate_config_menu_embed(state), view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild))
+            finally: db.close()
+
     class ConfigButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'): # Ajout de cog
-            super().__init__(label=label, style=style, row=row)
-            self.guild_id = guild_id
-            self.label = label
-            self.cog = cog # Stocker l'instance du cog
-
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
+            super().__init__(label=label, style=style, row=row); self.guild_id = guild_id; self.label = label; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
+                if self.label == "🎮 Start/Reset Game":
+                    if state:
+                        state.game_started = not state.game_started; state.game_start_time = datetime.datetime.utcnow() if state.game_started else None
+                        db.commit()
+                        await interaction.response.edit_message(embed=self.cog.generate_config_menu_embed(state), view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild))
+                        await interaction.followup.send(f"The game has been {'started' if state.game_started else 'stopped/reset'}.", ephemeral=True)
+                elif self.label == "📊 View Stats": await interaction.response.edit_message(embed=self.cog.generate_stats_embed(self.guild_id), view=self.cog.generate_stats_view(self.guild_id))
+                elif self.label == "🔔 Notifications": await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
+            finally: db.close()
 
-            if self.label == "🎮 Lancer/Reinitialiser Partie":
-                if state:
-                    state.game_started = not state.game_started
-                    state.game_start_time = datetime.datetime.utcnow() if state.game_started else None
-                    db.commit()
-                    
-                    await interaction.response.edit_message(
-                        embed=self.cog.generate_config_menu_embed(state), # Utiliser self.cog
-                        view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild) # Utiliser self.cog
-                    )
-                    await interaction.followup.send(f"La partie a été {'lancée' if state.game_started else 'arrêtée/réinitialisée'}.", ephemeral=True)
-                else:
-                    await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur.", ephemeral=True)
-
-            elif self.label == "📊 Voir Statistiques":
-                await interaction.response.edit_message(
-                    embed=self.cog.generate_stats_embed(self.guild_id), # Utiliser self.cog
-                    view=self.cog.generate_stats_view(self.guild_id) # Utiliser self.cog
-                )
-
-            elif self.label == "🔔 Notifications":
-                await interaction.response.edit_message(
-                    embed=self.cog.generate_notifications_embed(self.guild_id), # Utiliser self.cog
-                    view=self.cog.generate_notifications_view(self.guild_id) # Utiliser self.cog
-                )
-
-            db.close()
-
-    # --- Bouton qui va ouvrir la configuration des rôles et salons ---
     class GeneralConfigButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'): # Ajout de cog
-            super().__init__(label=label, style=style, row=row) 
-            self.guild_id = guild_id
-            self.cog = cog # Stocker l'instance du cog
-
+        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
+            super().__init__(label=label, style=style, row=row); self.guild_id = guild_id; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                await interaction.response.edit_message(embed=self.cog.generate_role_and_channel_config_embed(state), view=self.cog.generate_general_config_view(self.guild_id, interaction.guild))
+            finally: db.close()
 
-            # On passe le guild à la méthode de génération pour qu'elle puisse accéder aux rôles/canaux
-            await interaction.response.edit_message(
-                embed=self.cog.generate_role_and_channel_config_embed(state), # Utiliser self.cog
-                view=self.cog.generate_general_config_view(self.guild_id, interaction.guild) # Utiliser self.cog
-            )
-            db.close()
-
-    # --- Méthodes pour les configurations spécifiques (Rôle Admin, Salon, Rôle Notif) ---
-    
     def generate_role_and_channel_config_embed(self, state: ServerState) -> discord.Embed:
-        embed = discord.Embed(
-            title="⚙️ Configuration Générale (Rôles & Salons)",
-            description="Utilisez les menus déroulants pour sélectionner les rôles et salons.",
-            color=discord.Color.purple()
-        )
-        current_admin_role = f"<@&{state.admin_role_id}>" if state.admin_role_id else "Non défini"
-        current_notif_role = f"<@&{state.notification_role_id}>" if hasattr(state, 'notification_role_id') and state.notification_role_id else "Non défini"
-        current_game_channel = f"<#{state.game_channel_id}>" if state.game_channel_id else "Non défini"
-
-        embed.add_field(name="👑 Rôle Admin", value=current_admin_role, inline=False)
-        embed.add_field(name="🔔 Rôle de Notification", value=current_notif_role, inline=False)
-        embed.add_field(name="🎮 Salon de Jeu", value=current_game_channel, inline=False)
+        embed = discord.Embed(title="⚙️ General Config (Roles & Channels)", description="Use the dropdowns to select roles and channels.", color=discord.Color.purple())
+        current_admin_role = f"<@&{state.admin_role_id}>" if state.admin_role_id else "Not set"; current_notif_role = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"; current_game_channel = f"<#{state.game_channel_id}>" if state.game_channel_id else "Not set"
+        embed.add_field(name="👑 Admin Role", value=current_admin_role, inline=False); embed.add_field(name="🔔 Notification Role", value=current_notif_role, inline=False); embed.add_field(name="🎮 Game Channel", value=current_game_channel, inline=False)
         return embed
 
-    # --- Génération de la vue pour Rôles et Salons avec pagination pour les salons ---
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
-        """
-        Vue de configuration générale avec pagination intégrée dans le menu déroulant.
-        """
         view = discord.ui.View(timeout=180)
-
-        # --- Préparer les options ---
-        all_roles = guild.roles if guild else []
-        role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
-
-        text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
-        channel_options, channel_id_mapping = self.create_options_and_mapping(text_channels, "channel", guild)
-
-        # --- Ajouter les SelectMenus paginés ---
-        admin_role_select = PaginatedSelect(guild_id, "admin_role", role_options, role_id_mapping, page=0, cog=self)
-        notification_role_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
-        channel_select = PaginatedSelect(guild_id, "channel", channel_options, channel_id_mapping, page=0, cog=self)
-
-        admin_role_select.row = 0
-        notification_role_select.row = 1
-        channel_select.row = 2
-
-        view.add_item(admin_role_select)
-        view.add_item(notification_role_select)
-        view.add_item(channel_select)
-        
-
-        # --- Bouton retour ---
-        back_button = self.BackButton(
-            "⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self
-        )
-        view.add_item(back_button)
-
+        role_options, role_id_mapping = self.create_options_and_mapping(guild.roles if guild else [], "role", guild)
+        channel_options, channel_id_mapping = self.create_options_and_mapping([ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else [], "channel", guild)
+        view.add_item(PaginatedSelect(guild_id, "admin_role", role_options, role_id_mapping, 0, self))
+        view.add_item(PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, 0, self, row=1))
+        view.add_item(PaginatedSelect(guild_id, "channel", channel_options, channel_id_mapping, 0, self, row=2))
+        view.add_item(self.BackButton("⬅ Back to Settings", guild_id, discord.ButtonStyle.secondary, 3, self))
         return view
 
     # --- Classe de Menu pour la sélection des Rôles ---
@@ -799,14 +453,8 @@ class AdminCog(commands.Cog):
 
     # --- Méthodes pour les autres configurations (Statistiques, Notifications, Avancées) ---
     # ... (reste des méthodes : generate_stats_embed, generate_stats_view, etc.) ...
-    def generate_stats_embed(self, guild_id: str) -> discord.Embed:
-        embed = discord.Embed(title="📊 Statistiques du Serveur", description="Fonctionnalité en développement.", color=discord.Color.purple())
-        return embed
-    
-    def generate_stats_view(self, guild_id: str) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
-        view.add_item(self.BackButton("⬅ Retour Paramètres Jeu", guild_id, discord.ButtonStyle.secondary, row=3, cog=self)) # Passer self
-        return view
+    def generate_stats_embed(self, guild_id: str) -> discord.Embed: return discord.Embed(title="📊 Server Statistics", description="This feature is under development.", color=discord.Color.purple())
+    def generate_stats_view(self, guild_id: str) -> discord.ui.View: view = discord.ui.View(timeout=None); view.add_item(self.BackButton("⬅ Back to Settings", guild_id, discord.ButtonStyle.secondary, 3, self)); return view
 
     # Dans admin.py, dans AdminCog
         # --- Méthodes pour les configurations spécifiques (Rôle Admin, Salon, Rôle Notif) ---
@@ -816,307 +464,104 @@ class AdminCog(commands.Cog):
     # --- L'EMBED POUR LES PARAMÈTRES DE NOTIFICATIONS ---
     def generate_notifications_embed(self, guild_id: str) -> discord.Embed:
         db = SessionLocal()
-        state = db.query(ServerState).filter_by(guild_id=guild_id).first()
-        db.close()
+        try:
+            state = db.query(ServerState).filter_by(guild_id=guild_id).first()
+            if not state: return discord.Embed(title="🔔 Notification Settings", description="Could not load server configuration.", color=discord.Color.red())
+            embed = discord.Embed(title="🔔 Notification Settings", color=discord.Color.green())
+            notif_role_mention = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"
+            embed.add_field(name="📍 General Notification Role", value=notif_role_mention, inline=False)
+            embed.add_field(name="🚨 Specific Alert Roles", value=(f"📉 Low Vitals: {f'<@&{state.notify_vital_low_role_id}>' if state.notify_vital_low_role_id else 'Not set'}\n" f"🚨 Critical: {f'<@&{state.notify_critical_role_id}>' if state.notify_critical_role_id else 'Not set'}\n" f"🚬 Cravings: {f'<@&{state.notify_envie_fumer_role_id}>' if state.notify_envie_fumer_role_id else 'Not set'}\n" f"💬 Friend/Quiz Msg: {f'<@&{state.notify_friend_message_role_id}>' if state.notify_friend_message_role_id else 'Not set'}\n" f"🛒 Shop Promos: {f'<@&{state.notify_shop_promo_role_id}>' if state.notify_shop_promo_role_id else 'Not set'}"), inline=False)
+            embed.set_footer(text="Use the buttons below to adjust preferences.")
+            return embed
+        finally: db.close()
 
-        if not state:
-            return discord.Embed(title="🔔 Paramètres de Notifications", description="Impossible de charger la configuration du serveur.", color=discord.Color.red())
-
-        embed = discord.Embed(title="🔔 Paramètres de Notifications", color=discord.Color.green())
-
-        # Rôle de notification général (peut rester pour des alertes par défaut ou globales)
-        notif_role_mention = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Non défini"
-        embed.add_field(name="📍 Rôle de Notification Général", value=notif_role_mention, inline=False)
-
-        # Rôles spécifiques pour chaque type de notification
-        embed.add_field(
-            name="🚨 Rôles d'Alerte Spécifiques",
-            value=(
-                f"📉 Jauges Basses : {f'<@&{state.notify_vital_low_role_id}>' if state.notify_vital_low_role_id else 'Non défini'}\n"
-                f"🚨 Critique : {f'<@&{state.notify_critical_role_id}>' if state.notify_critical_role_id else 'Non défini'}\n"
-                f"🚬 Envies de Fumer : {f'<@&{state.notify_envie_fumer_role_id}>' if state.notify_envie_fumer_role_id else 'Non défini'}\n"
-                f"💬 Messages Amis/Quiz : {f'<@&{state.notify_friend_message_role_id}>' if state.notify_friend_message_role_id else 'Non défini'}\n"
-                f"🛒 Promos Boutique : {f'<@&{state.notify_shop_promo_role_id}>' if state.notify_shop_promo_role_id else 'Non défini'}"
-            ),
-            inline=False
-        )
-        embed.set_footer(text="Utilisez les boutons ci-dessous pour ajuster les préférences.")
-        return embed
-    
     class NotificationRoleSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict, cog: 'AdminCog'):
-            placeholder = f"Sélectionnez le rôle pour les notifications : {select_type.replace('_role_id', '').replace('_', ' ').title()}"
-            placeholder = placeholder[:100] # Tronquer si trop long
-            
-            super().__init__(placeholder=placeholder, options=options[:MAX_OPTIONS_PER_PAGE], custom_id=f"select_notif_role_{select_type}_{guild_id}", row=row)
-            self.guild_id = guild_id
-            self.select_type = select_type # Ex: "notify_vital_low_role_id"
-            self.id_mapping = id_mapping
-            self.cog = cog
-
+            placeholder = f"Select role for: {select_type.replace('_role_id', '').replace('_', ' ').title()}"; super().__init__(placeholder=placeholder[:100], options=options[:MAX_OPTIONS_PER_PAGE], custom_id=f"select_notif_role_{select_type}_{guild_id}", row=row)
+            self.guild_id, self.select_type, self.id_mapping, self.cog = guild_id, select_type, id_mapping, cog
         async def callback(self, interaction: discord.Interaction):
-            if not interaction.guild:
-                await interaction.response.send_message("Erreur: Impossible de trouver le serveur courant.", ephemeral=True)
-                return
-
-            if not self.values or self.values[0] in ["no_items", "error_guild"]:
-                await interaction.response.send_message("Veuillez sélectionner un rôle valide.", ephemeral=True)
-                return
-
-            selected_short_id = self.values[0]
-            selected_role_id = self.id_mapping.get(selected_short_id)
-
-            if not selected_role_id:
-                await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du rôle.", ephemeral=True)
-                return
-
             db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+            try:
+                selected_short_id = self.values[0]
+                if selected_short_id in ["no_items", "error_guild"]: await interaction.response.send_message("Please select a valid role.", ephemeral=True); return
+                selected_role_id = self.id_mapping.get(selected_short_id)
+                if not selected_role_id: await interaction.response.send_message("Error retrieving role ID.", ephemeral=True); return
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if state:
+                    setattr(state, self.select_type, selected_role_id); db.commit(); db.refresh(state)
+                    await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
+                    await interaction.followup.send(f"Notification role for '{self.select_type.replace('_role_id', '').replace('_', ' ').title()}' updated.", ephemeral=True)
+            except Exception as e:
+                logger.error(f"Error saving notification role {self.select_type}: {e}", exc_info=True); db.rollback()
+                await interaction.response.send_message(f"Error saving: {e}", ephemeral=True)
+            finally: db.close()
 
-            if state:
-                # Utiliser setattr pour mettre à jour le bon champ dans ServerState
-                setattr(state, self.select_type, selected_role_id)
-                
-                try:
-                    db.commit()
-                    db.refresh(state)
-
-                    # Rafraîchir la vue complète
-                    await interaction.response.edit_message(
-                        embed=self.cog.generate_notifications_embed(self.guild_id), # Recalculer l'embed
-                        view=self.cog.generate_notifications_view(self.guild_id)     # Recalculer la vue
-                    )
-                    await interaction.followup.send(f"Rôle de notification pour '{self.select_type.replace('_role_id', '').replace('_', ' ').title()}' mis à jour.", ephemeral=True)
-                except Exception as e:
-                    db.rollback()
-                    Logger.error(f"Erreur lors de la sauvegarde du rôle de notification {self.select_type} : {e}")
-                    await interaction.response.send_message(f"Erreur lors de la sauvegarde : {e}", ephemeral=True)
-            else:
-                await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur.", ephemeral=True)
-            
-            db.close()
-
-    # --- LA VUE POUR LES PRÉFÉRENCES DE NOTIFICATIONS ---
     def generate_notifications_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=180)
-
         db = SessionLocal()
-        state = db.query(ServerState).filter_by(guild_id=guild_id).first()
-        db.close()
-
-        if not state:
-            view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=0, cog=self))
-            return view
-
-        # --- Ajout des boutons Toggle avec des lignes correctes ---
-        # IMPORTANT : Les boutons dans une même ligne doivent avoir le même 'row' pour être côte à côte.
-        # Discord limite à 5 composants par ligne.
-
-        # Ligne 0: Jauges Basses (généralement critique, donc danger)
-        view.add_item(self.NotificationToggle("🔴 Jauges Basses", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, cog=self, row=0))
-        # Ligne 1: Événement Critique ET Envie de Fumer (deux boutons sur la même ligne)
-        view.add_item(self.NotificationToggle("🔴 Événement Critique", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, cog=self, row=1))
-        view.add_item(self.NotificationToggle("🚬 Envie de Fumer", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, cog=self, row=1))
-        
-        # Ligne 2: Message Ami/Quiz ET Promo Boutique
-        view.add_item(self.NotificationToggle("💬 Message Ami/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, cog=self, row=2))
-        view.add_item(self.NotificationToggle("💛 Promo Boutique", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.primary, cog=self, row=2))
-        
-        # --- Ajout du SelectMenu pour le rôle de notification général ---
-        # Il faut le placer sur une ligne libre, par exemple row=3
-        guild = discord.utils.get(self.bot.guilds, id=int(guild_id))
-        if guild:
-            all_roles = guild.roles
-            role_options, role_id_mapping = self.create_options_and_mapping(all_roles, "role", guild)
-            
-            general_notif_select = PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, page=0, cog=self)
-            general_notif_select.row = 3 # Placer sur une nouvelle ligne
-            view.add_item(general_notif_select)
-
-            # Si vous avez d'autres sélecteurs de rôle spécifiques, ajoutez-les ici en respectant les lignes.
-            # Par exemple, pour les rôles spécifiques de notification :
-            # vital_low_role_select = NotificationRoleSelect(guild_id, "notify_vital_low_role_id", row=4, options=role_options, id_mapping=role_id_mapping, cog=self)
-            # view.add_item(vital_low_role_select)
-            # etc.
-            
-        else:
-            # Si le guild n'a pas pu être trouvé
-            error_embed = discord.Embed(title="Erreur", description="Impossible de trouver le serveur pour charger les rôles.", color=discord.Color.red())
-            view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=3, cog=self))
-            return view # Retourne la vue avec juste le bouton retour si le guild n'est pas trouvé
-
-
-        # Bouton retour
-        view.add_item(self.BackButton("⬅ Retour", guild_id, discord.ButtonStyle.secondary, row=4, cog=self)) # Placez-le sur une ligne libre après les selectmenus
-
-        return view
-        
-    # Il est crucial que la classe NotificationRoleSelect existe et soit définie correctement
-    # Assurez-vous qu'elle est définie SOIT DANS AdminCog, SOIT IMPORTÉE depuis un autre fichier.
-    # Si elle est dans AdminCog, elle doit être définie AVANT generate_notifications_view.
-    # Si elle n'est pas définie, c'est une autre erreur !
-
-    # Classe pour la sélection des rôles de notification (SIMILAIRE à RoleSelect mais pour les champs de notification)
-    class NotificationRoleSelect(ui.Select): # Doit être définie DANS AdminCog
-        def __init__(self, guild_id: str, select_type: str, row: int, options: list[discord.SelectOption], id_mapping: dict, cog: 'AdminCog'):
-            placeholder = f"Sélectionnez le rôle pour les notifications : {select_type.replace('_role_id', '').replace('_', ' ').title()}"
-            placeholder = placeholder[:100] 
-            
-            super().__init__(placeholder=placeholder, options=options[:MAX_OPTIONS_PER_PAGE], custom_id=f"select_notif_role_{select_type}_{guild_id}", row=row)
-            self.guild_id = guild_id
-            self.select_type = select_type # Ex: "notify_vital_low_role_id"
-            self.id_mapping = id_mapping
-            self.cog = cog
-
-        async def callback(self, interaction: discord.Interaction):
-            selected_short_id = self.values[0]
-            selected_role_id = self.id_mapping.get(selected_short_id)
-
-            if not selected_role_id:
-                await interaction.response.send_message("Erreur: Impossible de récupérer l'ID du rôle.", ephemeral=True)
-                return
-
-            db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-
-            if state:
-                setattr(state, self.select_type, selected_role_id)
-                
-                try:
-                    db.commit()
-                    db.refresh(state)
-
-                    # Rafraîchir la vue complète pour refléter le changement
-                    await interaction.response.edit_message(
-                        embed=self.cog.generate_notifications_embed(self.guild_id), 
-                        view=self.cog.generate_notifications_view(self.guild_id)     
-                    )
-                    await interaction.followup.send(f"Rôle de notification pour '{self.select_type.replace('_role_id', '').replace('_', ' ').title()}' mis à jour.", ephemeral=True)
-                except Exception as e:
-                    db.rollback()
-                    Logger.error(f"Erreur lors de la sauvegarde du rôle de notification {self.select_type} : {e}")
-                    await interaction.response.send_message(f"Erreur lors de la sauvegarde : {e}", ephemeral=True)
-            else:
-                await interaction.response.send_message("Erreur: Impossible de trouver l'état du serveur.", ephemeral=True)
-            
-            db.close()
-
-    # --- La classe NotificationToggle est aussi ici ---
-    class NotificationToggle(ui.Button):
-        def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog', row: int): # <-- AJOUT DE 'row' ICI
-            super().__init__(label=label, style=style, row=row) # <-- Utilisation de 'row'
-            self.toggle_key = toggle_key
-            self.guild_id = guild_id
-            self.cog = cog
-
-        async def callback(self, interaction: discord.Interaction):
-            db = SessionLocal()
-            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-            
+        try:
+            state = db.query(ServerState).filter_by(guild_id=guild_id).first()
             if not state:
-                await interaction.response.send_message("Erreur: État du serveur non trouvé.", ephemeral=True)
-                db.close()
-                return
-            
-            if state.game_started:
-                await interaction.response.send_message("Une partie est en cours. Les préférences de notification sont verrouillées pour le moment.", ephemeral=True)
-                db.close()
-                return
+                view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=0, cog=self)); return view
+            view.add_item(self.NotificationToggle("🔴 Low Vitals", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, self, 0))
+            view.add_item(self.NotificationToggle("🔴 Critical Event", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, self, 1))
+            view.add_item(self.NotificationToggle("🚬 Cravings", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, self, 1))
+            view.add_item(self.NotificationToggle("💬 Friend/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, self, 2))
+            view.add_item(self.NotificationToggle("💛 Shop Promo", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.secondary, self, 2))
+            guild = self.bot.get_guild(int(guild_id))
+            if guild:
+                role_options, role_id_mapping = self.create_options_and_mapping(guild.roles, "role", guild)
+                view.add_item(PaginatedSelect(guild_id, "notification_role", role_options, role_id_mapping, 0, self, row=3))
+            view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=4, cog=self))
+            return view
+        finally: db.close()
 
-            current_value = getattr(state, self.toggle_key)
-            new_value = not current_value
-            setattr(state, self.toggle_key, new_value)
-            db.commit()
-            db.refresh(state)
-
-            # Rafraîchir l'embed et la vue
-            await interaction.response.edit_message(
-                embed=self.cog.generate_notifications_embed(self.guild_id),
-                view=self.cog.generate_notifications_view(self.guild_id)
-            )
-            await interaction.followup.send(f"Notifications pour '{self.toggle_key.replace('_', ' ').title()}' réglées sur {'Activé' if new_value else 'Désactivé'}.", ephemeral=True)
-            db.close()
-class PaginatedSelect(discord.ui.Select):
-        def __init__(self, guild_id: str, select_type: str, options: list[discord.SelectOption], id_mapping: dict, page: int, cog: 'AdminCog'):
-            self.guild_id = guild_id
-            self.select_type = select_type
-            self.id_mapping = id_mapping
-            self.page = page
-            self.cog = cog
-
-            self.items_per_page = 24  # 24 vrais éléments + 1 pour navigation
-            self.total_pages = max(1, math.ceil(len(options) / self.items_per_page))
-            self.all_options = options
-
-            # Construire les options de la page courante
-            start = page * self.items_per_page
-            end = start + self.items_per_page
-            page_options = options[start:end]
-
-            # Ajouter la dernière option de navigation si nécessaire
-            if self.total_pages > 1:
-                if page < self.total_pages - 1:
-                    page_options.append(discord.SelectOption(
-                        label=f"… Suite (Page {page+2}/{self.total_pages})",
-                        value="__next_page__"
-                    ))
-                else:
-                    page_options.append(discord.SelectOption(
-                        label=f"↩ Retour à la première page (1/{self.total_pages})",
-                        value="__first_page__"
-                    ))
-
-            placeholder = f"Sélectionnez {'un rôle' if 'role' in select_type else 'un salon'} (Page {page+1}/{self.total_pages})"
-            super().__init__(placeholder=placeholder, options=page_options, custom_id=f"paginated_{select_type}_{guild_id}_p{page}", row=0)
-
+    class NotificationToggle(ui.Button):
+        def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog', row: int):
+            super().__init__(label=label, style=style, row=row); self.toggle_key = toggle_key; self.guild_id = guild_id; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
-            selected = self.values[0]
-
-            # --- Gestion de la pagination ---
-            if selected in ["__next_page__", "__first_page__"]:
-                self.page = self.page + 1 if selected == "__next_page__" else 0
-
-                # Créer un nouveau Select pour la page suivante
-                new_select = PaginatedSelect(
-                    guild_id=self.guild_id,
-                    select_type=self.select_type,
-                    options=self.all_options,
-                    id_mapping=self.id_mapping,
-                    page=self.page,
-                    cog=self.cog
-                )
-
-                new_view = discord.ui.View(timeout=180)
-                new_view.add_item(new_select)
-
-                # Ajouter le bouton retour
-                back_button = self.cog.BackButton(
-                    "⬅ Retour Paramètres Jeu", self.guild_id, discord.ButtonStyle.secondary, row=1, cog=self.cog
-                )
-                new_view.add_item(back_button)
-
-                await interaction.response.edit_message(view=new_view)
-                return
-
-            # --- Sélection réelle ---
-            selected_item_id = self.id_mapping.get(selected)
-            if not selected_item_id:
-                await interaction.response.send_message("Erreur: élément introuvable.", ephemeral=True)
-                return
-
             db = SessionLocal()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if not state: await interaction.response.send_message("Error: Server state not found.", ephemeral=True); return
+                if state.game_started: await interaction.response.send_message("Cannot change notification settings while a game is in progress.", ephemeral=True); return
+                new_value = not getattr(state, self.toggle_key); setattr(state, self.toggle_key, new_value)
+                db.commit(); db.refresh(state)
+                await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
+                await interaction.followup.send(f"Notifications for '{self.toggle_key.replace('_', ' ').title()}' set to {'Enabled' if new_value else 'Disabled'}.", ephemeral=True)
+            finally: db.close()
+
+class PaginatedSelect(discord.ui.Select):
+    def __init__(self, guild_id: str, select_type: str, options: list[discord.SelectOption], id_mapping: dict, page: int, cog: 'AdminCog', row: int = 0):
+        self.guild_id, self.select_type, self.id_mapping, self.page, self.cog = guild_id, select_type, id_mapping, page, cog
+        self.all_options = options; self.items_per_page = 24; self.total_pages = max(1, math.ceil(len(options) / self.items_per_page))
+        start, end = page * self.items_per_page, (page + 1) * self.items_per_page
+        page_options = options[start:end]
+        if self.total_pages > 1:
+            if page < self.total_pages - 1: page_options.append(discord.SelectOption(label=f"… Next Page ({page+2}/{self.total_pages})", value="__next_page__"))
+            else: page_options.append(discord.SelectOption(label=f"↩ Back to Page 1", value="__first_page__"))
+        placeholder = f"Select a {'role' if 'role' in select_type else 'channel'} (Page {page+1}/{self.total_pages})"
+        super().__init__(placeholder=placeholder, options=page_options, custom_id=f"paginated_{select_type}_{guild_id}_p{page}", row=row)
+    async def callback(self, interaction: discord.Interaction):
+        selected = self.values[0]
+        if selected in ["__next_page__", "__first_page__"]:
+            self.page = self.page + 1 if selected == "__next_page__" else 0
+            # Rebuild the entire parent view to replace the select
+            await interaction.response.edit_message(view=self.cog.generate_general_config_view(self.guild_id, interaction.guild))
+            return
+        db = SessionLocal()
+        try:
+            selected_item_id = self.id_mapping.get(selected)
+            if not selected_item_id: await interaction.response.send_message("Error: item not found.", ephemeral=True); return
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
             if state:
-                if self.select_type == "admin_role":
-                    state.admin_role_id = selected_item_id
-                elif self.select_type == "notification_role":
-                    state.notification_role_id = selected_item_id
-                elif self.select_type == "channel":
-                    state.game_channel_id = selected_item_id
+                if self.select_type == "admin_role": state.admin_role_id = selected_item_id
+                elif self.select_type == "notification_role": state.notification_role_id = selected_item_id
+                elif self.select_type == "channel": state.game_channel_id = selected_item_id
                 db.commit()
-
-            await interaction.response.send_message("✅ Sélection mise à jour.", ephemeral=True)
-            db.close()
+            await interaction.response.edit_message(view=self.cog.generate_general_config_view(self.guild_id, interaction.guild))
+            await interaction.followup.send("✅ Selection updated.", ephemeral=True)
+        finally: db.close()
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
