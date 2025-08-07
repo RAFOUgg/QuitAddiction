@@ -138,6 +138,62 @@ class PaginatedViewManager(ui.View):
         self.update_components()
         await interaction.response.edit_message(view=self)
 
+class StopGameConfirmationModal(ui.Modal, title="Confirm Game Stop"):
+    def __init__(self, guild_id: str, cog: 'AdminCog'):
+        super().__init__()
+        self.guild_id = guild_id
+        self.cog = cog
+
+    # Un champ de texte est requis dans un modal.
+    # On l'utilise pour forcer l'utilisateur à confirmer activement.
+    confirmation_input = ui.TextInput(
+        label='Type "STOP" to confirm',
+        placeholder="This action will end the current game for all players.",
+        style=discord.TextStyle.short,
+        required=True,
+        max_length=4,
+        min_length=4
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Vérifie si l'utilisateur a bien tapé "STOP"
+        if self.confirmation_input.value.upper() != "STOP":
+            await interaction.response.send_message("Confirmation failed. The game was not stopped.", ephemeral=True)
+            return
+        
+        # Si la confirmation est bonne, on procède à l'arrêt du jeu.
+        # On utilise une réponse différée car la mise à jour peut prendre un instant.
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        
+        db = SessionLocal()
+        try:
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+            if not state or not state.game_started:
+                await interaction.followup.send("The game is not currently running or was already stopped.", ephemeral=True)
+                return
+
+            state.game_started = False
+            state.game_start_time = None
+            db.commit()
+            db.refresh(state)
+
+            # Mettre à jour le message de configuration original
+            await interaction.edit_original_response(
+                embed=self.cog.generate_config_menu_embed(state),
+                view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
+            )
+            await interaction.followup.send("✅ The game has been successfully stopped.", ephemeral=True)
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to stop game for guild {self.guild_id} after confirmation: {e}", exc_info=True)
+            await interaction.followup.send("An error occurred while stopping the game.", ephemeral=True)
+        finally:
+            db.close()
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        logger.error(f"Error in StopGameConfirmationModal: {error}", exc_info=True)
+        await interaction.followup.send('Oops! Something went wrong with the confirmation.', ephemeral=True)
 
 class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
@@ -336,6 +392,8 @@ class AdminCog(commands.Cog):
             self.guild_id = guild_id
             self.label = label
             self.cog = cog
+        
+        # MODIFIÉ : La logique est maintenant divisée
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
             try:
@@ -344,23 +402,31 @@ class AdminCog(commands.Cog):
                     await interaction.response.send_message("Server configuration not found.", ephemeral=True)
                     return
 
-                # --- REFACTORED: Start/Stop Game Logic ---
-                if "Start Game" in self.label or "Stop Game" in self.label:
-                    state.game_started = not state.game_started
-                    state.game_start_time = datetime.datetime.utcnow() if state.game_started else None
+                # --- NOUVELLE LOGIQUE ---
+                # Si on clique sur "Stop Game", on ouvre le modal de confirmation
+                if "Stop Game" in self.label:
+                    modal = StopGameConfirmationModal(guild_id=self.guild_id, cog=self.cog)
+                    await interaction.response.send_modal(modal)
+                
+                # Si on clique sur "Start Game", on démarre le jeu directement
+                elif "Start Game" in self.label:
+                    state.game_started = True
+                    state.game_start_time = datetime.datetime.utcnow()
                     db.commit()
-                    db.refresh(state) # Refresh state to get the latest data for the view
+                    db.refresh(state)
                     await interaction.response.edit_message(
                         embed=self.cog.generate_config_menu_embed(state), 
                         view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
                     )
-                    await interaction.followup.send(f"The game has been {'started' if state.game_started else 'stopped'}.", ephemeral=True)
+                    await interaction.followup.send("The game has been started.", ephemeral=True)
                 
+                # Logique pour les autres boutons
                 elif self.label == "📊 View Stats": 
                     await interaction.response.edit_message(embed=self.cog.generate_stats_embed(self.guild_id), view=self.cog.generate_stats_view(self.guild_id))
                 elif self.label == "🔔 Notifications": 
                     await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
-            finally: db.close()
+            finally:
+                db.close()
 
     # --- NOUVELLE LOGIQUE POUR ROLES & CHANNELS ---
     class GeneralConfigButton(ui.Button):
