@@ -16,6 +16,8 @@ from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
+# --- NOUVEL IMPORT NÉCESSAIRE ---
+from cogs.main_embed import MainMenuView 
 
 # --- Setup Logger for this Cog ---
 logger = get_logger(__name__)
@@ -328,7 +330,7 @@ class AdminCog(commands.Cog):
 
     def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(title="⚙️ Bot & Game Configuration", description="Use the buttons below to adjust server settings.", color=discord.Color.blue())
-        embed.add_field(name="▶️ **General Status**", value=f"**Game:** `{'In Progress' if state.game_started else 'Not Started'}`\n**Mode:** `{state.game_mode.capitalize() if state.game_mode else 'Medium (Default)'}`\n**Duration:** `{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Medium (31 days)')}`", inline=False)
+        embed.add_field(name="▶️ **General Status**", value=f"**Game:** `{'In Progress' if state.game_started else 'Not Started'}`\n**Mode:** `{state.game_mode.capitalize() if state.game_mode else 'Medium (Default)'}`\n**Duration:** `{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Medium (31 jours)')}`", inline=False)
         admin_role, notif_role, game_channel = (f"<@&{state.admin_role_id}>" if state.admin_role_id else "Not set"), (f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"), (f"<#{state.game_channel_id}>" if state.game_channel_id else "Not set")
         embed.add_field(name="📍 **Server Config**", value=f"**Admin Role:** {admin_role}\n**Notification Role:** {notif_role}\n**Game Channel:** {game_channel}", inline=False)
         embed.add_field(name="⏱️ **Game Parameters**", value=f"**Tick Interval (min):** `{state.game_tick_interval_minutes or 30}`", inline=False)
@@ -446,8 +448,11 @@ class AdminCog(commands.Cog):
                     db.refresh(state)
 
                     try:
-                        game_embed = main_embed_cog.generate_menu_embed(state)
-                        game_view = main_embed_cog.generate_main_menu(str(self.guild_id))
+                        # ===== DEBUT DE LA CORRECTION =====
+                        game_embed = main_embed_cog.generate_main_embed(state, interaction)
+                        game_view = MainMenuView()
+                        # ===== FIN DE LA CORRECTION =====
+                        
                         game_message = await game_channel.send(embed=game_embed, view=game_view)
                         state.game_message_id = game_message.id
                         db.commit()
