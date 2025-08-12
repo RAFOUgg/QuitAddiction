@@ -442,6 +442,14 @@ class AdminCog(commands.Cog):
                     player = db.query(PlayerProfile).filter_by(guild_id=str(self.guild_id)).first()
                     if not player:
                         player = PlayerProfile(guild_id=str(self.guild_id))
+                        # ===== AJOUT : Initialiser les timestamps pour éviter les erreurs =====
+                        now = datetime.datetime.utcnow()
+                        player.last_eaten_at = now
+                        player.last_drank_at = now
+                        player.last_slept_at = now
+                        player.last_smoked_at = now
+                        player.last_urinated_at = now
+                        # ===== FIN DE L'AJOUT =====
                         db.add(player)
                     
                     state.game_started = True
