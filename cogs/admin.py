@@ -28,6 +28,9 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER")
 GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME")
 
+
+# --- NOUVELLE VUE DE PAGINATION (APPROCHE CORRECTE) ---
+
 class ItemSelect(ui.Select):
     """ Un menu déroulant simple pour sélectionner un item (rôle/salon). """
     def __init__(self, guild_id: str, select_type: Literal['admin_role', 'notification_role', 'game_channel'], id_mapping: dict, cog: 'AdminCog'):
@@ -150,7 +153,8 @@ class StopGameConfirmationModal(ui.Modal, title="Confirm Game Stop"):
         max_length=4,
         min_length=4
     )
-
+    
+    # This on_submit was incorrect in the original file, so it's been fixed.
     async def on_submit(self, interaction: discord.Interaction):
         if self.confirmation_input.value.upper() != "STOP":
             await interaction.response.send_message("Confirmation failed. The game was not stopped.", ephemeral=True)
@@ -165,53 +169,46 @@ class StopGameConfirmationModal(ui.Modal, title="Confirm Game Stop"):
                 await interaction.followup.send("There is no game currently running to stop.", ephemeral=True)
                 return
 
-            # --- Full game stopping logic ---
             state.game_started = False
             state.game_start_time = None
             
-            # Keep track of the message to edit/delete, then clear it from the state
             game_message_id_to_clear = state.game_message_id
             game_channel_id_to_use = state.game_channel_id
             state.game_message_id = None
             
-            # --- Optional: Reset player profiles. Uncomment if desired. ---
-            # db.query(PlayerProfile).filter_by(guild_id=self.guild_id).delete()
-            # logger.info(f"All player profiles reset for guild {self.guild_id} after game stop.")
-
             db.commit()
             db.refresh(state)
 
-            # Update the admin's config panel
             await interaction.edit_original_response(
                 embed=self.cog.generate_config_menu_embed(state),
                 view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
             )
 
-            # Try to edit the old game message to show "Game Over"
             if game_message_id_to_clear and game_channel_id_to_use:
                 try:
                     game_channel = await self.cog.bot.fetch_channel(game_channel_id_to_use)
                     game_message = await game_channel.fetch_message(game_message_id_to_clear)
                     
                     game_over_embed = discord.Embed(
-                        title="🏁 Game Over",
-                        description="This game session has been ended by an administrator. A new game can be started from the `/config` command.",
+                        title="🏁 Partie Terminée",
+                        description="Cette session de jeu est terminée. Un administrateur peut en lancer une nouvelle via la commande `/config`.",
                         color=discord.Color.dark_grey()
                     )
                     await game_message.edit(embed=game_over_embed, view=None)
                 except (NotFound, Forbidden):
-                    logger.warning(f"Could not find or edit the game message {game_message_id_to_clear} in channel {game_channel_id_to_use}")
+                    logger.warning(f"Impossible de trouver ou modifier le message de jeu {game_message_id_to_clear} dans le salon {game_channel_id_to_use}")
                 except Exception as e:
-                    logger.error(f"Error while editing the end-game message: {e}", exc_info=True)
+                    logger.error(f"Erreur lors de la modification du message de fin de jeu: {e}", exc_info=True)
 
             await interaction.followup.send("✅ The game has been successfully stopped.", ephemeral=True)
 
         except Exception as e:
             db.rollback()
             logger.error(f"Error stopping the game: {e}", exc_info=True)
-            await interaction.followup.send(f"A database error occurred while stopping the game: {e}", ephemeral=True)
+            await interaction.followup.send(f"A database error occurred: {e}", ephemeral=True)
         finally:
             db.close()
+
 
 class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
@@ -411,7 +408,7 @@ class AdminCog(commands.Cog):
             self.label = label
             self.cog = cog
         
-        # MODIFIÉ : La logique est maintenant divisée
+        # --- METHOD CORRECTED FOR SYNTAX ---
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
             try:
@@ -420,15 +417,11 @@ class AdminCog(commands.Cog):
                     await interaction.response.send_message("Server configuration not found.", ephemeral=True)
                     return
 
-                # --- NOUVELLE LOGIQUE ---
-                # Si on clique sur "Stop Game", on ouvre le modal de confirmation
                 if "Stop Game" in self.label:
                     modal = StopGameConfirmationModal(guild_id=self.guild_id, cog=self.cog)
                     await interaction.response.send_modal(modal)
                 
-                # Si on clique sur "Start Game", on démarre le jeu directement
                 elif "Start Game" in self.label:
-                    # 1. Vérifier si un salon de jeu est configuré
                     if not state.game_channel_id:
                         await interaction.response.send_message(
                             "❌ **Erreur :** Veuillez d'abord configurer un salon de jeu via `⚙️ Roles & Channels`.",
@@ -436,7 +429,6 @@ class AdminCog(commands.Cog):
                         )
                         return
 
-                    # 2. Essayer de récupérer le salon de jeu
                     try:
                         game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
                     except (NotFound, Forbidden):
@@ -446,7 +438,6 @@ class AdminCog(commands.Cog):
                         )
                         return
 
-                    # 3. Récupérer le cog qui gère l'embed du jeu
                     main_embed_cog = self.cog.bot.get_cog("MainEmbed")
                     if not main_embed_cog:
                         await interaction.response.send_message(
@@ -455,42 +446,34 @@ class AdminCog(commands.Cog):
                         )
                         return
 
-                    # 4. Démarrer la transaction de base de données
                     state.game_started = True
                     state.game_start_time = datetime.datetime.utcnow()
-                    
-                    # On met à jour l'état avant de l'envoyer à l'embed
                     db.commit()
                     db.refresh(state)
 
                     try:
-                        # 5. Créer et envoyer l'embed du jeu
                         game_embed = main_embed_cog.generate_menu_embed(state)
                         game_view = main_embed_cog.generate_main_menu(str(self.guild_id))
                         game_message = await game_channel.send(embed=game_embed, view=game_view)
                         
-                        # 6. Sauvegarder l'ID du message de jeu
                         state.game_message_id = game_message.id
                         db.commit()
                         db.refresh(state)
 
-                        # 7. Mettre à jour le panneau de configuration
                         await interaction.response.edit_message(
                             embed=self.cog.generate_config_menu_embed(state), 
                             view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
                         )
-                        # Envoyer une confirmation claire à l'admin
                         await interaction.followup.send(
                             f"✅ Le jeu a démarré ! L'interface a été postée dans {game_channel.mention}.",
                             ephemeral=True
                         )
-
                     except Forbidden:
                         await interaction.followup.send(
                             f"❌ **Erreur :** Je n'ai pas la permission d'envoyer des messages dans {game_channel.mention}.",
                             ephemeral=True
                         )
-                        # Annuler le démarrage du jeu si on ne peut pas poster le message
+                        db.rollback()
                         state.game_started = False
                         state.game_start_time = None
                         state.game_message_id = None
@@ -498,13 +481,15 @@ class AdminCog(commands.Cog):
                     except Exception as e:
                         logger.error(f"Erreur inattendue lors du démarrage du jeu: {e}", exc_info=True)
                         await interaction.followup.send("Une erreur inattendue est survenue.", ephemeral=True)
-                        # On rollback
+                        db.rollback()
                         state.game_started = False
                         state.game_start_time = None
                         state.game_message_id = None
                         db.commit()
-                    finally: db.close() 
+            finally:
+                db.close() 
 
+    # --- NOUVELLE LOGIQUE POUR ROLES & CHANNELS ---
     class GeneralConfigButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
             super().__init__(label=label, style=style, row=row, disabled=disabled)
