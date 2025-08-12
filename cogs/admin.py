@@ -28,9 +28,6 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO_OWNER = os.getenv("GITHUB_REPO_OWNER")
 GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME")
 
-
-# --- NOUVELLE VUE DE PAGINATION (APPROCHE CORRECTE) ---
-
 class ItemSelect(ui.Select):
     """ Un menu déroulant simple pour sélectionner un item (rôle/salon). """
     def __init__(self, guild_id: str, select_type: Literal['admin_role', 'notification_role', 'game_channel'], id_mapping: dict, cog: 'AdminCog'):
@@ -145,8 +142,6 @@ class StopGameConfirmationModal(ui.Modal, title="Confirm Game Stop"):
         self.guild_id = guild_id
         self.cog = cog
 
-    # Un champ de texte est requis dans un modal.
-    # On l'utilise pour forcer l'utilisateur à confirmer activement.
     confirmation_input = ui.TextInput(
         label='Type "STOP" to confirm',
         placeholder="This action will end the current game for all players.",
@@ -157,61 +152,66 @@ class StopGameConfirmationModal(ui.Modal, title="Confirm Game Stop"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Vérifie si l'utilisateur a bien tapé "STOP"
         if self.confirmation_input.value.upper() != "STOP":
             await interaction.response.send_message("Confirmation failed. The game was not stopped.", ephemeral=True)
             return
-        
-        # Si la confirmation est bonne, on procède à l'arrêt du jeu.
-        # On utilise une réponse différée car la mise à jour peut prendre un instant.
+
         await interaction.response.defer(ephemeral=True, thinking=True)
         
         db = SessionLocal()
-        await interaction.edit_original_response(
-            embed=self.cog.generate_config_menu_embed(state),
-            view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
-        )
+        try:
+            state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+            if not state or not state.game_started:
+                await interaction.followup.send("There is no game currently running to stop.", ephemeral=True)
+                return
 
-        # --- AJOUTEZ CETTE PARTIE ---
-        # Essayer de modifier/supprimer l'ancien message de jeu
-        if state.game_message_id and state.game_channel_id:
-            try:
-                game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
-                game_message = await game_channel.fetch_message(state.game_message_id)
-                
-                # Option 1: Modifier le message pour indiquer la fin
-                game_over_embed = discord.Embed(
-                    title="🏁 Partie Terminée",
-                    description="Cette session de jeu est terminée. Un administrateur peut en lancer une nouvelle via la commande `/config`.",
-                    color=discord.Color.dark_grey()
-                )
-                await game_message.edit(embed=game_over_embed, view=None) # view=None pour supprimer les boutons
-                
-                # Option 2: Supprimer complètement le message
-                # await game_message.delete()
+            # --- Full game stopping logic ---
+            state.game_started = False
+            state.game_start_time = None
+            
+            # Keep track of the message to edit/delete, then clear it from the state
+            game_message_id_to_clear = state.game_message_id
+            game_channel_id_to_use = state.game_channel_id
+            state.game_message_id = None
+            
+            # --- Optional: Reset player profiles. Uncomment if desired. ---
+            # db.query(PlayerProfile).filter_by(guild_id=self.guild_id).delete()
+            # logger.info(f"All player profiles reset for guild {self.guild_id} after game stop.")
 
-            except (NotFound, Forbidden):
-                logger.warning(f"Impossible de trouver ou modifier le message de jeu {state.game_message_id} dans le salon {state.game_channel_id}")
-            except Exception as e:
-                logger.error(f"Erreur lors de la modification du message de fin de jeu: {e}", exc_info=True)
+            db.commit()
+            db.refresh(state)
 
-        # Réinitialiser l'ID du message dans la DB
-        state.game_message_id = None
-        db.commit()
-        # --- FIN DE L'AJOUT ---
+            # Update the admin's config panel
+            await interaction.edit_original_response(
+                embed=self.cog.generate_config_menu_embed(state),
+                view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
+            )
 
-        await interaction.followup.send("✅ The game has been successfully stopped.", ephemeral=True)
+            # Try to edit the old game message to show "Game Over"
+            if game_message_id_to_clear and game_channel_id_to_use:
+                try:
+                    game_channel = await self.cog.bot.fetch_channel(game_channel_id_to_use)
+                    game_message = await game_channel.fetch_message(game_message_id_to_clear)
+                    
+                    game_over_embed = discord.Embed(
+                        title="🏁 Game Over",
+                        description="This game session has been ended by an administrator. A new game can be started from the `/config` command.",
+                        color=discord.Color.dark_grey()
+                    )
+                    await game_message.edit(embed=game_over_embed, view=None)
+                except (NotFound, Forbidden):
+                    logger.warning(f"Could not find or edit the game message {game_message_id_to_clear} in channel {game_channel_id_to_use}")
+                except Exception as e:
+                    logger.error(f"Error while editing the end-game message: {e}", exc_info=True)
+
+            await interaction.followup.send("✅ The game has been successfully stopped.", ephemeral=True)
 
         except Exception as e:
             db.rollback()
-            logger.error(f"Failed to stop game for guild {self.guild_id} after confirmation: {e}", exc_info=True)
-            await interaction.followup.send("An error occurred while stopping the game.", ephemeral=True)
+            logger.error(f"Error stopping the game: {e}", exc_info=True)
+            await interaction.followup.send(f"A database error occurred while stopping the game: {e}", ephemeral=True)
         finally:
             db.close()
-
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        logger.error(f"Error in StopGameConfirmationModal: {error}", exc_info=True)
-        await interaction.followup.send('Oops! Something went wrong with the confirmation.', ephemeral=True)
 
 class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
@@ -505,7 +505,6 @@ class AdminCog(commands.Cog):
                         db.commit()
                     finally: db.close() 
 
-    # --- NOUVELLE LOGIQUE POUR ROLES & CHANNELS ---
     class GeneralConfigButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
             super().__init__(label=label, style=style, row=row, disabled=disabled)

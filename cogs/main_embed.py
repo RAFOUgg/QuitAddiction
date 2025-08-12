@@ -260,7 +260,7 @@ class MainEmbed(commands.Cog):
                 elif self.action == "buy_cigarette":
                     state.water = max(0.0, state.water - 2.0) # Déshydrate un peu
                     state.food = max(0.0, state.food - 1.0) # Diminue la faim (parfois fumer coupe l'appétit)
-                    state.happiness = min(100.0, state.happy + 5.0) # Petit boost de bonheur
+                    state.happy = min(100.0, state.happy + 5.0) # Petit boost de bonheur
                     state.stress = max(0.0, state.stress - 5.0) # Réduit un peu le stress
                     state.tox += 1.0 # Augmente les toxines
                     state.addiction = min(100.0, state.addiction + 0.5) # Crée une petite addiction
