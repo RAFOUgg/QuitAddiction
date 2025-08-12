@@ -18,9 +18,65 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     bar = bar_filled * filled_length + bar_empty * (length - filled_length)
     return f"`{bar}`"
 
+# --- Helper function pour le temps (à mettre dans utils/helpers.py) ---
+def format_time_delta(td: datetime.timedelta) -> str:
+    seconds = int(td.total_seconds())
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    return f"{hours}h"
+
 # ---------------------------------------------------
 # --- SECTION 1: DÉFINITION DES VUES (BOUTONS) ---
 # ---------------------------------------------------
+
+class ActionsView(ui.View):
+    def __init__(self, player: PlayerProfile, server_state: ServerState):
+        super().__init__(timeout=None)
+        now = datetime.datetime.utcnow()
+
+        # --- Bouton Manger ---
+        if player.last_eaten_at:
+            label = f"Manger (il y a {format_time_delta(now - player.last_eaten_at)})"
+        else:
+            label = "Manger"
+        self.add_item(ui.Button(label=label, style=discord.ButtonStyle.success, custom_id="action_eat", emoji="🍽️"))
+
+        # --- Bouton Boire ---
+        if player.last_drank_at:
+            label = f"Boire (il y a {format_time_delta(now - player.last_drank_at)})"
+        else:
+            label = "Boire"
+        self.add_item(ui.Button(label=label, style=discord.ButtonStyle.primary, custom_id="action_drink", emoji="💧"))
+
+        # --- Bouton Dormir ---
+        if player.last_slept_at:
+            label = f"Dormir (il y a {format_time_delta(now - player.last_slept_at)})"
+        else:
+            label = "Dormir"
+        self.add_item(ui.Button(label=label, style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️"))
+
+        # --- Bouton Fumer (prédictif pour le manque) ---
+        time_to_craving = (20 - player.withdrawal_severity) * 5 # estimation en minutes
+        if player.withdrawal_severity > 5:
+            label = f"Fumer (Manque dans ~{int(time_to_craving)}m)"
+            style = discord.ButtonStyle.danger
+        else:
+            label = "Fumer"
+            style = discord.ButtonStyle.secondary
+        self.add_item(ui.Button(label=label, style=style, custom_id="action_smoke", emoji="🚬"))
+        
+        # --- Bouton Uriner ---
+        if player.bladder > 30:
+            label = f"Uriner ({player.bladder:.0f}%)"
+            style = discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple
+            self.add_item(ui.Button(label=label, style=style, custom_id="action_urinate", emoji="🚽", row=1))
+
+        # --- Bouton Retour ---
+        self.add_item(ui.Button(label="⬅️ Retour au menu", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
 
 class MainMenuView(ui.View):
     """La vue principale avec les 3 boutons de navigation."""
@@ -100,28 +156,51 @@ class MainEmbed(commands.Cog):
         return embed
 
     # MODIFICATION: On passe 'guild'
-    def generate_stats_embed(self, player_profile: PlayerProfile, guild: discord.Guild) -> discord.Embed:
-        """Génère l'embed détaillé des statistiques."""
-        embed = self.get_base_embed(player_profile, guild)
+    def generate_stats_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
+        """Génère l'embed détaillé et réorganisé des statistiques."""
+        embed = self.get_base_embed(player, guild)
         embed.description = "Aperçu de l'état de santé physique et mental du cuisinier."
         
-        # Les stats sont maintenant lues depuis le PlayerProfile
-        stats_text = (
-            f"**❤️ Santé:** {generate_progress_bar(player_profile.health)} `({player_profile.health:.0f}%)`\n"
-            f"**🧠 Mental:** {generate_progress_bar(player_profile.sanity)} `({player_profile.sanity:.0f}%)`\n"
-            f"**😊 Humeur:** {generate_progress_bar(player_profile.happiness)} `({player_profile.happiness:.0f}%)`\n"
-            f"**🍔 Faim:** {generate_progress_bar(player_profile.hunger)} `({player_profile.hunger:.0f}%)`\n"
-            f"**💧 Soif:** {generate_progress_bar(player_profile.thirst)} `({player_profile.thirst:.0f}%)`\n"
-            f"**😨 Stress:** {generate_progress_bar(player_profile.stress)} `({player_profile.stress:.0f}%)`\n"
-            f"**☠️ Toxines:** {generate_progress_bar(player_profile.tox)} `({player_profile.tox:.0f}%)`"
+        # --- SECTION 1: SANTÉ PHYSIQUE ---
+        phys_health = (
+            f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`\n"
+            f"**Énergie:** {generate_progress_bar(player.energy)} `{player.energy:.0f}%`\n"
+            f"**Fatigue:** {generate_progress_bar(player.fatigue)} `{player.fatigue:.0f}%`\n"
+            f"**Toxines:** {generate_progress_bar(player.tox)} `{player.tox:.0f}%`"
         )
-        embed.add_field(name="--- Statistiques Vitales ---", value=stats_text, inline=False)
+        embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=True)
+
+        # --- SECTION 2: ÉTAT MENTAL & ÉMOTIONNEL ---
+        mental_health = (
+            f"**Mentale:** {generate_progress_bar(player.sanity)} `{player.sanity:.0f}%`\n"
+            f"**Stress:** {generate_progress_bar(player.stress)} `{player.stress:.0f}%`\n"
+            f"**Humeur:** {generate_progress_bar(player.happiness)} `{player.happiness:.0f}%`\n"
+            f"**Ennui:** {generate_progress_bar(player.boredom)} `{player.boredom:.0f}%`"
+        )
+        embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
         
-        addiction_text = (
-            f"**🚬 Addiction:** {generate_progress_bar(player_profile.substance_addiction_level)} `({player_profile.substance_addiction_level:.1f}%)`\n"
-            f"**💰 Portefeuille:** `{player_profile.wallet} $`"
+        # Saut de ligne pour l'esthétique
+        embed.add_field(name="\u200b", value="\u200b", inline=False) 
+
+        # --- SECTION 3: SYMPTÔMES & MALAISE ---
+        symptoms = (
+            f"**Douleur:** {generate_progress_bar(player.pain)} `{player.pain:.0f}%`\n"
+            f"**Nausée:** {generate_progress_bar(player.nausea)} `{player.nausea:.0f}%`\n"
+            f"**Vertiges:** {generate_progress_bar(player.dizziness)} `{player.dizziness:.0f}%`\n"
+            f"**Mal de Tête:** {generate_progress_bar(player.headache)} `{player.headache:.0f}%`\n"
+            f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat)} `{player.sore_throat:.0f}%`\n"
+            f"**Bouche Sèche:** {generate_progress_bar(player.dry_mouth)} `{player.dry_mouth:.0f}%`"
         )
-        embed.add_field(name="--- État Secondaire ---", value=addiction_text, inline=False)
+        embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
+        
+        # --- SECTION 4: ADDICTION & DÉPENDANCE ---
+        addiction = (
+            f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level)} `{player.substance_addiction_level:.0f}%`\n"
+            f"**Manque:** {generate_progress_bar(player.withdrawal_severity)} `{player.withdrawal_severity:.0f}%`\n"
+            f"**Défonce:** {generate_progress_bar(player.intoxication_level)} `{player.intoxication_level:.0f}%`"
+        )
+        embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
+        
         return embed
 
     # --- Le Listener qui gère TOUS les clics de l'interface principale ---
@@ -155,8 +234,9 @@ class MainEmbed(commands.Cog):
                 embed = self.generate_stats_embed(player, interaction.guild)
                 await interaction.edit_original_response(embed=embed, view=BackView())
             elif custom_id == "nav_actions":
+                server_state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
                 embed = self.generate_main_embed(player, interaction.guild)
-                await interaction.edit_original_response(embed=embed, view=ActionsView())
+                await interaction.edit_original_response(embed=embed, view=ActionsView(player, server_state))
             elif custom_id == "nav_phone":
                 embed = self.get_base_embed(player, interaction.guild)
                 embed.description = "Vous ouvrez votre téléphone."
@@ -173,13 +253,15 @@ class MainEmbed(commands.Cog):
                     message = cooker_brain.perform_sleep(player)
                 elif custom_id == "action_smoke":
                     message = cooker_brain.perform_smoke(player)
+                if custom_id == "action_urinate":
+                    message = cooker_brain.perform_urinate(player)
                 
                 db.commit() # Sauvegarde les changements faits par le CookerBrain
                 db.refresh(player)
                 
-                # On réaffiche l'écran d'action avec l'embed principal mis à jour
+                server_state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
                 new_embed = self.generate_main_embed(player, interaction.guild)
-                await interaction.edit_original_response(embed=new_embed, view=ActionsView())
+                await interaction.edit_original_response(embed=new_embed, view=ActionsView(player, server_state))
                 await interaction.followup.send(f"✅ {message}", ephemeral=True)
 
         except Exception as e:

@@ -82,39 +82,50 @@ class ServerState(Base):
 class PlayerProfile(Base):
     __tablename__ = "player_profile"
     id = Column(Integer, primary_key=True)
+    guild_id = Column(String, nullable=False, index=True, unique=True)
+
+    # === SECTION 1: SANTÉ PHYSIQUE DE BASE ===
+    health = Column(Float, default=100.0)   # Santé générale (0 = mort)
+    energy = Column(Float, default=100.0)    # Énergie physique (0 = épuisé)
+    pain = Column(Float, default=0.0)        # Douleur physique (0-100)
+    tox = Column(Float, default=0.0)         # Niveau de toxines dans le corps (0-100)
+
+    # === SECTION 2: BESOINS IMMÉDIATS (0 = satisfait, 100 = critique) ===
+    hunger = Column(Float, default=0.0)      # Faim
+    thirst = Column(Float, default=0.0)      # Soif
+    bladder = Column(Float, default=0.0)     # Envie d'uriner
+    fatigue = Column(Float, default=0.0)     # Fatigue accumulée (différent de l'énergie)
+
+    # === SECTION 3: ÉTAT MENTAL & ÉMOTIONNEL ===
+    sanity = Column(Float, default=100.0)    # Santé mentale (0 = psychose)
+    stress = Column(Float, default=0.0)      # Stress (0-100)
+    happiness = Column(Float, default=50.0)  # Bonheur général (0-100)
+    boredom = Column(Float, default=0.0)     # Ennui (0-100)
     
-    # Clé composite pour identifier un personnage unique par serveur
-    guild_id = Column(String, nullable=False, index=True)
+    # === SECTION 4: SYMPTÔMES SPÉCIFIQUES (lié à la conso & santé) ===
+    nausea = Column(Float, default=0.0)      # Nausée (0-100)
+    dizziness = Column(Float, default=0.0)   # Vertiges / Perte d'équilibre (0-100)
+    headache = Column(Float, default=0.0)    # Mal de tête (0-100)
+    dry_mouth = Column(Float, default=0.0)   # "Pâteuse" / Bouche sèche (0-100)
+    sore_throat = Column(Float, default=0.0) # Mal de gorge (0-100)
     
-    # --- STATS VITALES & PHYSIQUES ---
-    health = Column(Float, default=100.0)
-    energy = Column(Float, default=100.0)
-    hunger = Column(Float, default=0.0)
-    thirst = Column(Float, default=0.0)
-    bladder = Column(Float, default=0.0)
-    pain = Column(Float, default=0.0)
-    tox = Column(Float, default=0.0)
+    # === SECTION 5: ADDICTION & CONSOMMATION ===
+    substance_addiction_level = Column(Float, default=0.0) # Niveau de dépendance
+    withdrawal_severity = Column(Float, default=0.0)      # Sévérité du manque actuel
+    intoxication_level = Column(Float, default=0.0)       # "Défonce" / Trip actuel
 
-    # --- STATS MENTALES & ÉMOTIONNELLES ---
-    sanity = Column(Float, default=100.0)
-    stress = Column(Float, default=0.0)
-    happiness = Column(Float, default=50.0)
-    boredom = Column(Float, default=0.0)
-
-    # --- ADDICTION & CONSOMMATION ---
-    substance_addiction_level = Column(Float, default=0.0)
-    withdrawal_severity = Column(Float, default=0.0)
-    intoxication_level = Column(Float, default=0.0)
-
-    # --- AUTRES ---
+    # === SECTION 6: AUTRES & MÉTA-DONNÉES ===
     wallet = Column(Integer, default=20)
     last_update = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # --- TIMESTAMPS POUR LA VUE D'ACTIONS ---
+    last_eaten_at = Column(DateTime, nullable=True)
+    last_drank_at = Column(DateTime, nullable=True)
+    last_slept_at = Column(DateTime, nullable=True)
+    last_smoked_at = Column(DateTime, nullable=True)
+    last_urinated_at = Column(DateTime, nullable=True)
 
-    # NOTE : 'user_id' est retiré pour l'instant car le bot gère UN personnage par serveur.
-    # On l'identifiera par le guild_id.
-    __table_args__ = (
-        UniqueConstraint('guild_id', name='uq_guild_player'),
-    )
+    __table_args__ = (UniqueConstraint('guild_id', name='uq_guild_player'),)
 
 # --- Modèle pour l'historique des actions ---
 class ActionLog(Base):

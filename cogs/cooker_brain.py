@@ -1,42 +1,56 @@
-# --- cogs/cooker_brain.py (REFACTORED as the Game Engine) ---
+# --- cogs/cooker_brain.py (UPDATED to handle new variables and timestamps) ---
 from discord.ext import commands
 from db.models import PlayerProfile
-from utils.calculations import clamp
+from utils.helpers import clamp # ou gardez la fonction clamp ici
+import datetime
 
 class CookerBrain(commands.Cog):
-    """
-    Le moteur de jeu. Contient toute la logique pour modifier l'état du personnage.
-    N'interagit pas directement avec Discord, mais est appelé par d'autres cogs.
-    """
     def __init__(self, bot):
         self.bot = bot
 
     def perform_eat(self, player: PlayerProfile) -> str:
-        """Logique pour l'action de manger."""
-        player.hunger = clamp(player.hunger - 40.0, 0, 100)
-        player.happiness = clamp(player.happiness + 5.0, 0, 100)
-        return "Vous avez mangé. Votre faim est apaisée."
+        player.hunger = clamp(player.hunger - 50.0, 0, 100)
+        player.nausea = clamp(player.nausea - 10.0, 0, 100) # Manger peut calmer une légère nausée
+        player.last_eaten_at = datetime.datetime.utcnow()
+        return "Vous avez mangé."
 
     def perform_drink(self, player: PlayerProfile) -> str:
-        """Logique pour l'action de boire."""
-        player.thirst = clamp(player.thirst - 50.0, 0, 100)
-        return "Vous avez bu de l'eau. Vous vous sentez hydraté."
+        player.thirst = clamp(player.thirst - 60.0, 0, 100)
+        player.dry_mouth = clamp(player.dry_mouth - 70.0, 0, 100)
+        player.headache = clamp(player.headache - 15.0, 0, 100)
+        player.last_drank_at = datetime.datetime.utcnow()
+        return "Vous avez bu de l'eau."
 
     def perform_sleep(self, player: PlayerProfile) -> str:
-        """Logique pour l'action de dormir."""
-        player.health = clamp(player.health + 25.0, 0, 100)
-        player.energy = clamp(player.energy + 50.0, 0, 100)
-        player.stress = clamp(player.stress - 20.0, 0, 100)
-        return "Une bonne nuit de sommeil ! Vous vous sentez reposé."
+        # La qualité du sommeil dépend de la douleur
+        sleep_quality = 1.0 - (player.pain / 200.0) # 100 de douleur = 50% de qualité
+        
+        player.energy = clamp(player.energy + 60.0 * sleep_quality, 0, 100)
+        player.fatigue = clamp(player.fatigue - 70.0 * sleep_quality, 0, 100)
+        player.health = clamp(player.health + 15.0 * sleep_quality, 0, 100)
+        player.stress = clamp(player.stress - 30.0 * sleep_quality, 0, 100)
+        player.last_slept_at = datetime.datetime.utcnow()
+        return f"Vous avez dormi (qualité: {sleep_quality:.0%})."
 
     def perform_smoke(self, player: PlayerProfile, smoke_type: str = "leger") -> str:
-        """Logique pour l'action de fumer."""
-        # On pourrait avoir une logique plus complexe ici en fonction du type
-        player.stress = clamp(player.stress - 15.0, 0, 100)
-        player.happiness = clamp(player.happiness + 10.0, 0, 100)
-        player.tox = clamp(player.tox + 5.0, 0, 100)
-        player.substance_addiction_level = clamp(player.substance_addiction_level + 1.5, 0, 100)
-        return "Une cigarette pour décompresser... mais à quel prix ?"
+        player.stress = clamp(player.stress - 25.0, 0, 100)
+        player.happiness = clamp(player.happiness + 15.0, 0, 100)
+        player.withdrawal_severity = 0 # Fumer calme le manque IMMÉDIATEMENT
+        
+        # Effets négatifs
+        player.tox = clamp(player.tox + 8.0, 0, 100)
+        player.dry_mouth = clamp(player.dry_mouth + 40.0, 0, 100)
+        player.sore_throat = clamp(player.sore_throat + 15.0, 0, 100)
+        player.substance_addiction_level = clamp(player.substance_addiction_level + 1.0, 0, 100)
+        player.intoxication_level = clamp(player.intoxication_level + 20.0, 0, 100)
+        player.last_smoked_at = datetime.datetime.utcnow()
+        return "Vous avez fumé une cigarette."
+        
+    def perform_urinate(self, player: PlayerProfile) -> str:
+        player.bladder = 0.0
+        player.pain = clamp(player.pain - 5, 0, 100) # Soulage la douleur liée à la vessie
+        player.last_urinated_at = datetime.datetime.utcnow()
+        return "Ah... ça soulage !"
 
 async def setup(bot):
     await bot.add_cog(CookerBrain(bot))

@@ -81,6 +81,14 @@ class Scheduler(commands.Cog):
                     action_log.append(f"💧 Complètement déshydraté, il a bu une grande quantité d'eau. ({log_entry})")
                     action_taken = True
                 
+                if player.substance_addiction_level > 20:
+                    time_since_last_smoke = (current_time - player.last_smoked_at) if player.last_smoked_at else datetime.timedelta(minutes=999)
+                    # Le manque commence après ~2h sans fumer
+                    if time_since_last_smoke.total_seconds() > 7200:
+                        # Le manque augmente en fonction du niveau d'addiction
+                        player.withdrawal_severity = clamp(player.withdrawal_severity + player.substance_addiction_level * 0.02, 0, 100)
+
+                state_for_calc = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
                 # --- 3. Appliquer les conséquences globales (chain_reactions) ---
                 state_for_calc = { "HEALTH": player.health, "HUNGER": player.hunger, "THIRST": player.thirst, "STRESS": player.stress, "MENT": player.sanity, "HAPPY": player.happiness, "ADDICTION": player.substance_addiction_level, "TOX": player.tox }
                 chain_reactions(state_for_calc)
@@ -93,6 +101,9 @@ class Scheduler(commands.Cog):
                 db.commit() # On sauvegarde l'état du joueur
 
                 # --- 4. Mise à jour de l'interface si quelque chose s'est passé ---
+                for key, value in updated_state.items():
+                    if hasattr(player, key):
+                        setattr(player, key, value)
                 if action_taken:
                     try:
                         guild = await self.bot.fetch_guild(int(server_state.guild_id))
