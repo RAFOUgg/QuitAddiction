@@ -1,40 +1,42 @@
 # --- cogs/phone.py ---
-from discord.ext import commands
 import discord
-from db.database import SessionLocal
-from db.models import ServerState # Importé pour accéder aux données si nécessaire
+from discord.ext import commands
+from discord import ui
+
+# La vue (les boutons) est définie ici pour être importée par main_embed.py
+class PhoneMainView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        # custom_id doit être unique pour que le listener du Cog "Phone" puisse le traiter
+        self.add_item(ui.Button(label="💬 SMS", style=discord.ButtonStyle.green, custom_id="phone_sms"))
+        self.add_item(ui.Button(label="🛍️ Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop"))
+        # Le bouton de retour est géré par le listener principal dans main_embed.py
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu"))
+
 
 class Phone(commands.Cog):
-    """Gestion du téléphone : quiz, messages et missions sociales."""
+    """Gestion des applications du téléphone."""
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
-    async def quiz(self, ctx):
-        """
-        Envoie une question éducative avec boutons pour interagir.
-        """
-        # Récupérer l'état du serveur si nécessaire pour personnaliser la question
-        db = SessionLocal()
-        state = db.query(ServerState).filter_by(guild_id=str(ctx.guild.id)).first()
-        db.close()
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if not interaction.data or "custom_id" not in interaction.data:
+            return
 
-        # Question exemple
-        question = "Quel est le mode de consommation le moins nocif ?"
+        custom_id = interaction.data["custom_id"]
+
+        # Ce listener ne s'occupe que des boutons du téléphone
+        if not custom_id.startswith("phone_"):
+            return
+
+        if custom_id == "phone_sms":
+            # Ici, vous pourriez ouvrir une nouvelle vue ou un modal pour les SMS
+            await interaction.response.send_message("Messagerie en cours de développement.", ephemeral=True)
         
-        # Création des options de réponse
-        options = [
-            discord.SelectOption(label="A) La consommation régulière et modérée", value="regular_moderate"),
-            discord.SelectOption(label="B) L'abstinence totale", value="abstinence"),
-            discord.SelectOption(label="C) La consommation occasionnelle et à faible dose", value="occasional_low_dose"),
-            discord.SelectOption(label="D) Le 'binge drinking' (consommation excessive)", value="binge_drinking")
-        ]
-
-        # Création du message avec la question et un menu déroulant pour les réponses
-        # Note: Pour utiliser des SelectOptions, il faut créer une classe Select personnalisée qui hérite de ui.Select.
-        # Ici, on va rester sur un message simple pour l'instant, car la logique du Select n'est pas implémentée ici.
-        await ctx.send(f"📱 Nouveau message : {question}")
-        # Si vous voulez des boutons, vous devrez créer une classe `discord.ui.Button` et l'ajouter à une vue.
+        elif custom_id == "phone_shop":
+            # Ici, vous pourriez afficher l'embed de la boutique
+            await interaction.response.send_message("La boutique du téléphone arrive bientôt !", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Phone(bot))
