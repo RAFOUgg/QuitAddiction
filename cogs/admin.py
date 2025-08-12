@@ -422,6 +422,13 @@ class AdminCog(commands.Cog):
             await interaction.response.defer()
             db = SessionLocal()
             try:
+                player = db.query(PlayerProfile).filter_by(guild_id=str(self.guild_id)).first()
+                if not player:
+                    player = PlayerProfile(guild_id=str(self.guild_id))
+                    db.add(player)
+                    db.commit()
+                    db.refresh(player)
+
                 state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
                 if not state:
                     await interaction.followup.send("Server configuration not found.", ephemeral=True)
@@ -449,7 +456,7 @@ class AdminCog(commands.Cog):
 
                     try:
                         # ===== DEBUT DE LA CORRECTION =====
-                        game_embed = main_embed_cog.generate_main_embed(state, interaction)
+                        game_embed = main_embed_cog.generate_main_embed(player, interaction.guild)
                         game_view = MainMenuView()
                         # ===== FIN DE LA CORRECTION =====
                         
