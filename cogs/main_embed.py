@@ -1,14 +1,10 @@
-# --- cogs/main_embed.py (CORRECTED to always show the cook) ---
-
 import discord
 from discord.ext import commands
 from discord import ui
 from db.database import SessionLocal
-from db.models import ServerState
 import datetime
-from db.models import ServerState, PlayerProfile
-# --- On importe les vues des autres modules pour les utiliser ici ---
 from .phone import PhoneMainView 
+from db.models import ServerState, PlayerProfile
 
 # --- Helper function for creating progress bars (no changes) ---
 def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 10) -> str:
@@ -142,58 +138,47 @@ class MainEmbed(commands.Cog):
         await interaction.response.defer()
         db = SessionLocal()
         try:
-            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not state:
-                return await interaction.followup.send("Erreur: état du serveur introuvable.", ephemeral=True)
+            # ON RÉCUPÈRE LE PROFIL DU JOUEUR, PAS L'ÉTAT DU SERVEUR
+            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
+            if not player:
+                return await interaction.followup.send("Erreur: Profil du cuisinier introuvable.", ephemeral=True)
 
-            # --- LOGIQUE DE NAVIGATION ---
+            cooker_brain = self.bot.get_cog("CookerBrain")
+            if not cooker_brain:
+                return await interaction.followup.send("Erreur critique: Le moteur de jeu est introuvable.", ephemeral=True)
+
+            # --- LOGIQUE DE NAVIGATION (utilise 'player' et 'interaction.guild') ---
             if custom_id == "nav_main_menu":
-                embed = self.generate_main_embed(state, interaction)
+                embed = self.generate_main_embed(player, interaction.guild)
                 await interaction.edit_original_response(embed=embed, view=MainMenuView())
-            
             elif custom_id == "nav_stats":
-                embed = self.generate_stats_embed(state, interaction)
+                embed = self.generate_stats_embed(player, interaction.guild)
                 await interaction.edit_original_response(embed=embed, view=BackView())
-
             elif custom_id == "nav_actions":
-                embed = self.generate_main_embed(state, interaction)
+                embed = self.generate_main_embed(player, interaction.guild)
                 await interaction.edit_original_response(embed=embed, view=ActionsView())
-            
             elif custom_id == "nav_phone":
-                embed = self.get_base_embed(state, interaction) # Récupère l'embed avec l'image du cuisinier
-                embed.description = "Vous ouvrez votre téléphone." # Change juste la description
-                # On ne change plus l'image principale.
+                embed = self.get_base_embed(player, interaction.guild)
+                embed.description = "Vous ouvrez votre téléphone."
                 await interaction.edit_original_response(embed=embed, view=PhoneMainView())
 
-            # --- LOGIQUE D'ACTION ---
+            # --- LOGIQUE D'ACTION (centralisée) ---
             message = ""
-            action_taken = False
             if custom_id.startswith("action_"):
-                action_taken = True
                 if custom_id == "action_eat":
-                    state.food = max(0.0, state.food - 30.0)
-                    state.happy = min(100.0, state.happy + 5.0)
-                    message = "Vous avez mangé. Votre faim est apaisée."
+                    message = cooker_brain.perform_eat(player)
                 elif custom_id == "action_drink":
-                    state.water = max(0.0, state.water - 40.0)
-                    message = "Vous avez bu. Vous vous sentez hydraté."
+                    message = cooker_brain.perform_drink(player)
                 elif custom_id == "action_sleep":
-                    state.phys = min(100.0, state.phys + 50.0)
-                    state.stress = max(0.0, state.stress - 30.0)
-                    message = "Une bonne nuit de sommeil ! Vous vous sentez reposé."
+                    message = cooker_brain.perform_sleep(player)
                 elif custom_id == "action_smoke":
-                    state.stress = max(0.0, state.stress - 15.0)
-                    state.happy = min(100.0, state.happy + 10.0)
-                    state.tox = min(100.0, state.tox + 5.0)
-                    state.addiction = min(100.0, state.addiction + 2.0)
-                    message = "Une cigarette pour décompresser... mais à quel prix ?"
-
-            # Si une action a été effectuée, on met à jour la BDD et on rafraîchit l'affichage
-            if action_taken:
-                db.commit()
-                db.refresh(state)
+                    message = cooker_brain.perform_smoke(player)
+                
+                db.commit() # Sauvegarde les changements faits par le CookerBrain
+                db.refresh(player)
+                
                 # On réaffiche l'écran d'action avec l'embed principal mis à jour
-                new_embed = self.generate_main_embed(state, interaction)
+                new_embed = self.generate_main_embed(player, interaction.guild)
                 await interaction.edit_original_response(embed=new_embed, view=ActionsView())
                 await interaction.followup.send(f"✅ {message}", ephemeral=True)
 

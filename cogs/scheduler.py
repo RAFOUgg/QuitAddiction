@@ -32,12 +32,12 @@ class Scheduler(commands.Cog):
             self.tick.cancel()
         print("Scheduler tick cancelled.")
 
-    @tasks.loop(minutes=1) 
+    @tasks.loop(minutes=1)
     async def tick(self):
-        # On attend que les cogs soient prêts pour éviter les erreurs au démarrage
         main_embed_cog = self.bot.get_cog("MainEmbed")
-        if not main_embed_cog:
-            return # On attend le prochain tick
+        cooker_brain = self.bot.get_cog("CookerBrain")
+        if not main_embed_cog or not cooker_brain:
+            return
 
         current_time = datetime.datetime.utcnow()
         db = SessionLocal()
@@ -67,20 +67,18 @@ class Scheduler(commands.Cog):
                 action_taken = False
 
                 if player.health < HEALTH_CRITICAL_THRESHOLD and not action_taken:
-                    player.health = self.clamp(player.health + 40, 0, 100)
-                    player.stress = self.clamp(player.stress - 30, 0, 100)
-                    action_log.append("😴 Se sentant extrêmement faible, il s'est effondré pour dormir un peu.")
+                    log_entry = cooker_brain.perform_sleep(player)
+                    action_log.append(f"😴 Se sentant extrêmement faible, il s'est effondré pour dormir. ({log_entry})")
                     action_taken = True
 
                 if player.hunger > HUNGER_CRITICAL_THRESHOLD and not action_taken:
-                    player.hunger = self.clamp(player.hunger - 50, 0, 100)
-                    player.happiness = self.clamp(player.happiness + 5, -100, 100)
-                    action_log.append("🍔 Tourmenté par la faim, il a dévoré le premier truc qu'il a trouvé.")
+                    log_entry = cooker_brain.perform_eat(player)
+                    action_log.append(f"🍔 Tourmenté par la faim, il a dévoré quelque chose. ({log_entry})")
                     action_taken = True
 
                 if player.thirst > THIRST_CRITICAL_THRESHOLD and not action_taken:
-                    player.thirst = self.clamp(player.thirst - 60, 0, 100)
-                    action_log.append("💧 Complètement déshydraté, il a bu une grande quantité d'eau.")
+                    player.thirst = cooker_brain.perform_thirst(player)
+                    action_log.append(f"💧 Complètement déshydraté, il a bu une grande quantité d'eau. ({log_entry})")
                     action_taken = True
                 
                 # --- 3. Appliquer les conséquences globales (chain_reactions) ---
