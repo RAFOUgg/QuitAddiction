@@ -77,7 +77,7 @@ class Scheduler(commands.Cog):
                     action_taken = True
 
                 if player.thirst > THIRST_CRITICAL_THRESHOLD and not action_taken:
-                    player.thirst = cooker_brain.perform_thirst(player)
+                    player.thirst = cooker_brain.perform_drink(player)
                     action_log.append(f"💧 Complètement déshydraté, il a bu une grande quantité d'eau. ({log_entry})")
                     action_taken = True
                 
