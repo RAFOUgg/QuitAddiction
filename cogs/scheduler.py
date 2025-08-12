@@ -1,14 +1,10 @@
-# --- cogs/scheduler.py ---
-
-import discord # Importation nécessaire
+import discord
 from discord.ext import commands, tasks
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import datetime
-import math
-import random # Pour un peu de variété
-
 from utils.calculations import chain_reactions
+from utils.helpers import clamp
 
 # --- Constantes pour les seuils de décision ---
 HEALTH_CRITICAL_THRESHOLD = 20.0  # En dessous de ça, il DOIT dormir
@@ -87,23 +83,19 @@ class Scheduler(commands.Cog):
                     if time_since_last_smoke.total_seconds() > 7200:
                         # Le manque augmente en fonction du niveau d'addiction
                         player.withdrawal_severity = clamp(player.withdrawal_severity + player.substance_addiction_level * 0.02, 0, 100)
+                
+                player.intoxication_level = clamp(player.intoxication_level - 1.5, 0, 100)
+                player.dizziness = clamp(player.dizziness - 2, 0, 100)
 
-                state_for_calc = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
                 # --- 3. Appliquer les conséquences globales (chain_reactions) ---
-                state_for_calc = { "HEALTH": player.health, "HUNGER": player.hunger, "THIRST": player.thirst, "STRESS": player.stress, "MENT": player.sanity, "HAPPY": player.happiness, "ADDICTION": player.substance_addiction_level, "TOX": player.tox }
-                chain_reactions(state_for_calc)
-                # Mettre à jour le joueur avec les résultats
-                player.health = self.clamp(state_for_calc.get("HEALTH", player.health), 0, 100)
-                player.stress = self.clamp(state_for_calc.get("STRESS", player.stress), 0, 100)
-                # ... etc pour les autres stats de chain_reactions
-
-                player.last_update = current_time
-                db.commit() # On sauvegarde l'état du joueur
-
-                # --- 4. Mise à jour de l'interface si quelque chose s'est passé ---
+                state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
+                updated_state = chain_reactions(state_dict)
                 for key, value in updated_state.items():
                     if hasattr(player, key):
                         setattr(player, key, value)
+                
+                player.last_update = current_time
+                db.commit()
                 if action_taken:
                     try:
                         guild = await self.bot.fetch_guild(int(server_state.guild_id))
