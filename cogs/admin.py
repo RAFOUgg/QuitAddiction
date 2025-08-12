@@ -411,37 +411,26 @@ class AdminCog(commands.Cog):
             self.label = label
             self.cog = cog
         
-        # --- METHOD REWRITTEN FOR CLARITY AND TO PREVENT TIMEOUTS ---
         async def callback(self, interaction: discord.Interaction):
             if "Stop Game" in self.label:
                 modal = StopGameConfirmationModal(guild_id=self.guild_id, cog=self.cog)
                 await interaction.response.send_modal(modal)
                 return
 
-            # For actions that might take time, defer first.
             await interaction.response.defer()
             db = SessionLocal()
             try:
-                player = db.query(PlayerProfile).filter_by(guild_id=str(self.guild_id)).first()
-                if not player:
-                    player = PlayerProfile(guild_id=str(self.guild_id))
-                    db.add(player)
-                    db.commit()
-                    db.refresh(player)
-
-                state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
-                if not state:
-                    await interaction.followup.send("Server configuration not found.", ephemeral=True)
-                    return
-                
+                # --- LOGIQUE DE DÉMARRAGE REGROUPÉE ET CORRIGÉE ---
                 if "Start Game" in self.label:
-                    if not state.game_channel_id:
+                    state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
+                    if not state or not state.game_channel_id:
                         await interaction.followup.send("❌ **Erreur :** Veuillez d'abord configurer un salon de jeu via `⚙️ Roles & Channels`.", ephemeral=True)
                         return
+                    
                     try:
                         game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
                     except (NotFound, Forbidden):
-                        await interaction.followup.send("❌ **Erreur :** Le salon de jeu configuré n'a pas été trouvé ou je n'ai pas les permissions pour y accéder.", ephemeral=True)
+                        await interaction.followup.send("❌ **Erreur :** Le salon de jeu configuré est invalide.", ephemeral=True)
                         return
 
                     main_embed_cog = self.cog.bot.get_cog("MainEmbed")
@@ -449,34 +438,30 @@ class AdminCog(commands.Cog):
                         await interaction.followup.send("❌ **Erreur Critique :** Le module de jeu (`MainEmbed`) n'est pas chargé.", ephemeral=True)
                         return
 
+                    # Vérifier/Créer le profil du joueur
+                    player = db.query(PlayerProfile).filter_by(guild_id=str(self.guild_id)).first()
+                    if not player:
+                        player = PlayerProfile(guild_id=str(self.guild_id))
+                        db.add(player)
+                    
                     state.game_started = True
                     state.game_start_time = datetime.datetime.utcnow()
                     db.commit()
+                    db.refresh(player)
                     db.refresh(state)
 
-                    try:
-                        # ===== DEBUT DE LA CORRECTION =====
-                        game_embed = main_embed_cog.generate_main_embed(player, interaction.guild)
-                        game_view = MainMenuView()
-                        # ===== FIN DE LA CORRECTION =====
-                        
-                        game_message = await game_channel.send(embed=game_embed, view=game_view)
-                        state.game_message_id = game_message.id
-                        db.commit()
+                    game_embed = main_embed_cog.generate_main_embed(player, interaction.guild)
+                    game_view = MainMenuView()
+                    game_message = await game_channel.send(embed=game_embed, view=game_view)
+                    
+                    state.game_message_id = game_message.id
+                    db.commit()
 
-                        # Refresh state after all changes before generating final view
-                        db.refresh(state) 
-                        await interaction.edit_original_response(
-                            embed=self.cog.generate_config_menu_embed(state), 
-                            view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
-                        )
-                        await interaction.followup.send(f"✅ Le jeu a démarré ! L'interface a été postée dans {game_channel.mention}.", ephemeral=True)
-                    except Exception as e:
-                        logger.error(f"Erreur inattendue lors du démarrage du jeu: {e}", exc_info=True)
-                        await interaction.followup.send(f"Une erreur inattendue est survenue: {e}", ephemeral=True)
-                        db.rollback() # Rollback the failed start
-                        state.game_started = False; state.game_start_time = None; state.game_message_id = None
-                        db.commit()
+                    await interaction.edit_original_response(
+                        embed=self.cog.generate_config_menu_embed(state), 
+                        view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
+                    )
+                    await interaction.followup.send(f"✅ Le jeu a démarré ! L'interface a été postée dans {game_channel.mention}.", ephemeral=True)
 
                 elif "Notifications" in self.label:
                     await interaction.edit_original_response(
@@ -493,9 +478,10 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 logger.error(f"Error in ConfigButton callback: {e}", exc_info=True)
                 if not interaction.is_expired():
-                    await interaction.followup.send("A critical error occurred.", ephemeral=True)
+                    await interaction.followup.send(f"Une erreur critique est survenue.", ephemeral=True)
+                db.rollback()
             finally:
-                db.close() 
+                db.close()
 
     # --- NOUVELLE LOGIQUE POUR ROLES & CHANNELS ---
     class GeneralConfigButton(ui.Button):
