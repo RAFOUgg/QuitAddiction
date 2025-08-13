@@ -40,17 +40,26 @@ class Scheduler(commands.Cog):
                 player = db.query(PlayerProfile).filter_by(guild_id=server_state.guild_id).first()
                 if not player: continue
 
-                # --- 1. DÉGRADATION & LOGIQUE TEMPORELLE ---
-                if not player.last_update: player.last_update = current_time
-                time_delta_minutes = (current_time - player.last_update).total_seconds() / 60
+                # --- 1. GESTION DE LA MALADIE ---
+                # Le joueur est-il malade ? Si oui, vérifie s'il doit guérir.
+                if player.is_sick and player.sickness_end_time and current_time > player.sickness_end_time:
+                    player.is_sick = False
+                    player.sickness_end_time = None
+                    try:
+                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+                        await channel.send("🎉 **Bonne nouvelle !** Vous vous sentez enfin mieux et n'êtes plus malade.")
+                    except (discord.NotFound, discord.Forbidden): pass
                 
+                # --- 2. DÉGRADATION & LOGIQUE TEMPORELLE ---
+                time_delta_minutes = (current_time - player.last_update).total_seconds() / 60
                 interval = server_state.game_tick_interval_minutes or 30
                 
-                # --- CORRECTION: Ajout de la dégradation de l'ennui (boredom) ---
+                # Map de dégradation incluant la nouvelle hygiène
                 degradation_map = {
                     'hunger': server_state.degradation_rate_hunger, 'thirst': server_state.degradation_rate_thirst,
                     'stress': server_state.degradation_rate_stress, 'bladder': server_state.degradation_rate_bladder,
-                    'boredom': server_state.degradation_rate_boredom
+                    'boredom': server_state.degradation_rate_boredom,
+                    'hygiene': server_state.degradation_rate_hygiene # Ajout
                 }
                 for stat, rate in degradation_map.items():
                     current_val = getattr(player, stat)
@@ -64,7 +73,7 @@ class Scheduler(commands.Cog):
                 player.intoxication_level = clamp(player.intoxication_level - 1.5, 0, 100)
                 player.dizziness = clamp(player.dizziness - 2, 0, 100)
 
-                # --- 2. ACTIONS AUTONOMES (IA AMÉLIORÉE) ---
+                # --- 3. ACTIONS AUTONOMES (IA AMÉLIORÉE) ---
                 action_log_message, action_taken = None, False
                 if player.health < 20 and not action_taken:
                     message, _ = cooker_brain.perform_sleep(player); action_log_message = f"😴 {message}"; action_taken = True
@@ -73,16 +82,26 @@ class Scheduler(commands.Cog):
                 if player.thirst > 90 and (player.water_bottles > 0 or player.beers > 0) and not action_taken:
                     message, _ = cooker_brain.perform_drink(player); action_log_message = f"💧 Déshydraté, il a bu."; action_taken = True
                 
-                # ... (Logique des événements narratifs inchangée) ...
-
-                # --- 3. RÉACTIONS EN CHAÎNE ---
+                # --- 4. RÉACTIONS EN CHAÎNE ---
                 state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
                 updated_state = chain_reactions(state_dict)
                 for key, value in updated_state.items():
                     if hasattr(player, key): setattr(player, key, value)
                 
+                # --- 5. ÉVÉNEMENTS ALÉATOIRES (ex: tomber malade) ---
+                if not player.is_sick:
+                    # Chance de base très faible, augmentée massivement par un système immunitaire bas
+                    sickness_chance = (100 - player.immune_system) / 5000.0 
+                    if random.random() < sickness_chance:
+                        player.is_sick = True
+                        player.sickness_end_time = current_time + datetime.timedelta(days=2) # Malade pour 2 jours
+                        try:
+                            channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+                            await channel.send("🤒 **Aïe...** Vous ne vous sentez pas bien du tout. Vous avez probablement attrapé quelque chose. (Vous êtes malade !)")
+                        except (discord.NotFound, discord.Forbidden): pass
+                
                 player.last_update = current_time
-                db.commit() # Commit principal après toutes les modifications
+                db.commit()
 
                 # --- 4. MISE À JOUR DE L'INTERFACE & LOGGING ---
                 # On met à jour l'UI uniquement s'il y a un changement significatif ou toutes les 5 minutes.
