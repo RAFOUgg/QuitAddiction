@@ -50,12 +50,8 @@ class Phone(commands.Cog):
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            # --- CORRECTION: Il faut aussi récupérer le state ---
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-
-            if not player or not state: 
-                return await interaction.followup.send("Erreur: Profil ou état du serveur introuvable.", ephemeral=True)
-
+            if not player or not state: return
 
             if custom_id == "nav_phone":
                 main_embed_cog = self.bot.get_cog("MainEmbed")
