@@ -214,115 +214,14 @@ class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
     def __init__(self, bot):
         self.bot = bot
-    GAME_MODES = { "peaceful": { "tick_interval_minutes": 60, "rates": { "hunger": 5.0, "thirst": 4.0, "bladder": 5.0, "energy": 3.0, "stress": 1.0, "boredom": 2.0, "addiction_base": 0.05, "toxins_base": 0.1, } }, "medium": { "tick_interval_minutes": 30, "rates": { "hunger": 10.0, "thirst": 8.0, "bladder": 15.0, "energy": 5.0, "stress": 3.0, "boredom": 7.0, "addiction_base": 0.1, "toxins_base": 0.5, } }, "hard": { "tick_interval_minutes": 15, "rates": { "hunger": 20.0, "thirst": 16.0, "bladder": 30.0, "energy": 10.0, "stress": 6.0, "boredom": 14.0, "addiction_base": 0.2, "toxins_base": 1.0, } } }
-    GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, }
+
+    GAME_MODES = { "peaceful": { "tick_interval_minutes": 60, "rates": { "hunger": 5.0, "thirst": 4.0, "bladder": 5.0, "stress": 1.0, } }, "medium": { "tick_interval_minutes": 30, "rates": { "hunger": 10.0, "thirst": 8.0, "bladder": 15.0, "stress": 3.0, } }, "hard": { "tick_interval_minutes": 15, "rates": { "hunger": 20.0, "thirst": 16.0, "bladder": 30.0, "stress": 6.0, } } }
+    GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, "test_day": {"label": "Test Day [INSTANT START]"} }
+    
     MAX_OPTION_LENGTH = 100
     MIN_OPTION_LENGTH = 1
-
-    # --- COMMANDS ---
-
-
-    TEST_DURATION_MINUTES = 20  # Durée de la journée de test
+    TEST_DURATION_MINUTES = 20
     TEST_RATE_MULTIPLIER = 60
-    @app_commands.command(name="test_day", description="[STAFF] Lance une journée de test accélérée de 20 minutes.")
-    @app_commands.default_permissions(administrator=True)
-    async def test_day(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
-        db = SessionLocal()
-        try:
-            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not state or not state.game_channel_id:
-                return await interaction.followup.send("❌ Erreur : Le salon de jeu doit être configuré avant de lancer un test.", ephemeral=True)
-            
-            if state.game_started:
-                return await interaction.followup.send("❌ Erreur : Une partie est déjà en cours. Arrêtez-la avec `/config` avant de lancer un test.", ephemeral=True)
-
-            main_embed_cog = self.bot.get_cog("MainEmbed")
-            if not main_embed_cog:
-                return await interaction.followup.send("❌ Erreur Critique : Le module de jeu (`MainEmbed`) n'est pas chargé.", ephemeral=True)
-
-            # --- Préparation de la journée de test ---
-            await interaction.followup.send(f"🚀 Lancement d'une journée de test de {self.TEST_DURATION_MINUTES} minutes. Les taux sont multipliés par {self.TEST_RATE_MULTIPLIER}.", ephemeral=True)
-            
-            # Sauvegarder les anciens taux pour les restaurer plus tard
-            original_rates = {
-                "hunger": state.degradation_rate_hunger,
-                "thirst": state.degradation_rate_thirst,
-                "bladder": state.degradation_rate_bladder,
-                "energy": state.degradation_rate_energy,
-                "stress": state.degradation_rate_stress,
-                "boredom": state.degradation_rate_boredom,
-            }
-
-            # Appliquer les taux accélérés
-            state.degradation_rate_hunger *= self.TEST_RATE_MULTIPLIER
-            state.degradation_rate_thirst *= self.TEST_RATE_MULTIPLIER
-            state.degradation_rate_bladder *= self.TEST_RATE_MULTIPLIER
-            state.degradation_rate_energy *= self.TEST_RATE_MULTIPLIER
-            state.degradation_rate_stress *= self.TEST_RATE_MULTIPLIER
-            state.degradation_rate_boredom *= self.TEST_RATE_MULTIPLIER
-
-            # Créer/Réinitialiser le joueur pour le test
-            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            if player:
-                db.delete(player)
-                db.commit()
-            
-            now = datetime.datetime.utcnow()
-            player = PlayerProfile(guild_id=str(interaction.guild.id), last_eaten_at=now, last_drank_at=now, last_slept_at=now, last_smoked_at=now, last_urinated_at=now)
-            db.add(player)
-
-            # Démarrer la partie en mode test
-            state.game_started = True
-            state.game_start_time = now
-            db.commit()
-            db.refresh(player)
-            db.refresh(state)
-
-            # Envoyer l'interface de jeu
-            game_channel = await self.bot.fetch_channel(state.game_channel_id)
-            game_embed = main_embed_cog.generate_dashboard_embed(player, interaction.guild)
-            game_view = MainMenuView()
-            game_message = await game_channel.send(content="**--- DÉBUT DE LA JOURNÉE DE TEST ACCÉLÉRÉE ---**", embed=game_embed, view=game_view)
-            state.game_message_id = game_message.id
-            db.commit()
-
-        except Exception as e:
-            logger.error(f"Erreur dans /test_day: {e}", exc_info=True)
-            await interaction.followup.send("Une erreur est survenue lors du lancement du test.", ephemeral=True)
-            db.rollback()
-            return
-        finally:
-            db.close()
-
-        # --- Tâche de fond pour arrêter le test automatiquement ---
-        await asyncio.sleep(self.TEST_DURATION_MINUTES * 60)
-
-        db = SessionLocal()
-        try:
-            logger.info(f"Fin de la journée de test pour le serveur {interaction.guild.id}.")
-            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-            if state:
-                state.game_started = False
-                state.game_message_id = None
-                # Restaurer les taux de dégradation normaux
-                state.degradation_rate_hunger = original_rates["hunger"]
-                state.degradation_rate_thirst = original_rates["thirst"]
-                state.degradation_rate_bladder = original_rates["bladder"]
-                state.degradation_rate_energy = original_rates["energy"]
-                state.degradation_rate_stress = original_rates["stress"]
-                state.degradation_rate_boredom = original_rates["boredom"]
-                db.commit()
-
-                try:
-                    end_embed = discord.Embed(title="🏁 Journée de Test Terminée", description="Les paramètres de jeu ont été restaurés à la normale.", color=discord.Color.gold())
-                    await game_message.edit(content="**--- FIN DE LA JOURNÉE DE TEST ---**", embed=end_embed, view=None)
-                except discord.NotFound:
-                    pass # Le message a peut-être été supprimé
-
-        finally:
-            db.close()
 
     @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
     @app_commands.default_permissions(administrator=True)
@@ -476,17 +375,86 @@ class AdminCog(commands.Cog):
 
     class GameDurationSelect(ui.Select):
         def __init__(self, guild_id: str, select_type: str, row: int, cog: 'AdminCog'):
-            options = [discord.SelectOption(label=data["label"], value=key) for key, data in AdminCog.GAME_DURATIONS.items()]
-            super().__init__(placeholder="Choose the game duration...", options=options, custom_id=f"select_gameduration_{guild_id}", row=row); self.guild_id = guild_id; self.cog = cog
+            options = [discord.SelectOption(label=data["label"], value=key) for key, data in cog.GAME_DURATIONS.items()]
+            super().__init__(placeholder="Choose the game duration...", options=options, custom_id=f"select_gameduration_{guild_id}", row=row)
+            self.guild_id = guild_id
+            self.cog = cog
+
         async def callback(self, interaction: discord.Interaction):
+            await interaction.response.defer(ephemeral=True) # Defer pour les opérations longues
+            selected_key = self.values[0]
             db = SessionLocal()
             try:
-                selected_key = self.values[0]; state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-                if state and (duration_data := self.cog.GAME_DURATIONS.get(selected_key)):
-                    state.duration_key = selected_key; db.commit()
-                    embed = self.cog.generate_setup_game_mode_embed(); embed.description = f"✅ Game duration set to **{duration_data['label']}**.\n{embed.description}"
-                    await interaction.response.edit_message(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
-            finally: db.close()
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if not state or not (duration_data := self.cog.GAME_DURATIONS.get(selected_key)):
+                    await interaction.followup.send("Error processing selection.", ephemeral=True)
+                    return
+
+                state.duration_key = selected_key
+                db.commit()
+
+                # --- MODIFICATION: Logique de démarrage instantané pour le mode test ---
+                if selected_key == "test_day":
+                    await self.start_test_game(interaction, state, db)
+                else:
+                    embed = self.cog.generate_setup_game_mode_embed()
+                    embed.description = f"✅ Game duration set to **{duration_data['label']}**.\n{embed.description}"
+                    await interaction.edit_original_response(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
+
+            except Exception as e:
+                logger.error(f"Error in GameDurationSelect callback: {e}", exc_info=True)
+                await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
+            finally:
+                db.close()
+
+        async def start_test_game(self, interaction: discord.Interaction, state: ServerState, db: SessionLocal):
+            """Logique pour démarrer une partie de test."""
+            if not state.game_channel_id:
+                return await interaction.followup.send("❌ **Erreur :** Configurez un salon de jeu avant de lancer un test.", ephemeral=True)
+            if state.game_started:
+                return await interaction.followup.send("❌ **Erreur :** Une partie est déjà en cours.", ephemeral=True)
+
+            main_embed_cog = self.cog.bot.get_cog("MainEmbed")
+            if not main_embed_cog:
+                return await interaction.followup.send("❌ Erreur Critique : Module `MainEmbed` non chargé.", ephemeral=True)
+
+            # Appliquer les paramètres de test
+            state.is_test_mode = True
+            mode_data = self.cog.GAME_MODES["hard"] # Le mode test utilise les taux "hard" comme base
+            state.degradation_rate_hunger = mode_data["rates"]["hunger"] * self.cog.TEST_RATE_MULTIPLIER
+            state.degradation_rate_thirst = mode_data["rates"]["thirst"] * self.cog.TEST_RATE_MULTIPLIER
+            state.degradation_rate_bladder = mode_data["rates"]["bladder"] * self.cog.TEST_RATE_MULTIPLIER
+            state.degradation_rate_stress = mode_data["rates"]["stress"] * self.cog.TEST_RATE_MULTIPLIER
+            state.game_tick_interval_minutes = 1 # Tick chaque minute pour le test
+
+            # Créer/Réinitialiser le joueur
+            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
+            if player:
+                db.delete(player)
+                db.commit()
+            
+            now = datetime.datetime.utcnow()
+            player = PlayerProfile(guild_id=str(interaction.guild.id), last_update=now, last_eaten_at=now, last_drank_at=now, last_slept_at=now, last_smoked_at=now, last_urinated_at=now, recent_logs="--- Test Session Started ---\n")
+            db.add(player)
+            
+            # Démarrer la partie
+            state.game_started = True
+            state.game_start_time = now
+            db.commit()
+            db.refresh(player)
+            db.refresh(state)
+
+            # Envoyer l'interface
+            game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
+            game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
+            game_message = await game_channel.send(content="**--- DÉBUT DE LA JOURNÉE DE TEST ACCÉLÉRÉE ---**", embed=game_embed, view=MainMenuView())
+            state.game_message_id = game_message.id
+            db.commit()
+
+            # Confirmer à l'admin
+            await interaction.followup.send(f"✅ La partie de test a démarré dans {game_channel.mention} !", ephemeral=True)
+            # Mettre à jour le panneau de config pour qu'il se ferme
+            await interaction.edit_original_response(embed=self.cog.generate_config_menu_embed(state), view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state))
 
     class BackButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0, cog: 'AdminCog'=None):
