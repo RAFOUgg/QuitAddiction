@@ -218,7 +218,10 @@ class AdminCog(commands.Cog):
     GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, }
     MAX_OPTION_LENGTH = 100
     MIN_OPTION_LENGTH = 1
+
     # --- COMMANDS ---
+
+
     TEST_DURATION_MINUTES = 20  # Durée de la journée de test
     TEST_RATE_MULTIPLIER = 60
     @app_commands.command(name="test_day", description="[STAFF] Lance une journée de test accélérée de 20 minutes.")
@@ -321,20 +324,6 @@ class AdminCog(commands.Cog):
         finally:
             db.close()
 
-    @app_commands.command(name="clear_global_commands", description="[STAFF] Nettoie toutes les commandes globales enregistrées.")
-    @app_commands.default_permissions(administrator=True)
-    async def clear_global_commands(self, interaction: discord.Interaction):
-        """
-        Commande utilitaire à n'utiliser qu'une seule fois pour nettoyer les vieilles commandes.
-        """
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        
-        self.bot.tree.clear_commands(guild=None) # On vide les commandes globales
-        await self.bot.tree.sync(guild=None)
-        
-        await interaction.followup.send("✅ Les commandes globales ont été effacées. "
-                                        "Les duplicatas devraient disparaître après un redémarrage du bot et de votre client Discord.", ephemeral=True)
-        
     @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
     @app_commands.default_permissions(administrator=True)
     async def config(self, interaction: discord.Interaction):
