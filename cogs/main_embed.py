@@ -158,14 +158,15 @@ class MainEmbed(commands.Cog):
             
             # --- LOGIQUE D'ACTION ---
             elif custom_id.startswith("action_"):
-                if player.last_action_at and (datetime.datetime.utcnow() - player.last_action_at).total_seconds() < 10:
-                    return await interaction.followup.send("Vous agissez trop vite ! Attendez un peu.", ephemeral=True)
-                player.last_action_at = datetime.datetime.utcnow()
                 cooker_brain = self.bot.get_cog("CookerBrain")
                 if not cooker_brain: return await interaction.followup.send("Erreur: Moteur de jeu non trouvé.", ephemeral=True)
                 
-                message = ""
+                if player.last_action_at and (datetime.datetime.utcnow() - player.last_action_at).total_seconds() < 10:
+                    return await interaction.followup.send("Vous agissez trop vite ! Attendez un peu.", ephemeral=True)
                 
+                player.last_action_at = datetime.datetime.utcnow()
+                message = ""
+
                 # --- CAS SPÉCIAL POUR L'ACTION DE FUMER ---
                 if custom_id == "action_smoke":
                     message = cooker_brain.perform_smoke(player)
@@ -183,22 +184,41 @@ class MainEmbed(commands.Cog):
                     final_embed = self.generate_main_embed(player, interaction.guild)
                     await interaction.edit_original_response(embed=final_embed, view=ActionsView(player))
 
-                # --- NOUVEAU CAS SPÉCIAL POUR L'ACTION DE BOIRE ---
+                # --- CAS SPÉCIAL POUR L'ACTION DE BOIRE ---
                 elif custom_id == "action_drink":
                     message = cooker_brain.perform_drink(player)
                     db.commit(); db.refresh(player)
                     asset_cog = self.bot.get_cog("AssetManager")
-                    
-                    # Choisir l'image de boisson en fonction de l'état du joueur
                     is_sad = player.stress > 70 or player.hunger > 70 or player.health < 40
                     drink_image_name = "sad_drinking" if is_sad else "neutral_drinking"
                     drinking_image_url = asset_cog.get_url(drink_image_name) if asset_cog else None
-
                     if drinking_image_url:
                         drinking_embed = self.get_base_embed(player, interaction.guild)
                         drinking_embed.set_image(url=drinking_image_url)
                         drinking_embed.description = "Il s'hydrate..."
                         await interaction.edit_original_response(embed=drinking_embed, view=ActionsView(player))
+                    await interaction.followup.send(f"✅ {message}", ephemeral=True)
+                    await asyncio.sleep(5)
+                    db.refresh(player)
+                    final_embed = self.generate_main_embed(player, interaction.guild)
+                    await interaction.edit_original_response(embed=final_embed, view=ActionsView(player))
+
+                # --- NOUVEAU CAS SPÉCIAL POUR L'ACTION DE MANGER ---
+                elif custom_id == "action_eat":
+                    message = cooker_brain.perform_eat(player)
+                    db.commit(); db.refresh(player)
+                    asset_cog = self.bot.get_cog("AssetManager")
+                    is_sad = player.stress > 70 or player.health < 40 # Manger quand on a faim n'est pas triste
+                    
+                    # On cherche d'abord l'image "triste en train de manger" si elle existe
+                    eat_image_name = "sad_eating" if is_sad and asset_cog.get_url("sad_eating") else "neutral_eating"
+                    eating_image_url = asset_cog.get_url(eat_image_name) if asset_cog else None
+
+                    if eating_image_url:
+                        eating_embed = self.get_base_embed(player, interaction.guild)
+                        eating_embed.set_image(url=eating_image_url)
+                        eating_embed.description = "Il mange un morceau..."
+                        await interaction.edit_original_response(embed=eating_embed, view=ActionsView(player))
                     
                     await interaction.followup.send(f"✅ {message}", ephemeral=True)
                     await asyncio.sleep(5)
@@ -206,10 +226,9 @@ class MainEmbed(commands.Cog):
                     final_embed = self.generate_main_embed(player, interaction.guild)
                     await interaction.edit_original_response(embed=final_embed, view=ActionsView(player))
 
-                # --- CAS GÉNÉRAL POUR LES AUTRES ACTIONS ---
+                # --- CAS GÉNÉRAL POUR LES AUTRES ACTIONS SANS ANIMATION ---
                 else:
-                    if custom_id == "action_eat": message = cooker_brain.perform_eat(player)
-                    elif custom_id == "action_sleep": message = cooker_brain.perform_sleep(player)
+                    if custom_id == "action_sleep": message = cooker_brain.perform_sleep(player)
                     elif custom_id == "action_urinate": message = cooker_brain.perform_urinate(player)
                     
                     if message:
@@ -219,7 +238,7 @@ class MainEmbed(commands.Cog):
                         await interaction.followup.send(f"✅ {message}", ephemeral=True)
 
         except Exception as e:
-            print(f"Erreur dans le listener d'interaction: {e}")
+            print(f"Erreur dans le listener d'interaction: {e}", exc_info=True) # Ajout de exc_info
             await interaction.followup.send("Une erreur est survenue.", ephemeral=True)
             db.rollback()
         finally:
