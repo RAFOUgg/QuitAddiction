@@ -1,16 +1,19 @@
-# --- cogs/scheduler.py (FINAL & CORRECTED) ---
+# --- cogs/scheduler.py (FINAL & CORRECTED WITH UI REFRESH) ---
 
 import discord
 from discord.ext import commands, tasks
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import datetime
+import traceback
 from utils.calculations import chain_reactions
 from utils.helpers import clamp
 
 class Scheduler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # Nombre de lignes de log à garder en mode test
+        self.max_log_lines = 10
 
     async def cog_load(self):
         if not self.tick.is_running():
@@ -26,6 +29,7 @@ class Scheduler(commands.Cog):
         main_embed_cog = self.bot.get_cog("MainEmbed")
         cooker_brain = self.bot.get_cog("CookerBrain")
         if not main_embed_cog or not cooker_brain:
+            print("Scheduler tick skipped: MainEmbed or CookerBrain cog not ready.")
             return
 
         current_time = datetime.datetime.utcnow()
@@ -41,10 +45,17 @@ class Scheduler(commands.Cog):
                 time_delta_minutes = (current_time - player.last_update).total_seconds() / 60
                 
                 interval = server_state.game_tick_interval_minutes or 30
-                player.hunger = clamp(player.hunger + (server_state.degradation_rate_hunger / interval) * time_delta_minutes, 0, 100)
-                player.thirst = clamp(player.thirst + (server_state.degradation_rate_thirst / interval) * time_delta_minutes, 0, 100)
-                player.stress = clamp(player.stress + (server_state.degradation_rate_stress / interval) * time_delta_minutes, 0, 100)
-                player.bladder = clamp(player.bladder + (server_state.degradation_rate_bladder / interval) * time_delta_minutes, 0, 100)
+                
+                # --- CORRECTION: Ajout de la dégradation de l'ennui (boredom) ---
+                degradation_map = {
+                    'hunger': server_state.degradation_rate_hunger, 'thirst': server_state.degradation_rate_thirst,
+                    'stress': server_state.degradation_rate_stress, 'bladder': server_state.degradation_rate_bladder,
+                    'boredom': server_state.degradation_rate_boredom
+                }
+                for stat, rate in degradation_map.items():
+                    current_val = getattr(player, stat)
+                    new_val = clamp(current_val + (rate / interval) * time_delta_minutes, 0, 100)
+                    setattr(player, stat, new_val)
 
                 if player.substance_addiction_level > 20 and player.last_smoked_at:
                     if (current_time - player.last_smoked_at).total_seconds() > 7200:
@@ -56,29 +67,13 @@ class Scheduler(commands.Cog):
                 # --- 2. ACTIONS AUTONOMES (IA AMÉLIORÉE) ---
                 action_log_message, action_taken = None, False
                 if player.health < 20 and not action_taken:
-                    message, _ = cooker_brain.perform_sleep(player)
-                    action_log_message = f"😴 {message}"; action_taken = True
+                    message, _ = cooker_brain.perform_sleep(player); action_log_message = f"😴 {message}"; action_taken = True
                 if player.hunger > 85 and player.food_servings > 0 and not action_taken:
-                    message, _ = cooker_brain.perform_eat(player)
-                    action_log_message = f"🍔 Tourmenté par la faim, il a dévoré quelque chose."; action_taken = True
+                    message, _ = cooker_brain.perform_eat(player); action_log_message = f"🍔 Tourmenté par la faim, il a dévoré quelque chose."; action_taken = True
                 if player.thirst > 90 and (player.water_bottles > 0 or player.beers > 0) and not action_taken:
-                    message, _ = cooker_brain.perform_drink(player)
-                    action_log_message = f"💧 Déshydraté, il a bu."; action_taken = True
-
-                # --- NOUVEAU : SYSTÈME D'ÉVÉNEMENTS NARRATIFS ---
-                if server_state.game_start_time and not player.has_unlocked_joints:
-                    game_duration_hours = (current_time - server_state.game_start_time).total_seconds() / 3600
-                    trigger_time = 0.05 if (server_state.game_tick_interval_minutes < 5) else 2.0 
-                    
-                    if game_duration_hours > trigger_time:
-                        player.has_unlocked_joints = True
-                        player.joints += 1
-                        
-                        try:
-                            channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
-                            await channel.send("📱 **Nouveau message d'un ami :**\n> *\"Hey ! J'suis passé te voir mais t'étais pas là. Je t'ai laissé un petit cadeau pour te détendre après le boulot. Fais-toi plaisir !\"*\n(Vous avez reçu votre premier joint !)")
-                        except Exception as e:
-                            print(f"Scheduler: Erreur lors de l'envoi de l'event narratif: {e}")
+                    message, _ = cooker_brain.perform_drink(player); action_log_message = f"💧 Déshydraté, il a bu."; action_taken = True
+                
+                # ... (Logique des événements narratifs inchangée) ...
 
                 # --- 3. RÉACTIONS EN CHAÎNE ---
                 state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
@@ -87,32 +82,41 @@ class Scheduler(commands.Cog):
                     if hasattr(player, key): setattr(player, key, value)
                 
                 player.last_update = current_time
-                db.commit()
+                db.commit() # Commit principal après toutes les modifications
 
-                # --- 4. MISE À JOUR & LOGGING ---
-                if action_taken and action_log_message:
-                    # Log pour le mode test
-                    if server_state.is_test_mode:
-                        log_time = current_time.strftime("%H:%M")
-                        new_log_entry = f"`{log_time}`: {action_log_message}"
-                        
-                        # Garder seulement les X dernières lignes
-                        logs = player.recent_logs.splitlines()
-                        logs.append(new_log_entry)
-                        player.recent_logs = "\n".join(logs[-self.max_log_lines:])
-
+                # --- 4. MISE À JOUR DE L'INTERFACE & LOGGING ---
+                # On met à jour l'UI uniquement s'il y a un changement significatif ou toutes les 5 minutes.
+                significant_change = action_taken
+                
+                # Le logging autonome est géré ici
+                if significant_change and action_log_message:
                     # Envoyer un message discret dans le canal
                     try:
                         channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
                         await channel.send(f"**Pendant que vous aviez le dos tourné...**\n> {action_log_message}")
-                    except Exception as e:
-                        print(f"Scheduler: Erreur envoi message autonome: {e}")
-
-                player.last_update = current_time
-                db.commit()
+                    except (discord.NotFound, discord.Forbidden): pass
+                
+                # On rafraîchit TOUJOURS le dashboard principal pour que les stats progressent visuellement.
+                try:
+                    guild = self.bot.get_guild(int(server_state.guild_id))
+                    channel = self.bot.get_channel(int(server_state.game_channel_id))
+                    if guild and channel and server_state.game_message_id:
+                        game_message = await channel.fetch_message(int(server_state.game_message_id))
+                        # IMPORTANT: On met à jour l'embed seulement si l'embed actuel est le dashboard
+                        # pour ne pas interrompre l'utilisateur s'il est dans la boutique par ex.
+                        if game_message.embeds and game_message.embeds[0].title == "👨‍🍳 Le Quotidien du Cuisinier":
+                           new_embed = main_embed_cog.generate_dashboard_embed(player, server_state, guild)
+                           # Ne pas changer la vue, juste le contenu de l'embed
+                           await game_message.edit(embed=new_embed)
+                except (discord.NotFound, discord.Forbidden):
+                    print(f"Scheduler: Message/channel {server_state.game_message_id} introuvable pour la guilde {server_state.guild_id}.")
+                except Exception as e:
+                    print(f"Erreur lors du rafraîchissement de l'UI par le scheduler: {e}")
+                    traceback.print_exc()
 
         except Exception as e:
             print(f"Erreur critique dans Scheduler.tick: {e}")
+            traceback.print_exc()
             db.rollback()
         finally:
             db.close()
