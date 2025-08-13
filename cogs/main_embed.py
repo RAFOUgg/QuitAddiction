@@ -43,7 +43,7 @@ class ActionsView(ui.View):
         now = datetime.datetime.utcnow()
         # Cooldown: 10 seconds between actions
         cooldown_active = player.last_action_at and (now - player.last_action_at).total_seconds() < 10
-
+        self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.secondary, custom_id="action_shower", emoji="🚿", disabled=(player.hygiene > 95 or cooldown_active)))
         self.add_item(ui.Button(label=f"Manger (x{player.food_servings})", style=discord.ButtonStyle.success, custom_id="action_eat", emoji="🍽️", disabled=(player.food_servings <= 0 or cooldown_active)))
         self.add_item(ui.Button(label=f"Boire (x{player.water_bottles + player.beers})", style=discord.ButtonStyle.primary, custom_id="action_drink", emoji="💧", disabled=((player.water_bottles + player.beers) <= 0 or cooldown_active)))
         self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", disabled=(cooldown_active)))
@@ -97,10 +97,28 @@ class MainEmbed(commands.Cog):
 
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
-        # --- Section Test-Mode (si active) ---
         if state and state.is_test_mode and state.game_start_time:
-            # ... (logique de monitoring du mode test, inchangée)
-            pass
+            admin_cog = self.bot.get_cog("AdminCog")
+            if admin_cog:
+                now = datetime.datetime.utcnow()
+                elapsed_time = now - state.game_start_time
+                elapsed_seconds = elapsed_time.total_seconds()
+                
+                minutes, seconds = divmod(int(elapsed_seconds), 60)
+                elapsed_str = f"{minutes:02d}:{seconds:02d}"
+
+                test_total_seconds = admin_cog.TEST_DURATION_MINUTES * 60
+                progress_percent = (elapsed_seconds / test_total_seconds) * 100
+                progress_bar = generate_progress_bar(progress_percent, 100, length=20)
+                
+                logs = player.recent_logs if player.recent_logs else "No autonomous actions yet."
+
+                debug_info = (
+                    f"**Temps Écoulé:** `{elapsed_str}` / `{admin_cog.TEST_DURATION_MINUTES}:00`\n"
+                    f"**Progression:** {progress_bar}\n"
+                    f"**Logs Autonomes:**\n```\n{logs}\n```"
+                )
+                embed.add_field(name="📊 Test-Mode Monitoring", value=debug_info, inline=False)
 
         # --- Section Stats (TOUJOURS affichée) ---
         # NOUVEAU: Besoins Vitaux
@@ -121,10 +139,12 @@ class MainEmbed(commands.Cog):
 
         symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`")
         embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
-
+        
         addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)}`{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
         embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
         
+        if player.is_sick:
+            embed.add_field(name="État Actuel", value="**Malade 🤒**", inline=False)
         embed.set_footer(text=f"Jeu sur le serveur {guild.name} • Dernière mise à jour :")
         embed.timestamp = datetime.datetime.utcnow()
         return embed
@@ -199,7 +219,12 @@ class MainEmbed(commands.Cog):
                 if player.last_action_at and (datetime.datetime.utcnow() - player.last_action_at).total_seconds() < 10:
                     return await interaction.followup.send("Vous agissez trop vite ! Attendez un peu.", ephemeral=True)
 
-                action_map = { "action_eat": cooker_brain.perform_eat, "action_drink": cooker_brain.perform_drink, "action_sleep": cooker_brain.perform_sleep, "action_smoke": cooker_brain.perform_smoke, "action_urinate": cooker_brain.perform_urinate }
+                action_map = { 
+                    "action_eat": cooker_brain.perform_eat, "action_drink": cooker_brain.perform_drink,
+                    "action_sleep": cooker_brain.perform_sleep, "action_smoke": cooker_brain.perform_smoke,
+                    "action_urinate": cooker_brain.perform_urinate,
+                    "action_shower": cooker_brain.perform_shower # AJOUT
+                }
                 message, changes = action_map[custom_id](player)
                 
                 if not changes: return await interaction.followup.send(f"⚠️ {message}", ephemeral=True)

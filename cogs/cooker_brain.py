@@ -8,6 +8,17 @@ class CookerBrain(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def perform_shower(self, player: PlayerProfile) -> (str, dict):
+        if player.hygiene > 95:
+            return "Vous êtes déjà propre !", {}
+        
+        player.hygiene = 100.0
+        player.stress = clamp(player.stress - 10, 0, 100)
+        player.happiness = clamp(player.happiness + 5, 0, 100)
+        player.last_shower_at = datetime.datetime.utcnow()
+        changes = {"🧼 Hygiène": "100%", "😨 Stress": "-10", "😊 Humeur": "+5"}
+        return "Vous prenez une bonne douche. Ça fait du bien !", changes
+    
     def perform_eat(self, player: PlayerProfile) -> (str, dict):
         if player.food_servings <= 0: return "Vous n'avez plus rien à manger !", {}
         player.food_servings -= 1
