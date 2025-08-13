@@ -1,4 +1,4 @@
-# --- cogs/admin.py (CORRECTED AND REFACTORED) ---
+# --- cogs/admin.py (CORRECTED WITH HYGIENE RATES) ---
 
 import discord
 from discord.ext import commands
@@ -10,11 +10,13 @@ import math
 from typing import List, Tuple, Dict, Literal
 import os
 import traceback
+
+# --- CORRECT: Centralized Imports ---
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
-# --- NOUVEL IMPORT NÉCESSAIRE ---
+# --- NOUVEL IMPORT NÉCESSAIRE (CORRIGÉ) ---
 from cogs.main_embed import DashboardView
 
 # --- Setup Logger for this Cog ---
@@ -212,8 +214,12 @@ class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
     def __init__(self, bot):
         self.bot = bot
-
-    GAME_MODES = { "peaceful": { "tick_interval_minutes": 60, "rates": { "hunger": 5.0, "thirst": 4.0, "bladder": 5.0, "energy": 3.0, "stress": 1.0, "boredom": 2.0 } }, "medium": { "tick_interval_minutes": 30, "rates": { "hunger": 10.0, "thirst": 8.0, "bladder": 15.0, "energy": 5.0, "stress": 3.0, "boredom": 7.0 } }, "hard": { "tick_interval_minutes": 15, "rates": { "hunger": 20.0, "thirst": 16.0, "bladder": 30.0, "energy": 10.0, "stress": 6.0, "boredom": 14.0 } } }
+    # --- MODIFIED: Added hygiene rates to game modes ---
+    GAME_MODES = {
+        "peaceful": {"tick_interval_minutes": 60, "rates": {"hunger": 5.0, "thirst": 4.0, "bladder": 5.0, "energy": 3.0, "stress": 1.0, "boredom": 2.0, "hygiene": 2.0}},
+        "medium": {"tick_interval_minutes": 30, "rates": {"hunger": 10.0, "thirst": 8.0, "bladder": 15.0, "energy": 5.0, "stress": 3.0, "boredom": 7.0, "hygiene": 4.0}},
+        "hard": {"tick_interval_minutes": 15, "rates": {"hunger": 20.0, "thirst": 16.0, "bladder": 30.0, "energy": 10.0, "stress": 6.0, "boredom": 14.0, "hygiene": 8.0}}
+    }
     GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, "test_day": {"label": "Test Day [INSTANT START]"} }
 
     MAX_OPTION_LENGTH = 100
@@ -378,7 +384,7 @@ class AdminCog(commands.Cog):
             super().__init__(placeholder="Choose the game duration...", options=options, custom_id=f"select_gameduration_{guild_id}", row=row)
             self.guild_id = guild_id
             self.cog = cog
-
+            
         async def callback(self, interaction: discord.Interaction):
             await interaction.response.defer(ephemeral=True) # Defer pour les opérations longues
             selected_key = self.values[0]
@@ -392,12 +398,12 @@ class AdminCog(commands.Cog):
                 state.duration_key = selected_key
                 db.commit()
 
-                # --- MODIFICATION: Logique de démarrage instantané pour le mode test ---
                 if selected_key == "test_day":
                     await self.start_test_game(interaction, state, db)
                 else:
                     embed = self.cog.generate_setup_game_mode_embed()
                     embed.description = f"✅ Game duration set to **{duration_data['label']}**.\n{embed.description}"
+                    # This call is incorrect, GameDurationSelect does not have an edit_original_response method. It should be on the interaction.
                     await interaction.edit_original_response(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
 
             except Exception as e:
@@ -407,7 +413,6 @@ class AdminCog(commands.Cog):
                 db.close()
 
         async def start_test_game(self, interaction: discord.Interaction, state: ServerState, db: SessionLocal):
-            """Logique pour démarrer une partie de test."""
             if not state.game_channel_id:
                 return await interaction.followup.send("❌ **Erreur :** Configurez un salon de jeu avant de lancer un test.", ephemeral=True)
             if state.game_started:
@@ -417,13 +422,13 @@ class AdminCog(commands.Cog):
             if not main_embed_cog:
                 return await interaction.followup.send("❌ Erreur Critique : Module `MainEmbed` non chargé.", ephemeral=True)
 
-            # Appliquer les paramètres de test
             state.is_test_mode = True
-            mode_data = self.cog.GAME_MODES["hard"] # Le mode test utilise les taux "hard" comme base
-            state.degradation_rate_hunger = mode_data["rates"]["hunger"] * self.cog.TEST_RATE_MULTIPLIER
-            state.degradation_rate_thirst = mode_data["rates"]["thirst"] * self.cog.TEST_RATE_MULTIPLIER
-            state.degradation_rate_bladder = mode_data["rates"]["bladder"] * self.cog.TEST_RATE_MULTIPLIER
-            state.degradation_rate_stress = mode_data["rates"]["stress"] * self.cog.TEST_RATE_MULTIPLIER
+            mode_data = self.cog.GAME_MODES["hard"]
+            
+            # --- MODIFIED: Apply multiplier to ALL rates from the preset ---
+            for rate_key, base_value in mode_data["rates"].items():
+                setattr(state, f"degradation_rate_{rate_key}", base_value * self.cog.TEST_RATE_MULTIPLIER)
+
             state.game_tick_interval_minutes = 1 # Tick chaque minute pour le test
 
             # Créer/Réinitialiser le joueur
