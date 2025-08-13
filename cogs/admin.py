@@ -10,14 +10,12 @@ import math
 from typing import List, Tuple, Dict, Literal
 import os
 import traceback
-
-# --- CORRECT: Centralized Imports ---
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
 # --- NOUVEL IMPORT NÉCESSAIRE ---
-from cogs.main_embed import MainMenuView 
+from cogs.main_embed import DashboardView
 
 # --- Setup Logger for this Cog ---
 logger = get_logger(__name__)
@@ -531,9 +529,9 @@ class AdminCog(commands.Cog):
                     db.refresh(player)
                     db.refresh(state)
 
-                    # --- CORRECTION: L'appel ici doit aussi passer 'state' ---
                     game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
-                    game_view = MainMenuView()
+                    game_view = DashboardView() # <-- CHANGED FROM MainMenuView()
+                    game_message = await game_channel.send(embed=game_embed, view=game_view)
                     game_message = await game_channel.send(embed=game_embed, view=game_view)
                     
                     state.game_message_id = game_message.id
