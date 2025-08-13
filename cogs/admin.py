@@ -321,7 +321,20 @@ class AdminCog(commands.Cog):
         finally:
             db.close()
 
-
+    @app_commands.command(name="clear_global_commands", description="[STAFF] Nettoie toutes les commandes globales enregistrées.")
+    @app_commands.default_permissions(administrator=True)
+    async def clear_global_commands(self, interaction: discord.Interaction):
+        """
+        Commande utilitaire à n'utiliser qu'une seule fois pour nettoyer les vieilles commandes.
+        """
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        
+        self.bot.tree.clear_commands(guild=None) # On vide les commandes globales
+        await self.bot.tree.sync(guild=None)
+        
+        await interaction.followup.send("✅ Les commandes globales ont été effacées. "
+                                        "Les duplicatas devraient disparaître après un redémarrage du bot et de votre client Discord.", ephemeral=True)
+        
     @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
     @app_commands.default_permissions(administrator=True)
     async def config(self, interaction: discord.Interaction):

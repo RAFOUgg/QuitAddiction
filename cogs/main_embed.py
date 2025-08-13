@@ -60,76 +60,74 @@ class ActionsView(ui.View):
 class MainEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        bot.add_view(MainMenuView())
-        bot.add_view(BackView())
-        bot.add_view(PhoneMainView())
+        self.bot.add_view(MainMenuView())
+        self.bot.add_view(BackView())
+        self.bot.add_view(PhoneMainView())
 
     def get_base_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
-        asset_cog = self.bot.get_cog("AssetManager")
-        
-        # --- LOGIQUE D'IMAGE MISE À JOUR ---
-        image_name = "neutral" # Utilise neutral.png par défaut
-        if player.stress > 70 or player.hunger > 70 or player.thirst > 70 or player.health < 40:
-            image_name = "sad" # Utilise sad.png si l'état est mauvais
-            embed.color = 0xe74c3c
-        
-        image_url = asset_cog.get_url(image_name) if asset_cog else None
-        if image_url: embed.set_image(url=image_url)
-        else: embed.add_field(name="⚠️ Asset manquant", value=f"L'image '{image_name}.png' n'a pas été trouvée.")
-        
-        embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/3423/3423485.png")
+        # Note: Le set_thumbnail() pour le globe est supprimé.
         embed.set_footer(text=f"Jeu sur le serveur {guild.name}")
         return embed
 
+    # --- ÉCRAN PRINCIPAL ---
     def generate_main_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
         embed = self.get_base_embed(player, guild)
+        asset_cog = self.bot.get_cog("AssetManager")
+        image_name = "neutral"
+        if player.stress > 70 or player.hunger > 70 or player.health < 40:
+            image_name = "sad"
+            embed.color = 0xe74c3c
+        image_url = asset_cog.get_url(image_name) if asset_cog else None
+        if image_url: embed.set_image(url=image_url)
+        
         status_description = "Il a l'air de bien se porter."
-        if player.stress > 70 or player.hunger > 70 or player.thirst > 70:
+        if player.stress > 70 or player.hunger > 70:
             status_description = "Il a l'air fatigué et stressé... Il a besoin d'aide."
         embed.description = f"*Dernière mise à jour : <t:{int(datetime.datetime.now().timestamp())}:R>*\n{status_description}"
         return embed
 
+    # --- ÉCRAN DES STATS (Cerveau) ---
     def generate_stats_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
-        """Génère l'embed détaillé et réorganisé des statistiques avec les nouvelles jauges."""
         embed = self.get_base_embed(player, guild)
+        asset_cog = self.bot.get_cog("AssetManager")
+        image_name = "neutral"
+        if player.stress > 70 or player.hunger > 70 or player.health < 40:
+            image_name = "sad"
+            embed.color = 0xe74c3c
+        image_url = asset_cog.get_url(image_name) if asset_cog else None
+        if image_url: embed.set_image(url=image_url)
+
         embed.description = "Aperçu de l'état de santé physique et mental du cuisinier."
         
-        phys_health = (
-            f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n"
-            f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n"
-            f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n"
-            f"**Toxines:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.0f}%`"
-        )
+        phys_health = (f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n" f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n" f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n" f"**Toxines:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.0f}%`")
         embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=True)
-
-        mental_health = (
-            f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n"
-            f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
-            f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
-            f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`"
-        )
+        mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
         embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
-        
         embed.add_field(name="\u200b", value="\u200b", inline=False) 
-
-        symptoms = (
-            f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n"
-            f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n"
-            f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n"
-            f"**Mal de Tête:** {generate_progress_bar(player.headache, high_is_bad=True)} `{player.headache:.0f}%`\n"
-            f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`\n"
-            f"**Bouche Sèche:** {generate_progress_bar(player.dry_mouth, high_is_bad=True)} `{player.dry_mouth:.0f}%`"
-        )
+        symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n" f"**Mal de Tête:** {generate_progress_bar(player.headache, high_is_bad=True)} `{player.headache:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`\n" f"**Bouche Sèche:** {generate_progress_bar(player.dry_mouth, high_is_bad=True)} `{player.dry_mouth:.0f}%`")
         embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
-        
-        addiction = (
-            f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n"
-            f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n"
-            f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`"
-        )
+        addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
         embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
-        
+        return embed
+
+    # --- NOUVEL ÉCRAN D'INVENTAIRE ---
+    def generate_inventory_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
+        embed = self.get_base_embed(player, guild)
+        asset_cog = self.bot.get_cog("AssetManager")
+        image_url = asset_cog.get_url("neutral") if asset_cog else None
+        if image_url: embed.set_image(url=image_url)
+
+        embed.description = "Contenu de vos poches et de votre portefeuille."
+        inventory_list = (
+            f"🚬 Cigarettes: **{player.cigarettes}**\n"
+            f"🍺 Bières: **{player.beers}**\n"
+            f"💧 Bouteilles d'eau: **{player.water_bottles}**\n"
+            f"🍔 Portions de nourriture: **{player.food_servings}**\n"
+            f"🌿 Joints: **{player.joints}**"
+        )
+        embed.add_field(name="Consommables", value=inventory_list, inline=True)
+        embed.add_field(name="Argent", value=f"💰 **{player.wallet}$**", inline=True)
         return embed
 
     @commands.Cog.listener()
