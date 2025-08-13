@@ -43,8 +43,6 @@ class Phone(commands.Cog):
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return
         custom_id = interaction.data["custom_id"]
-        # --- CORRECTION ---
-        # On écoute maintenant aussi 'nav_phone' pour le bouton retour de la boutique
         if not (custom_id.startswith("phone_") or custom_id.startswith("shop_buy_") or custom_id == "nav_phone"):
             return
 
@@ -52,15 +50,17 @@ class Phone(commands.Cog):
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not player: return
+            # --- CORRECTION: Il faut aussi récupérer le state ---
+            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
 
-            # --- CORRECTION ---
-            # 'nav_phone' est maintenant géré ici pour retourner au menu du tel
+            if not player or not state: 
+                return await interaction.followup.send("Erreur: Profil ou état du serveur introuvable.", ephemeral=True)
+
+
             if custom_id == "nav_phone":
                 main_embed_cog = self.bot.get_cog("MainEmbed")
                 if not main_embed_cog: return
-                
-                embed = main_embed_cog.generate_dashboard_embed(player, interaction.guild, show_stats=False)
+                embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild, show_stats=False)
                 embed.description = "Vous ouvrez votre téléphone."
                 await interaction.edit_original_response(embed=embed, view=PhoneMainView())
                 return
