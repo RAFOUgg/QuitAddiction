@@ -8,6 +8,7 @@ import datetime
 import traceback
 from utils.calculations import chain_reactions
 from utils.helpers import clamp
+import random 
 
 class Scheduler(commands.Cog):
     def __init__(self, bot):
