@@ -1,10 +1,9 @@
-# --- bot.py (Corrected) ---
+# --- bot.py (CORRECTED) ---
 import discord
 from discord.ext import commands
 import os
 import asyncio
 
-# --- Our custom modules ---
 from config import BOT_TOKEN, GUILD_ID
 from db.database import init_db
 from utils.logger import get_logger
@@ -23,33 +22,36 @@ class QuitAddictionBot(commands.Bot):
     async def on_ready(self):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
         logger.info('------')
+        
+        # --- NOUVEAU BLOC : Lancement des tâches post-démarrage ---
+        asset_cog = self.get_cog("AssetManager")
+        if asset_cog:
+            await asset_cog.initialize_assets()
+        # --- FIN DU NOUVEAU BLOC ---
 
     async def setup_hook(self):
         logger.info("Initializing database from setup_hook...")
         init_db()
         logger.info("Database initialization check complete.")
 
+        # Charger les cogs
         for filename in os.listdir(f'./{COGS_DIR}'):
-            if filename.endswith('.py') and not filename.startswith('__'):
+            if filename.endswith('.py') and not filename.startswith('__') and filename != 'actions.py':
                 try:
                     await self.load_extension(f'{COGS_DIR}.{filename[:-3]}')
                     logger.info(f'✅ Cog loaded: {filename}')
                 except Exception as e:
                     logger.error(f'❌ Failed to load cog {filename}: {type(e).__name__} - {e}', exc_info=True)
         
-        # --- BLOC CORRIGÉ POUR ÉVITER LES DOUBLONS ---
+        # Synchroniser les commandes
         if self.test_guild:
-            # Mode Développement : synchronise instantanément sur le serveur de test UNIQUEMENT.
             logger.info(f"Syncing commands to test guild: {self.test_guild.id}")
             self.tree.copy_global_to(guild=self.test_guild)
             await self.tree.sync(guild=self.test_guild)
             logger.info("Commands synced to test guild.")
         else:
-            # Mode Production : synchronise globalement pour tous les serveurs.
-            # (Peut prendre jusqu'à une heure pour se propager)
             await self.tree.sync()
             logger.info("Global slash commands synced.")
-        # --- FIN DU BLOC CORRIGÉ ---
 
 async def main():
     bot = QuitAddictionBot()
