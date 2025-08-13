@@ -282,7 +282,7 @@ class AdminCog(commands.Cog):
 
             # Envoyer l'interface de jeu
             game_channel = await self.bot.fetch_channel(state.game_channel_id)
-            game_embed = main_embed_cog.generate_main_embed(player, interaction.guild)
+            game_embed = main_embed_cog.generate_dashboard_embed(player, interaction.guild)
             game_view = MainMenuView()
             game_message = await game_channel.send(content="**--- DÉBUT DE LA JOURNÉE DE TEST ACCÉLÉRÉE ---**", embed=game_embed, view=game_view)
             state.game_message_id = game_message.id
@@ -561,7 +561,7 @@ class AdminCog(commands.Cog):
                     db.refresh(player)
                     db.refresh(state)
 
-                    game_embed = main_embed_cog.generate_main_embed(player, interaction.guild)
+                    game_embed = main_embed_cog.generate_dashboard_embed(player, interaction.guild)
                     game_view = MainMenuView()
                     game_message = await game_channel.send(embed=game_embed, view=game_view)
                     
