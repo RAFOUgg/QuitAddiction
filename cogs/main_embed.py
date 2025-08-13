@@ -91,6 +91,29 @@ class MainEmbed(commands.Cog):
         
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
+        if state and state.is_test_mode and state.game_start_time:
+            now = datetime.datetime.utcnow()
+            elapsed_time = now - state.game_start_time
+            elapsed_seconds = elapsed_time.total_seconds()
+            
+            # Formatter le temps écoulé
+            minutes, seconds = divmod(int(elapsed_seconds), 60)
+            elapsed_str = f"{minutes:02d}:{seconds:02d}"
+
+            # Barre de progression du test (20 minutes)
+            test_total_seconds = AdminCog.TEST_DURATION_MINUTES * 60
+            progress_percent = (elapsed_seconds / test_total_seconds) * 100
+            progress_bar = generate_progress_bar(progress_percent, 100, length=20)
+            
+            logs = player.recent_logs if player.recent_logs else "No autonomous actions yet."
+
+            debug_info = (
+                f"**Temps Écoulé:** `{elapsed_str}` / `{AdminCog.TEST_DURATION_MINUTES}:00`\n"
+                f"**Progression:** {progress_bar}\n"
+                f"**Logs Autonomes:**\n```\n{logs}\n```"
+            )
+            embed.add_field(name="📊 Test-Mode Monitoring", value=debug_info, inline=False)
+
         if show_stats:
             if image_url:
                 embed.set_thumbnail(url=image_url)
@@ -143,22 +166,24 @@ class MainEmbed(commands.Cog):
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not player: return await interaction.followup.send("Erreur: Profil du cuisinier introuvable.", ephemeral=True)
+            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
+            if not player or not state:
+                return await interaction.followup.send("Erreur: Profil ou état du serveur introuvable.", ephemeral=True)
 
             if custom_id == "nav_main_menu":
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_stats=False), view=MainMenuView())
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild, show_stats=False), view=MainMenuView())
             
             elif custom_id == "nav_stats":
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_stats=True), view=StatsView())
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild, show_stats=True), view=StatsView())
 
             elif custom_id == "nav_inventory":
                 await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=BackView())
             
             elif custom_id == "nav_actions":
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_stats=True), view=ActionsView(player))
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild, show_stats=True), view=ActionsView(player))
 
             elif custom_id == "nav_phone":
-                embed = self.generate_dashboard_embed(player, interaction.guild, show_stats=False)
+                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=False)
                 embed.description = "Vous ouvrez votre téléphone."
                 await interaction.edit_original_response(embed=embed, view=PhoneMainView())
             

@@ -32,7 +32,6 @@ class Scheduler(commands.Cog):
         db = SessionLocal()
         try:
             active_games = db.query(ServerState).filter(ServerState.game_started == True).all()
-            
             for server_state in active_games:
                 player = db.query(PlayerProfile).filter_by(guild_id=server_state.guild_id).first()
                 if not player: continue
@@ -55,14 +54,16 @@ class Scheduler(commands.Cog):
                 player.dizziness = clamp(player.dizziness - 2, 0, 100)
 
                 # --- 2. ACTIONS AUTONOMES (IA AMÉLIORÉE) ---
-                action_log, action_taken = [], False
+                action_log_message, action_taken = None, False
                 if player.health < 20 and not action_taken:
-                    cooker_brain.perform_sleep(player); action_log.append("😴 Extrêmement faible, il s'est effondré pour dormir."); action_taken = True
+                    message, _ = cooker_brain.perform_sleep(player)
+                    action_log_message = f"😴 {message}"; action_taken = True
                 if player.hunger > 85 and player.food_servings > 0 and not action_taken:
-                    cooker_brain.perform_eat(player); action_log.append("🍔 Tourmenté par la faim, il a dévoré quelque chose."); action_taken = True
+                    message, _ = cooker_brain.perform_eat(player)
+                    action_log_message = f"🍔 Tourmenté par la faim, il a dévoré quelque chose."; action_taken = True
                 if player.thirst > 90 and (player.water_bottles > 0 or player.beers > 0) and not action_taken:
-                    log_msg = cooker_brain.perform_drink(player)
-                    action_log.append(f"💧 Déshydraté, il a bu. ({log_msg})"); action_taken = True
+                    message, _ = cooker_brain.perform_drink(player)
+                    action_log_message = f"💧 Déshydraté, il a bu."; action_taken = True
 
                 # --- NOUVEAU : SYSTÈME D'ÉVÉNEMENTS NARRATIFS ---
                 if server_state.game_start_time and not player.has_unlocked_joints:
@@ -88,18 +89,27 @@ class Scheduler(commands.Cog):
                 player.last_update = current_time
                 db.commit()
 
-                # --- 4. MISE À JOUR DE L'INTERFACE ---
-                if action_taken:
-                    try:
-                        guild = await self.bot.fetch_guild(int(server_state.guild_id))
-                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
-                        msg = await channel.fetch_message(int(server_state.game_message_id))
+                # --- 4. MISE À JOUR & LOGGING ---
+                if action_taken and action_log_message:
+                    # Log pour le mode test
+                    if server_state.is_test_mode:
+                        log_time = current_time.strftime("%H:%M")
+                        new_log_entry = f"`{log_time}`: {action_log_message}"
                         
-                        # --- MODIFICATION : Utilise la nouvelle fonction avec les stats visibles ---
-                        await msg.edit(embed=main_embed_cog.generate_dashboard_embed(player, guild, show_stats=True))
-                        await channel.send(f"**Pendant que vous aviez le dos tourné...**\n>>> {''.join(action_log)}")
+                        # Garder seulement les X dernières lignes
+                        logs = player.recent_logs.splitlines()
+                        logs.append(new_log_entry)
+                        player.recent_logs = "\n".join(logs[-self.max_log_lines:])
+
+                    # Envoyer un message discret dans le canal
+                    try:
+                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+                        await channel.send(f"**Pendant que vous aviez le dos tourné...**\n> {action_log_message}")
                     except Exception as e:
-                        print(f"Scheduler: Erreur maj interface pour guild {server_state.guild_id}: {e}")
+                        print(f"Scheduler: Erreur envoi message autonome: {e}")
+
+                player.last_update = current_time
+                db.commit()
 
         except Exception as e:
             print(f"Erreur critique dans Scheduler.tick: {e}")
