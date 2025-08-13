@@ -1,4 +1,4 @@
-# --- cogs/main_embed.py (FINAL CORRECTED VERSION) ---
+# --- cogs/main_embed.py (FINAL & ROBUST) ---
 
 import discord
 from discord.ext import commands
@@ -8,7 +8,7 @@ from db.models import ServerState, PlayerProfile
 import datetime
 import asyncio
 
-from .phone import PhoneMainView 
+from .phone import PhoneMainView
 from utils.helpers import clamp, format_time_delta
 
 def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 10, high_is_bad: bool = False) -> str:
@@ -24,15 +24,23 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     return f"`{bar_filled * filled_length}{bar_empty * (length - filled_length)}`"
 
 # --- VUES ---
+# --- MODIFICATION : La vue principale a maintenant un bouton pour les stats ---
 class MainMenuView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        # --- MODIFICATION : Ajout du bouton pour voir le personnage ---
         self.add_item(ui.Button(label="🏃‍♂️ Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions"))
         self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
         self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
-        self.add_item(ui.Button(label="👨‍🍳 Voir le Cuisinier", style=discord.ButtonStyle.grey, custom_id="nav_view_character"))
+        self.add_item(ui.Button(label="🧠 Voir les Stats", style=discord.ButtonStyle.grey, custom_id="nav_stats")) # Ancien bouton "Voir le personnage"
 
+# --- NOUVELLE VUE : Affichée quand les stats sont visibles, pour pouvoir les cacher ---
+class StatsView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ui.Button(label="🏃‍♂️ Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions"))
+        self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
+        self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
+        self.add_item(ui.Button(label="🙈 Cacher les Stats", style=discord.ButtonStyle.grey, custom_id="nav_main_menu")) # Ramène au dashboard de base
 
 class BackView(ui.View):
     def __init__(self):
@@ -55,11 +63,12 @@ class ActionsView(ui.View):
 class MainEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # --- MODIFICATION : Ajout de la nouvelle vue au démarrage du bot ---
         self.bot.add_view(MainMenuView())
+        self.bot.add_view(StatsView()) 
         self.bot.add_view(BackView())
         self.bot.add_view(PhoneMainView())
 
-    # --- NOUVELLE FONCTION : LE CERVEAU DU CUISINIER ---
     def get_character_thoughts(self, player: PlayerProfile) -> str:
         """Détermine la pensée la plus urgente du personnage."""
         if player.health < 30: return "Je... je ne me sens pas bien du tout. J'ai mal partout."
@@ -72,43 +81,43 @@ class MainEmbed(commands.Cog):
         if player.boredom > 60: return "Je m'ennuie... il ne se passe jamais rien."
         return "Pour l'instant, ça va à peu près."
 
-    # --- LE NOUVEL EMBED UNIFIÉ ---
-    # --- MODIFICATION : Ajout du paramètre show_image ---
-    def generate_dashboard_embed(self, player: PlayerProfile, guild: discord.Guild, show_image: bool = False) -> discord.Embed:
+    # --- MODIFICATION : Le paramètre est maintenant 'show_stats' ---
+    def generate_dashboard_embed(self, player: PlayerProfile, guild: discord.Guild, show_stats: bool = False) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         
-        # --- MODIFICATION : L'image n'est affichée que si show_image est True ---
-        if show_image:
-            asset_cog = self.bot.get_cog("AssetManager")
-            image_name = "neutral"
-            if player.stress > 70 or player.hunger > 70 or player.health < 40:
-                image_name = "sad"
-                embed.color = 0xe74c3c
-            image_url = asset_cog.get_url(image_name) if asset_cog else None
-            if image_url: 
-                embed.set_image(url=image_url)
+        # --- MODIFICATION : L'image est maintenant TOUJOURS affichée sur le dashboard ---
+        asset_cog = self.bot.get_cog("AssetManager")
+        image_name = "neutral"
+        if player.stress > 70 or player.hunger > 70 or player.health < 40:
+            image_name = "sad"
+            embed.color = 0xe74c3c
+        image_url = asset_cog.get_url(image_name) if asset_cog else None
+        if image_url: 
+            embed.set_image(url=image_url)
 
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
-        phys_health = (f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n" f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n" f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n" f"**Toxines:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.0f}%`")
-        embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=True)
-        mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
-        embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
-        embed.add_field(name="\u200b", value="\u200b", inline=False)
-        symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`")
-        embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
-        addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)}`{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
-        embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
+        # --- MODIFICATION : Les champs de stats ne sont affichés que si show_stats est True ---
+        if show_stats:
+            phys_health = (f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n" f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n" f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n" f"**Toxines:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.0f}%`")
+            embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=True)
+            mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
+            embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
+            embed.add_field(name="\u200b", value="\u200b", inline=False)
+            symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`")
+            embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
+            addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)}`{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
+            embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
+        else:
+            embed.add_field(name="\u200b", value="*Cliquez sur `🧠 Voir les Stats` pour afficher les détails.*", inline=False)
+
 
         embed.set_footer(text=f"Jeu sur le serveur {guild.name} • Dernière mise à jour :")
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 
-    # --- NOUVEL ÉCRAN D'INVENTAIRE ---
     def generate_inventory_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
-        embed = discord.Embed(title="👖 Inventaire du Cuisinier", color=0x2ecc71) # Changed title and color
-        
-        # On n'affiche pas l'image ici pour garder l'inventaire clair
+        embed = discord.Embed(title="👖 Inventaire du Cuisinier", color=0x2ecc71)
         embed.description = "Contenu de vos poches et de votre portefeuille."
         inventory_list = (
             f"🚬 Cigarettes: **{player.cigarettes}**\n"
@@ -135,24 +144,25 @@ class MainEmbed(commands.Cog):
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player: return await interaction.followup.send("Erreur: Profil du cuisinier introuvable.", ephemeral=True)
 
-            # --- MODIFICATION : Gestion des nouveaux boutons et de l'affichage de l'image ---
-            if custom_id in ["nav_main_menu", "nav_stats"]: 
-                # On s'assure que l'image est cachée au retour au menu
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_image=False), view=MainMenuView())
+            # --- MODIFICATION : Nouvelle logique de navigation ---
+            if custom_id == "nav_main_menu": 
+                # Affiche le dashboard de base (image + pensées)
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_stats=False), view=MainMenuView())
             
-            elif custom_id == "nav_view_character":
-                # On montre l'image quand on clique sur le bouton dédié
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_image=True), view=MainMenuView())
+            elif custom_id == "nav_stats":
+                # Affiche le dashboard avec les stats détaillées
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_stats=True), view=StatsView())
 
             elif custom_id == "nav_inventory":
+                # L'inventaire est un écran séparé, sans l'image du perso
                 await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=BackView())
             
             elif custom_id == "nav_actions":
-                # On n'affiche pas l'image dans le menu des actions pour ne pas surcharger
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_image=False), view=ActionsView(player))
+                # Le menu des actions affiche le dashboard de base avec les boutons d'action
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, interaction.guild, show_stats=False), view=ActionsView(player))
 
             elif custom_id == "nav_phone":
-                embed = self.generate_dashboard_embed(player, interaction.guild, show_image=False) 
+                embed = self.generate_dashboard_embed(player, interaction.guild, show_stats=False) 
                 embed.description = "Vous ouvrez votre téléphone."
                 await interaction.edit_original_response(embed=embed, view=PhoneMainView())
             
@@ -177,8 +187,8 @@ class MainEmbed(commands.Cog):
                 await interaction.followup.send(f"✅ {message}\n{feedback_str}", ephemeral=True)
                 
                 current_view = ActionsView(player) 
-                # La logique pour l'image animée lors de l'action reste, mais l'image de base est cachée
-                action_embed_base = self.generate_dashboard_embed(player, interaction.guild, show_image=False)
+                # L'embed de base pour les actions n'a pas les stats détaillées
+                action_embed_base = self.generate_dashboard_embed(player, interaction.guild, show_stats=False)
 
                 if custom_id in ["action_smoke", "action_drink", "action_eat"]:
                     action_image_map = {"smoke": "smoke_cig", "drink": "neutral_drinking", "eat": "neutral_eating"}
@@ -192,12 +202,14 @@ class MainEmbed(commands.Cog):
                         await asyncio.sleep(5)
                 
                 db.refresh(player)
-                # L'embed final après l'action n'a pas l'image par défaut
-                final_embed = self.generate_dashboard_embed(player, interaction.guild, show_image=False)
+                # L'embed final après l'action est le dashboard de base (sans stats)
+                final_embed = self.generate_dashboard_embed(player, interaction.guild, show_stats=False)
                 await interaction.edit_original_response(embed=final_embed, view=current_view)
 
         except Exception as e:
-            print(f"Erreur dans le listener d'interaction: {e}", exc_info=True)
+            # Correction: utiliser traceback pour logger l'erreur complète
+            import traceback
+            print(f"Erreur dans le listener d'interaction: {e}\n{traceback.format_exc()}")
             if not interaction.response.is_done():
                 await interaction.followup.send("Une erreur est survenue.", ephemeral=True)
             db.rollback()

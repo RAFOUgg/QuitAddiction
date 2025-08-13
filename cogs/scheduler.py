@@ -67,8 +67,6 @@ class Scheduler(commands.Cog):
                 # --- NOUVEAU : SYSTÈME D'ÉVÉNEMENTS NARRATIFS ---
                 if server_state.game_start_time and not player.has_unlocked_joints:
                     game_duration_hours = (current_time - server_state.game_start_time).total_seconds() / 3600
-                    # Pour le mode test, 20min * 60 = 1200s. 1200 / 3600 = 0.33h
-                    # On déclenche après ~3 minutes en mode test
                     trigger_time = 0.05 if (server_state.game_tick_interval_minutes < 5) else 2.0 
                     
                     if game_duration_hours > trigger_time:
@@ -97,7 +95,8 @@ class Scheduler(commands.Cog):
                         channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
                         msg = await channel.fetch_message(int(server_state.game_message_id))
                         
-                        await msg.edit(embed=main_embed_cog.generate_stats_embed(player, guild))
+                        # --- MODIFICATION : Utilise la nouvelle fonction avec les stats visibles ---
+                        await msg.edit(embed=main_embed_cog.generate_dashboard_embed(player, guild, show_stats=True))
                         await channel.send(f"**Pendant que vous aviez le dos tourné...**\n>>> {''.join(action_log)}")
                     except Exception as e:
                         print(f"Scheduler: Erreur maj interface pour guild {server_state.guild_id}: {e}")
