@@ -46,17 +46,14 @@ class ActionsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
-        self.add_item(ui.Button(label=f"Manger (il y a {format_time_delta(now - player.last_eaten_at)})", style=discord.ButtonStyle.success, custom_id="action_eat", emoji="🍽️", row=0))
-        self.add_item(ui.Button(label=f"Boire (il y a {format_time_delta(now - player.last_drank_at)})", style=discord.ButtonStyle.primary, custom_id="action_drink", emoji="💧", row=0))
-        self.add_item(ui.Button(label=f"Dormir (il y a {format_time_delta(now - player.last_slept_at)})", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", row=0))
-        time_since_last_smoke_sec = (now - player.last_smoked_at).total_seconds() if player.last_smoked_at else float('inf')
-        time_to_craving_min = max(0, (7200 - time_since_last_smoke_sec) / 60)
-        if player.withdrawal_severity > 10: smoke_label, smoke_style = "Fumer (Manque !)", discord.ButtonStyle.danger
-        elif time_to_craving_min < 60 : smoke_label, smoke_style = f"Fumer (Manque ~{int(time_to_craving_min)}m)", discord.ButtonStyle.danger
-        else: smoke_label, smoke_style = "Fumer", discord.ButtonStyle.secondary
-        self.add_item(ui.Button(label=smoke_label, style=smoke_style, custom_id="action_smoke", emoji="🚬", row=0))
+        cooldown_active = player.last_action_at and (now - player.last_action_at).total_seconds() < 10
+
+        self.add_item(ui.Button(label=f"Manger (x{player.food_servings})", style=discord.ButtonStyle.success, custom_id="action_eat", emoji="🍽️", disabled=(player.food_servings <= 0 or cooldown_active)))
+        self.add_item(ui.Button(label=f"Boire (x{player.water_bottles + player.beers})", style=discord.ButtonStyle.primary, custom_id="action_drink", emoji="💧", disabled=((player.water_bottles + player.beers) <= 0 or cooldown_active)))
+        self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", disabled=(cooldown_active)))
+        self.add_item(ui.Button(label=f"Fumer (x{player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="action_smoke", emoji="🚬", disabled=(player.cigarettes <= 0 or cooldown_active)))
         if player.bladder > 30:
-            self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1))
+            self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=(cooldown_active)))
         self.add_item(ui.Button(label="⬅️ Retour au menu", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
 
 # --- COG ---
@@ -161,6 +158,9 @@ class MainEmbed(commands.Cog):
             
             # --- LOGIQUE D'ACTION ---
             elif custom_id.startswith("action_"):
+                if player.last_action_at and (datetime.datetime.utcnow() - player.last_action_at).total_seconds() < 10:
+                    return await interaction.followup.send("Vous agissez trop vite ! Attendez un peu.", ephemeral=True)
+                player.last_action_at = datetime.datetime.utcnow()
                 cooker_brain = self.bot.get_cog("CookerBrain")
                 if not cooker_brain: return await interaction.followup.send("Erreur: Moteur de jeu non trouvé.", ephemeral=True)
                 

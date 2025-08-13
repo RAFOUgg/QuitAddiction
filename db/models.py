@@ -62,16 +62,29 @@ class PlayerProfile(Base):
 
     # === SECTION 6: AUTRES & MÉTA-DONNÉES ===
     wallet = Column(Integer, default=20)
-    last_update = Column(DateTime, default=datetime.datetime.utcnow)
     
-    # --- TIMESTAMPS POUR LA VUE D'ACTIONS ---
+    
+    # --- Inventaire ---
+    cigarettes = Column(Integer, default=5)
+    beers = Column(Integer, default=0)
+    water_bottles = Column(Integer, default=2)
+    food_servings = Column(Integer, default=1)
+    joints = Column(Integer, default=0)
+
+    # --- Cooldowns & Timestamps ---
+    last_update = Column(DateTime, default=datetime.datetime.utcnow)
+    last_action_at = Column(DateTime, nullable=True) # Pour le cooldown global
     last_eaten_at = Column(DateTime, nullable=True)
     last_drank_at = Column(DateTime, nullable=True)
     last_slept_at = Column(DateTime, nullable=True)
     last_smoked_at = Column(DateTime, nullable=True)
     last_urinated_at = Column(DateTime, nullable=True)
 
+    # --- Flags Narratifs ---
+    has_unlocked_joints = Column(Boolean, default=False)
+
     __table_args__ = (UniqueConstraint('guild_id', name='uq_guild_player'),)
+
 
 # ActionLog reste inchangé
 class ActionLog(Base):

@@ -54,14 +54,32 @@ class Scheduler(commands.Cog):
                 player.intoxication_level = clamp(player.intoxication_level - 1.5, 0, 100)
                 player.dizziness = clamp(player.dizziness - 2, 0, 100)
 
-                # --- 2. ACTIONS AUTONOMES ---
+                # --- 2. ACTIONS AUTONOMES (IA AMÉLIORÉE) ---
                 action_log, action_taken = [], False
                 if player.health < 20 and not action_taken:
                     cooker_brain.perform_sleep(player); action_log.append("😴 Extrêmement faible, il s'est effondré pour dormir."); action_taken = True
-                if player.hunger > 85 and not action_taken:
+                if player.hunger > 85 and player.food_servings > 0 and not action_taken:
                     cooker_brain.perform_eat(player); action_log.append("🍔 Tourmenté par la faim, il a dévoré quelque chose."); action_taken = True
-                if player.thirst > 90 and not action_taken:
-                    cooker_brain.perform_drink(player); action_log.append("💧 Déshydraté, il a bu une grande quantité d'eau."); action_taken = True
+                if player.thirst > 90 and (player.water_bottles > 0 or player.beers > 0) and not action_taken:
+                    log_msg = cooker_brain.perform_drink(player)
+                    action_log.append(f"💧 Déshydraté, il a bu. ({log_msg})"); action_taken = True
+
+                # --- NOUVEAU : SYSTÈME D'ÉVÉNEMENTS NARRATIFS ---
+                if server_state.game_start_time and not player.has_unlocked_joints:
+                    game_duration_hours = (current_time - server_state.game_start_time).total_seconds() / 3600
+                    # Pour le mode test, 20min * 60 = 1200s. 1200 / 3600 = 0.33h
+                    # On déclenche après ~3 minutes en mode test
+                    trigger_time = 0.05 if (server_state.game_tick_interval_minutes < 5) else 2.0 
+                    
+                    if game_duration_hours > trigger_time:
+                        player.has_unlocked_joints = True
+                        player.joints += 1
+                        
+                        try:
+                            channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+                            await channel.send("📱 **Nouveau message d'un ami :**\n> *\"Hey ! J'suis passé te voir mais t'étais pas là. Je t'ai laissé un petit cadeau pour te détendre après le boulot. Fais-toi plaisir !\"*\n(Vous avez reçu votre premier joint !)")
+                        except Exception as e:
+                            print(f"Scheduler: Erreur lors de l'envoi de l'event narratif: {e}")
 
                 # --- 3. RÉACTIONS EN CHAÎNE ---
                 state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
