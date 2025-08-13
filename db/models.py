@@ -17,11 +17,12 @@ class ServerState(Base):
     game_mode = Column(String, default="medium")
     duration_key = Column(String, nullable=True, default="medium")
     game_tick_interval_minutes = Column(Integer, default=30)
-
     degradation_rate_hunger = Column(Float, default=10.0)
     degradation_rate_thirst = Column(Float, default=8.0)
     degradation_rate_bladder = Column(Float, default=15.0)
+    degradation_rate_energy = Column(Float, default=5.0)
     degradation_rate_stress = Column(Float, default=3.0)
+    degradation_rate_boredom = Column(Float, default=7.0)
     notify_on_low_vital_stat = Column(Boolean, default=True)
     is_test_mode = Column(Boolean, default=False)
 
