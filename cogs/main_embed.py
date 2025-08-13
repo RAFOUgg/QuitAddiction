@@ -59,12 +59,17 @@ class MainEmbed(commands.Cog):
     def get_base_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         asset_cog = self.bot.get_cog("AssetManager")
-        image_name = "happy"
+        
+        # --- LOGIQUE D'IMAGE MISE À JOUR ---
+        image_name = "neutral" # Utilise neutral.png par défaut
         if player.stress > 70 or player.hunger > 70 or player.thirst > 70 or player.health < 40:
-            image_name = "sad"
+            image_name = "sad" # Utilise sad.png si l'état est mauvais
             embed.color = 0xe74c3c
+        
         image_url = asset_cog.get_url(image_name) if asset_cog else None
         if image_url: embed.set_image(url=image_url)
+        else: embed.add_field(name="⚠️ Asset manquant", value=f"L'image '{image_name}.png' n'a pas été trouvée.")
+        
         embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/3423/3423485.png")
         embed.set_footer(text=f"Jeu sur le serveur {guild.name}")
         return embed
@@ -107,10 +112,9 @@ class MainEmbed(commands.Cog):
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not player:
-                return await interaction.followup.send("Erreur: Profil du cuisinier introuvable.", ephemeral=True)
+            if not player: return await interaction.followup.send("Erreur: Profil du cuisinier introuvable.", ephemeral=True)
 
-            # Navigation
+            # --- LOGIQUE DE NAVIGATION ---
             if custom_id == "nav_main_menu":
                 await interaction.edit_original_response(embed=self.generate_main_embed(player, interaction.guild), view=MainMenuView())
             elif custom_id == "nav_stats":
@@ -122,22 +126,58 @@ class MainEmbed(commands.Cog):
                 embed.description = "Vous ouvrez votre téléphone."
                 await interaction.edit_original_response(embed=embed, view=PhoneMainView())
             
-            # Actions
+            # --- LOGIQUE D'ACTION ---
             elif custom_id.startswith("action_"):
                 cooker_brain = self.bot.get_cog("CookerBrain")
+                if not cooker_brain: return await interaction.followup.send("Erreur: Moteur de jeu non trouvé.", ephemeral=True)
+                
                 message = ""
-                if custom_id == "action_eat": message = cooker_brain.perform_eat(player)
-                elif custom_id == "action_drink": message = cooker_brain.perform_drink(player)
-                elif custom_id == "action_sleep": message = cooker_brain.perform_sleep(player)
-                elif custom_id == "action_smoke": message = cooker_brain.perform_smoke(player)
-                elif custom_id == "action_urinate": message = cooker_brain.perform_urinate(player)
                 
-                db.commit()
-                db.refresh(player)
-                
-                new_embed = self.generate_main_embed(player, interaction.guild)
-                await interaction.edit_original_response(embed=new_embed, view=ActionsView(player))
-                await interaction.followup.send(f"✅ {message}", ephemeral=True)
+                # ================================================================= #
+                # ===         CAS SPÉCIAL POUR L'ACTION DE FUMER                === #
+                # ================================================================= #
+                if custom_id == "action_smoke":
+                    # L'action est effectuée sur le personnage
+                    message = cooker_brain.perform_smoke(player)
+                    db.commit(); db.refresh(player)
+
+                    asset_cog = self.bot.get_cog("AssetManager")
+                    smoking_image_url = asset_cog.get_url("smoke_cig") if asset_cog else None
+
+                    # 1. AFFICHER L'ÉTAT "EN TRAIN DE FUMER"
+                    if smoking_image_url:
+                        # On crée un embed spécial pour cet état
+                        smoking_embed = self.get_base_embed(player, interaction.guild)
+                        smoking_embed.set_image(url=smoking_image_url) # On force l'image de la cigarette
+                        smoking_embed.description = "Le cuisinier prend une pause cigarette..."
+                        await interaction.edit_original_response(embed=smoking_embed, view=ActionsView(player))
+                    
+                    # On envoie la confirmation de l'action
+                    await interaction.followup.send(f"✅ {message}", ephemeral=True)
+                    
+                    # 2. FAIRE UNE PAUSE DE QUELQUES SECONDES
+                    await asyncio.sleep(7)
+
+                    # 3. REVENIR À L'ÉTAT NORMAL
+                    # On s'assure que les données sont à jour au cas où le scheduler aurait tourné
+                    db.refresh(player) 
+                    final_embed = self.generate_main_embed(player, interaction.guild)
+                    # On met à jour le message pour revenir à l'image normale (neutral ou sad)
+                    await interaction.edit_original_response(embed=final_embed, view=ActionsView(player))
+
+                # --- CAS GÉNÉRAL POUR LES AUTRES ACTIONS ---
+                else:
+                    if custom_id == "action_eat": message = cooker_brain.perform_eat(player)
+                    elif custom_id == "action_drink": message = cooker_brain.perform_drink(player)
+                    elif custom_id == "action_sleep": message = cooker_brain.perform_sleep(player)
+                    elif custom_id == "action_urinate": message = cooker_brain.perform_urinate(player)
+                    
+                    if message:
+                        db.commit(); db.refresh(player)
+                        
+                        new_embed = self.generate_main_embed(player, interaction.guild)
+                        await interaction.edit_original_response(embed=new_embed, view=ActionsView(player))
+                        await interaction.followup.send(f"✅ {message}", ephemeral=True)
 
         except Exception as e:
             print(f"Erreur dans le listener d'interaction: {e}")
