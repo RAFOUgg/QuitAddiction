@@ -1,4 +1,4 @@
-# --- cogs/main_embed.py (FINAL UNIFIED VERSION) ---
+# --- cogs/main_embed.py (FINAL CORRECTED VERSION) ---
 
 import discord
 from discord.ext import commands
@@ -31,6 +31,11 @@ class MainMenuView(ui.View):
         self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
         self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
 
+class BackView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ui.Button(label="⬅️ Retour au Tableau de Bord", style=discord.ButtonStyle.grey, custom_id="nav_main_menu"))
+
 class ActionsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
@@ -42,11 +47,6 @@ class ActionsView(ui.View):
         self.add_item(ui.Button(label=f"Fumer (x{player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="action_smoke", emoji="🚬", disabled=(player.cigarettes <= 0 or cooldown_active)))
         if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=(cooldown_active)))
         self.add_item(ui.Button(label="⬅️ Retour au Tableau de Bord", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
-
-class BackView(ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(ui.Button(label="⬅️ Retour au Tableau de Bord", style=discord.ButtonStyle.grey, custom_id="nav_main_menu"))
 
 # --- COG ---
 class MainEmbed(commands.Cog):
@@ -73,29 +73,25 @@ class MainEmbed(commands.Cog):
     def generate_dashboard_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         asset_cog = self.bot.get_cog("AssetManager")
-
-        # Définir l'image et la couleur
         image_name = "neutral"
         if player.stress > 70 or player.hunger > 70 or player.health < 40:
             image_name = "sad"
             embed.color = 0xe74c3c
         image_url = asset_cog.get_url(image_name) if asset_cog else None
         if image_url: embed.set_image(url=image_url)
+        embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
-        # La nouvelle description dynamique
-        thoughts = self.get_character_thoughts(player)
-        embed.description = f"**Pensées du Cuisinier :**\n*\"{thoughts}\"*"
-
-        # --- Affichage des stats sous l'image ---
-        phys_health = (f"**Santé:** {generate_progress_bar(player.health, False)} `{player.health:.0f}%`\n" f"**Énergie:** {generate_progress_bar(player.energy, False)} `{player.energy:.0f}%`\n" f"**Fatigue:** {generate_progress_bar(player.fatigue, True)} `{player.fatigue:.0f}%`\n" f"**Toxines:** {generate_progress_bar(player.tox, True)} `{player.tox:.0f}%`")
+        # ======================================== CORRECTION CI-DESSOUS ========================================
+        phys_health = (f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n" f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n" f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n" f"**Toxines:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.0f}%`")
         embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=True)
-        mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, True)} `{player.boredom:.0f}%`")
+        mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
         embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
         embed.add_field(name="\u200b", value="\u200b", inline=False)
-        symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, True)} `{player.dizziness:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, True)} `{player.sore_throat:.0f}%`")
+        symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`")
         embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
-        addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, True)}`{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, True)} `{player.intoxication_level:.1f}%`")
+        addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)}`{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
         embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
+        # ======================================================================================================
 
         embed.set_footer(text=f"Jeu sur le serveur {guild.name} • Dernière mise à jour :")
         embed.timestamp = datetime.datetime.utcnow()
