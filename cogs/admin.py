@@ -524,13 +524,15 @@ class AdminCog(commands.Cog):
                         # ===== FIN DE L'AJOUT =====
                         db.add(player)
                     
+                    state.is_test_mode = False # Assure que c'est une partie normale
                     state.game_started = True
                     state.game_start_time = datetime.datetime.utcnow()
                     db.commit()
                     db.refresh(player)
                     db.refresh(state)
 
-                    game_embed = main_embed_cog.generate_dashboard_embed(player, interaction.guild)
+                    # --- CORRECTION: L'appel ici doit aussi passer 'state' ---
+                    game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
                     game_view = MainMenuView()
                     game_message = await game_channel.send(embed=game_embed, view=game_view)
                     
