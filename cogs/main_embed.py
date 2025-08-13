@@ -78,7 +78,7 @@ class MainEmbed(commands.Cog):
         if player.boredom > 60: return "Je m'ennuie... il ne se passe jamais rien."
         return "Pour l'instant, ça va à peu près."
 
-    def generate_dashboard_embed(self, player: PlayerProfile, guild: discord.Guild, show_stats: bool = False) -> discord.Embed:
+    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, show_stats: bool = False) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         
         asset_cog = self.bot.get_cog("AssetManager")
