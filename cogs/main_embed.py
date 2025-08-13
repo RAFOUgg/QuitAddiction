@@ -1,4 +1,4 @@
-# --- cogs/main_embed.py (FINAL VERSION WITH NEW UI) ---
+# --- cogs/main_embed.py (FINAL VERSION WITH VISUAL UPGRADES) ---
 
 import discord
 from discord.ext import commands
@@ -6,16 +6,27 @@ from discord import ui
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import datetime
-from .phone import PhoneMainView 
-from utils.helpers import clamp, format_time_delta # Assurez-vous d'avoir ce fichier
+import asyncio
 
-def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 10) -> str:
+from .phone import PhoneMainView 
+from utils.helpers import clamp, format_time_delta
+
+def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 10, high_is_bad: bool = False) -> str:
+    """Génère une barre de progression textuelle et colorée."""
     if not isinstance(value, (int, float)): value = 0.0
-    if value < 0: value = 0.0
-    if value > max_value: value = max_value
+    value = clamp(value, 0, max_value)
+    
     percent = value / max_value
     filled_length = int(length * percent)
-    bar_filled = '🟩'
+    
+    # Déterminer la couleur en fonction du pourcentage et du type de jauge
+    if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3):
+        bar_filled = '🟥' # Rouge pour un état critique
+    elif (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6):
+        bar_filled = '🟧' # Orange pour un état moyen
+    else:
+        bar_filled = '🟩' # Vert pour un bon état
+        
     bar_empty = '⬛'
     return f"`{bar_filled * filled_length}{bar_empty * (length - filled_length)}`"
 
@@ -83,21 +94,43 @@ class MainEmbed(commands.Cog):
         return embed
 
     def generate_stats_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
+        """Génère l'embed détaillé et réorganisé des statistiques avec les nouvelles jauges."""
         embed = self.get_base_embed(player, guild)
         embed.description = "Aperçu de l'état de santé physique et mental du cuisinier."
         
-        phys_health = (f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`\n" f"**Énergie:** {generate_progress_bar(player.energy)} `{player.energy:.0f}%`\n" f"**Fatigue:** {generate_progress_bar(player.fatigue)} `{player.fatigue:.0f}%`\n" f"**Toxines:** {generate_progress_bar(player.tox)} `{player.tox:.0f}%`")
+        phys_health = (
+            f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n"
+            f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n"
+            f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n"
+            f"**Toxines:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.0f}%`"
+        )
         embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=True)
 
-        mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom)} `{player.boredom:.0f}%`")
+        mental_health = (
+            f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n"
+            f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
+            f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
+            f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`"
+        )
         embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
         
         embed.add_field(name="\u200b", value="\u200b", inline=False) 
 
-        symptoms = (f"**Douleur:** {generate_progress_bar(player.pain)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness)} `{player.dizziness:.0f}%`\n" f"**Mal de Tête:** {generate_progress_bar(player.headache)} `{player.headache:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat)} `{player.sore_throat:.0f}%`\n" f"**Bouche Sèche:** {generate_progress_bar(player.dry_mouth)} `{player.dry_mouth:.0f}%`")
+        symptoms = (
+            f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n"
+            f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n"
+            f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n"
+            f"**Mal de Tête:** {generate_progress_bar(player.headache, high_is_bad=True)} `{player.headache:.0f}%`\n"
+            f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`\n"
+            f"**Bouche Sèche:** {generate_progress_bar(player.dry_mouth, high_is_bad=True)} `{player.dry_mouth:.0f}%`"
+        )
         embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
         
-        addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level)} `{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level)} `{player.intoxication_level:.1f}%`")
+        addiction = (
+            f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n"
+            f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n"
+            f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`"
+        )
         embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
         
         return embed
@@ -133,48 +166,54 @@ class MainEmbed(commands.Cog):
                 
                 message = ""
                 
-                # ================================================================= #
-                # ===         CAS SPÉCIAL POUR L'ACTION DE FUMER                === #
-                # ================================================================= #
+                # --- CAS SPÉCIAL POUR L'ACTION DE FUMER ---
                 if custom_id == "action_smoke":
-                    # L'action est effectuée sur le personnage
                     message = cooker_brain.perform_smoke(player)
                     db.commit(); db.refresh(player)
-
                     asset_cog = self.bot.get_cog("AssetManager")
                     smoking_image_url = asset_cog.get_url("smoke_cig") if asset_cog else None
-
-                    # 1. AFFICHER L'ÉTAT "EN TRAIN DE FUMER"
                     if smoking_image_url:
-                        # On crée un embed spécial pour cet état
                         smoking_embed = self.get_base_embed(player, interaction.guild)
-                        smoking_embed.set_image(url=smoking_image_url) # On force l'image de la cigarette
+                        smoking_embed.set_image(url=smoking_image_url)
                         smoking_embed.description = "Le cuisinier prend une pause cigarette..."
                         await interaction.edit_original_response(embed=smoking_embed, view=ActionsView(player))
-                    
-                    # On envoie la confirmation de l'action
                     await interaction.followup.send(f"✅ {message}", ephemeral=True)
-                    
-                    # 2. FAIRE UNE PAUSE DE QUELQUES SECONDES
                     await asyncio.sleep(7)
-
-                    # 3. REVENIR À L'ÉTAT NORMAL
-                    # On s'assure que les données sont à jour au cas où le scheduler aurait tourné
                     db.refresh(player) 
                     final_embed = self.generate_main_embed(player, interaction.guild)
-                    # On met à jour le message pour revenir à l'image normale (neutral ou sad)
+                    await interaction.edit_original_response(embed=final_embed, view=ActionsView(player))
+
+                # --- NOUVEAU CAS SPÉCIAL POUR L'ACTION DE BOIRE ---
+                elif custom_id == "action_drink":
+                    message = cooker_brain.perform_drink(player)
+                    db.commit(); db.refresh(player)
+                    asset_cog = self.bot.get_cog("AssetManager")
+                    
+                    # Choisir l'image de boisson en fonction de l'état du joueur
+                    is_sad = player.stress > 70 or player.hunger > 70 or player.health < 40
+                    drink_image_name = "sad_drinking" if is_sad else "neutral_drinking"
+                    drinking_image_url = asset_cog.get_url(drink_image_name) if asset_cog else None
+
+                    if drinking_image_url:
+                        drinking_embed = self.get_base_embed(player, interaction.guild)
+                        drinking_embed.set_image(url=drinking_image_url)
+                        drinking_embed.description = "Il s'hydrate..."
+                        await interaction.edit_original_response(embed=drinking_embed, view=ActionsView(player))
+                    
+                    await interaction.followup.send(f"✅ {message}", ephemeral=True)
+                    await asyncio.sleep(5)
+                    db.refresh(player)
+                    final_embed = self.generate_main_embed(player, interaction.guild)
                     await interaction.edit_original_response(embed=final_embed, view=ActionsView(player))
 
                 # --- CAS GÉNÉRAL POUR LES AUTRES ACTIONS ---
                 else:
                     if custom_id == "action_eat": message = cooker_brain.perform_eat(player)
-                    elif custom_id == "action_drink": message = cooker_brain.perform_drink(player)
                     elif custom_id == "action_sleep": message = cooker_brain.perform_sleep(player)
                     elif custom_id == "action_urinate": message = cooker_brain.perform_urinate(player)
                     
                     if message:
                         db.commit(); db.refresh(player)
-                        
                         new_embed = self.generate_main_embed(player, interaction.guild)
                         await interaction.edit_original_response(embed=new_embed, view=ActionsView(player))
                         await interaction.followup.send(f"✅ {message}", ephemeral=True)
