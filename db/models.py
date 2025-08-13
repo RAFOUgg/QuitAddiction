@@ -24,6 +24,7 @@ class ServerState(Base):
     degradation_rate_stress = Column(Float, default=3.0)
     degradation_rate_boredom = Column(Float, default=7.0)
     notify_on_low_vital_stat = Column(Boolean, default=True)
+    is_test_mode = Column(Boolean, default=False)
 
 class PlayerProfile(Base):
     __tablename__ = "player_profile"
@@ -83,6 +84,9 @@ class PlayerProfile(Base):
     # --- Flags Narratifs ---
     has_unlocked_joints = Column(Boolean, default=False)
 
+    # --- NOUVEAU CHAMP ---
+    recent_logs = Column(Text, default="")
+    
     __table_args__ = (UniqueConstraint('guild_id', name='uq_guild_player'),)
 
 
