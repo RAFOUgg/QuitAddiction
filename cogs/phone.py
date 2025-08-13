@@ -1,15 +1,16 @@
-# --- cogs/phone.py (IMPLEMENTED WITH SHOP LOGIC) ---
+# --- cogs/phone.py (FINAL - BACK BUTTON FIX) ---
 import discord
 from discord.ext import commands
 from discord import ui
 from db.database import SessionLocal
 from db.models import PlayerProfile
+import traceback
 
 # --- La Vue du Menu Principal du Téléphone ---
 class PhoneMainView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(ui.Button(label="💬 SMS", style=discord.ButtonStyle.green, custom_id="phone_sms"))
+        self.add_item(ui.Button(label="💬 SMS", style=discord.ButtonStyle.green, custom_id="phone_sms", disabled=True)) # SMS désactivé pour l'instant
         self.add_item(ui.Button(label="🛍️ Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop"))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu"))
 
@@ -17,12 +18,13 @@ class PhoneMainView(ui.View):
 class ShopView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
-        # Les boutons sont désactivés si le joueur n'a pas assez d'argent
         self.add_item(ui.Button(label="Acheter Cigarettes (5$) [x10]", style=discord.ButtonStyle.secondary, custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5), emoji="🚬"))
         self.add_item(ui.Button(label="Acheter Bière (3$) [x1]", style=discord.ButtonStyle.blurple, custom_id="shop_buy_beer", disabled=(player.wallet < 3), emoji="🍺"))
         self.add_item(ui.Button(label="Acheter Eau (1$) [x1]", style=discord.ButtonStyle.primary, custom_id="shop_buy_water", disabled=(player.wallet < 1), emoji="💧"))
         self.add_item(ui.Button(label="Acheter Nourriture (4$) [x1]", style=discord.ButtonStyle.success, custom_id="shop_buy_food", disabled=(player.wallet < 4), emoji="🍔"))
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone_main", row=1))
+        # --- CORRECTION ---
+        # Le bouton retour ramène bien au menu principal du téléphone
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=1))
 
 
 class Phone(commands.Cog):
@@ -41,7 +43,10 @@ class Phone(commands.Cog):
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return
         custom_id = interaction.data["custom_id"]
-        if not custom_id.startswith("phone_") and not custom_id.startswith("shop_buy_"): return
+        # --- CORRECTION ---
+        # On écoute maintenant aussi 'nav_phone' pour le bouton retour de la boutique
+        if not (custom_id.startswith("phone_") or custom_id.startswith("shop_buy_") or custom_id == "nav_phone"):
+            return
 
         await interaction.response.defer()
         db = SessionLocal()
@@ -49,12 +54,21 @@ class Phone(commands.Cog):
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player: return
 
-            # --- Navigation vers la boutique ---
+            # --- CORRECTION ---
+            # 'nav_phone' est maintenant géré ici pour retourner au menu du tel
+            if custom_id == "nav_phone":
+                main_embed_cog = self.bot.get_cog("MainEmbed")
+                if not main_embed_cog: return
+                
+                embed = main_embed_cog.generate_dashboard_embed(player, interaction.guild, show_stats=False)
+                embed.description = "Vous ouvrez votre téléphone."
+                await interaction.edit_original_response(embed=embed, view=PhoneMainView())
+                return
+
             if custom_id == "phone_shop":
                 embed = self.generate_shop_embed(player)
                 await interaction.edit_original_response(embed=embed, view=ShopView(player))
             
-            # --- Logique d'achat ---
             elif custom_id.startswith("shop_buy_"):
                 message = "Transaction échouée."
                 if custom_id == "shop_buy_cigarettes" and player.wallet >= 5:
@@ -69,10 +83,14 @@ class Phone(commands.Cog):
                 db.commit(); db.refresh(player)
                 await interaction.followup.send(f"🛍️ {message}", ephemeral=True)
                 
-                # Mettre à jour l'affichage de la boutique
                 new_embed = self.generate_shop_embed(player)
                 await interaction.edit_original_response(embed=new_embed, view=ShopView(player))
 
+        except Exception as e:
+            print(f"Erreur dans le listener d'interaction de Phone: {e}\n{traceback.format_exc()}")
+            if not interaction.response.is_done():
+                await interaction.followup.send("Une erreur est survenue.", ephemeral=True)
+            db.rollback()
         finally:
             db.close()
 
