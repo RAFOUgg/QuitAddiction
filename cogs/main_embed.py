@@ -8,7 +8,6 @@ from db.models import ServerState, PlayerProfile
 import datetime
 import asyncio
 import traceback
-from .admin import AdminCog
 from .phone import PhoneMainView
 from utils.helpers import clamp, format_time_delta
 
@@ -92,27 +91,27 @@ class MainEmbed(commands.Cog):
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
         if state and state.is_test_mode and state.game_start_time:
-            now = datetime.datetime.utcnow()
-            elapsed_time = now - state.game_start_time
-            elapsed_seconds = elapsed_time.total_seconds()
-            
-            # Formatter le temps écoulé
-            minutes, seconds = divmod(int(elapsed_seconds), 60)
-            elapsed_str = f"{minutes:02d}:{seconds:02d}"
+            admin_cog = self.bot.get_cog("AdminCog")
+            if admin_cog:
+                now = datetime.datetime.utcnow()
+                elapsed_time = now - state.game_start_time
+                elapsed_seconds = elapsed_time.total_seconds()
+                
+                minutes, seconds = divmod(int(elapsed_seconds), 60)
+                elapsed_str = f"{minutes:02d}:{seconds:02d}"
 
-            # Barre de progression du test (20 minutes)
-            test_total_seconds = AdminCog.TEST_DURATION_MINUTES * 60
-            progress_percent = (elapsed_seconds / test_total_seconds) * 100
-            progress_bar = generate_progress_bar(progress_percent, 100, length=20)
-            
-            logs = player.recent_logs if player.recent_logs else "No autonomous actions yet."
+                test_total_seconds = admin_cog.TEST_DURATION_MINUTES * 60
+                progress_percent = (elapsed_seconds / test_total_seconds) * 100
+                progress_bar = generate_progress_bar(progress_percent, 100, length=20)
+                
+                logs = player.recent_logs if player.recent_logs else "No autonomous actions yet."
 
-            debug_info = (
-                f"**Temps Écoulé:** `{elapsed_str}` / `{AdminCog.TEST_DURATION_MINUTES}:00`\n"
-                f"**Progression:** {progress_bar}\n"
-                f"**Logs Autonomes:**\n```\n{logs}\n```"
-            )
-            embed.add_field(name="📊 Test-Mode Monitoring", value=debug_info, inline=False)
+                debug_info = (
+                    f"**Temps Écoulé:** `{elapsed_str}` / `{admin_cog.TEST_DURATION_MINUTES}:00`\n"
+                    f"**Progression:** {progress_bar}\n"
+                    f"**Logs Autonomes:**\n```\n{logs}\n```"
+                )
+                embed.add_field(name="📊 Test-Mode Monitoring", value=debug_info, inline=False)
 
         if show_stats:
             if image_url:
