@@ -8,7 +8,7 @@ from db.models import ServerState, PlayerProfile
 import datetime
 import asyncio
 import traceback
-
+from .admin import AdminCog
 from .phone import PhoneMainView
 from utils.helpers import clamp, format_time_delta
 
@@ -216,14 +216,14 @@ class MainEmbed(commands.Cog):
                     action_image_url = asset_cog.get_url(action_image_map.get(image_key)) if asset_cog else None
                     
                     if action_image_url:
-                        animated_embed = self.generate_dashboard_embed(player, interaction.guild, show_stats=True)
+                        animated_embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=True)
                         animated_embed.set_image(url=action_image_url)
                         animated_embed.set_thumbnail(url=None)
                         await interaction.edit_original_response(embed=animated_embed, view=current_view)
                         await asyncio.sleep(5)
                 
                 db.refresh(player)
-                final_embed = self.generate_dashboard_embed(player, interaction.guild, show_stats=True)
+                final_embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=True)
                 final_view = ActionsView(player)
                 await interaction.edit_original_response(embed=final_embed, view=final_view)
 

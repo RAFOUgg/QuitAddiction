@@ -1,4 +1,4 @@
-# --- bot.py (CORRECTED) ---
+# --- bot.py (CORRECTED STRUCTURE) ---
 import discord
 from discord.ext import commands
 import os
@@ -23,35 +23,50 @@ class QuitAddictionBot(commands.Bot):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
         logger.info('------')
         
-        # --- NOUVEAU BLOC : Lancement des tâches post-démarrage ---
         asset_cog = self.get_cog("AssetManager")
         if asset_cog:
             await asset_cog.initialize_assets()
-        # --- FIN DU NOUVEAU BLOC ---
+        else:
+            logger.warning("AssetManager cog not found after setup, cannot initialize assets.")
 
     async def setup_hook(self):
-        logger.info("Initializing database from setup_hook...")
-        init_db()
-        logger.info("Database initialization check complete.")
+        # --- MODIFICATION CLÉ ---
+        # 1. Initialiser la DB en premier. Si ça échoue ici, le bot ne démarrera pas, ce qui est bien.
+        logger.info("--- Initializing Database ---")
+        try:
+            init_db()
+            logger.info("✅ Database initialization check complete.")
+        except Exception as e:
+            logger.critical(f"❌ CRITICAL: FAILED TO INITIALIZE DATABASE. SHUTTING DOWN. Error: {e}", exc_info=True)
+            await self.close() # Empêche le bot de démarrer sans DB
+            return
 
-        # Charger les cogs
+        # 2. Charger les cogs APRÈS l'initialisation de la DB.
+        logger.info("--- Loading Cogs ---")
         for filename in os.listdir(f'./{COGS_DIR}'):
-            if filename.endswith('.py') and not filename.startswith('__') and filename != 'actions.py':
+            # J'exclus les fichiers non-cogs pour être propre
+            if filename.endswith('.py') and not filename.startswith('__'):
                 try:
                     await self.load_extension(f'{COGS_DIR}.{filename[:-3]}')
                     logger.info(f'✅ Cog loaded: {filename}')
+                except commands.errors.NoEntryPointError:
+                    logger.warning(f"⚠️  Skipping {filename}: Not a valid cog (missing setup function).")
                 except Exception as e:
                     logger.error(f'❌ Failed to load cog {filename}: {type(e).__name__} - {e}', exc_info=True)
         
-        # Synchroniser les commandes
-        if self.test_guild:
-            logger.info(f"Syncing commands to test guild: {self.test_guild.id}")
-            self.tree.copy_global_to(guild=self.test_guild)
-            await self.tree.sync(guild=self.test_guild)
-            logger.info("Commands synced to test guild.")
-        else:
-            await self.tree.sync()
-            logger.info("Global slash commands synced.")
+        # 3. Synchroniser les commandes
+        logger.info("--- Syncing Commands ---")
+        try:
+            if self.test_guild:
+                logger.info(f"Syncing commands to test guild: {self.test_guild.id}")
+                self.tree.copy_global_to(guild=self.test_guild)
+                await self.tree.sync(guild=self.test_guild)
+                logger.info("✅ Commands synced to test guild.")
+            else:
+                await self.tree.sync()
+                logger.info("✅ Global slash commands synced.")
+        except Exception as e:
+            logger.error(f"❌ Command sync failed: {e}", exc_info=True)
 
 async def main():
     bot = QuitAddictionBot()
