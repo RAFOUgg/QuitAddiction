@@ -1,4 +1,4 @@
-# --- cogs/main_embed.py (FINAL VERSION - IMAGE LOGIC COMPLETE) ---
+# --- cogs/main_embed.py (FINAL VERSION - GRID LAYOUT) ---
 
 import discord
 from discord.ext import commands
@@ -99,37 +99,24 @@ class MainEmbed(commands.Cog):
         self.bot = bot
 
     def get_image_url(self, player: PlayerProfile) -> str | None:
-        asset_cog = self.bot.get_cog("AssetManager")
+        # ... (code inchangé) ...
+        asset_cog = self.bot.get_cog("AssetManager"); now = datetime.datetime.utcnow()
         if not asset_cog: return None
-        now = datetime.datetime.utcnow()
-        
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
-        
-        if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
-             return asset_cog.get_url(player.last_action)
-        
-        # --- LOGIQUE D'IMAGE COMPLÈTE ET HIÉRARCHISÉE ---
-        image_name = "neutral" # Par défaut
-        
-        # Urgences et états critiques
+        if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown): return asset_cog.get_url(player.last_action)
+        image_name = "neutral"
         if player.bladder >= 99: image_name = "peed"
         elif player.happiness < 10 and player.stress > 80: image_name = "sob"
-        # Besoins pressants
         elif player.bowels > 85: image_name = "neutral_pooping"
         elif player.bladder > 85: image_name = "need_pee"
         elif player.hunger > 85: image_name = "hungry"
         elif player.fatigue > 90: image_name = "neutral_sleep"
-        # Symptômes et malaises
         elif player.withdrawal_severity > 60: image_name = "neutral_hold_e_cig"
         elif player.headache > 70: image_name = "scratch_eye"
         elif player.stomachache > 70: image_name = "hand_stomach"
-        # NOUVEAU: Santé mentale basse
         elif player.sanity < 40: image_name = "confused"
-        # États émotionnels négatifs
         elif player.stress > 70 or player.health < 40: image_name = "sad"
-        # Autres
         elif player.hygiene < 20: image_name = "neutral_shower"
-        
         return asset_cog.get_url(image_name)
 
     @staticmethod
@@ -144,50 +131,68 @@ class MainEmbed(commands.Cog):
         return "Pour l'instant, ça va à peu près."
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
-        # ... (code inchangé) ...
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         if image_url := self.get_image_url(player):
             embed.set_image(url=image_url)
+
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
+
         if player.show_inventory_in_view:
+            # ... (code de l'inventaire inchangé) ...
             inventory_items = [("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"), ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"), ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")]
             inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items if getattr(player, attr, 0) > 0]
             if inventory_list:
                 mid_point = len(inventory_list) // 2 + (len(inventory_list) % 2)
-                col1 = "\n".join(inventory_list[:mid_point])
-                col2 = "\n".join(inventory_list[mid_point:])
+                col1 = "\n".join(inventory_list[:mid_point]); col2 = "\n".join(inventory_list[mid_point:])
                 embed.add_field(name="🎒 Inventaire", value=col1, inline=True)
                 if col2: embed.add_field(name="\u200b", value=col2, inline=True)
             else:
                  embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
+
+        # --- VUE "CERVEAU" AVEC MISE EN PAGE SUR 2 LIGNES PARFAITEMENT ALIGNÉE ---
         if player.show_stats_in_view:
-            def stat_line(name: str, value: float, high_is_bad: bool):
-                return f"`{name:<11}` {generate_progress_bar(value, high_is_bad=high_is_bad)} `{int(value):>3}%`"
-            col1_title = "🧬 Physique & Besoins"; col1_text = (f"{stat_line('Santé', player.health, False)}\n{stat_line('Énergie', player.energy, False)}\n{stat_line('Hygiène', player.hygiene, False)}\n{stat_line('Fatigue', player.fatigue, True)}\n{stat_line('Faim', player.hunger, True)}\n{stat_line('Soif', player.thirst, True)}"); embed.add_field(name=col1_title, value=col1_text, inline=True)
-            col2_title = "🧠 Mental & Émotions"; col2_text = (f"{stat_line('Humeur', player.happiness, False)}\n{stat_line('Stress', player.stress, True)}\n{stat_line('Volonté', player.willpower, False)}\n{stat_line('S. Mentale', player.sanity, False)}\n{stat_line('Culpabilité', player.guilt, True)}\n{stat_line('Ennui', player.boredom, True)}"); embed.add_field(name=col2_title, value=col2_text, inline=True)
-            cravings = { "Nico": player.craving_nicotine, "Alco": player.craving_alcohol, "Weed": player.craving_cannabis }; dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1]); envie_text = f"{stat_line(f'Envie', dominant_craving_val, True)}"; col3_title = "🚬 Addiction & Symptômes"; col3_text = (f"{stat_line('Dépendance', player.substance_addiction_level, True)}\n{stat_line('Sevrage', player.withdrawal_severity, True)}\n{envie_text}\n{stat_line('Toxine', player.tox, True)}\n{stat_line('Douleur', player.pain, True)}\n{stat_line('Nausée', player.nausea, True)}"); embed.add_field(name=col3_title, value=col3_text, inline=True)
+            # Helper pour générer la ligne de stat + barre
+            def stat_value_and_bar(value: float, high_is_bad: bool):
+                return f"`{int(value)}%`\n{generate_progress_bar(value, high_is_bad=high_is_bad)}"
+            
+            # Titres des colonnes - on utilise un espace insécable pour qu'ils prennent de la place
+            embed.add_field(name="**🧬 Physique & Besoins**", value="\u200b", inline=True)
+            embed.add_field(name="**🧠 Mental & Émotions**", value="\u200b", inline=True)
+            embed.add_field(name="**🚬 Addiction & Symptômes**", value="\u200b", inline=True)
+
+            # Création de la grille de stats
+            stats_layout = [
+                [('Santé', player.health, False),       ('Humeur', player.happiness, False),     ('Dépendance', player.substance_addiction_level, True)],
+                [('Énergie', player.energy, False),       ('Stress', player.stress, True),         ('Sevrage', player.withdrawal_severity, True)],
+                [('Hygiène', player.hygiene, False),     ('Volonté', player.willpower, False),      ('Envie', max(player.craving_nicotine, player.craving_alcohol, player.craving_cannabis), True)],
+                [('Fatigue', player.fatigue, True),       ('S. Mentale', player.sanity, False),    ('Toxine', player.tox, True)],
+                [('Faim', player.hunger, True),         ('Culpabilité', player.guilt, True),     ('Douleur', player.pain, True)],
+                [('Soif', player.thirst, True),         ('Ennui', player.boredom, True),         ('Nausée', player.nausea, True)],
+            ]
+
+            for row in stats_layout:
+                for stat_name, stat_value, is_bad in row:
+                    embed.add_field(name=stat_name, value=stat_value_and_bar(stat_value, is_bad), inline=True)
+
         embed.set_footer(text=f"Jeu sur {guild.name}"); embed.timestamp = datetime.datetime.utcnow()
         return embed
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
+        # ... (code du listener inchangé, il est déjà correct) ...
         if not interaction.data or "custom_id" not in interaction.data: return
         db = SessionLocal()
         try:
             if interaction.message is None:
-                db.close()
-                return
+                db.close(); return
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
             if not state or not state.game_message_id or interaction.message.id != state.game_message_id:
-                db.close()
-                return
-
+                db.close(); return
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player:
                 if not interaction.response.is_done(): await interaction.response.send_message("Erreur: Profil de joueur introuvable.", ephemeral=True)
                 return
-            
             custom_id = interaction.data["custom_id"]
             phone_cog = self.bot.get_cog("Phone")
             if custom_id == "phone_open":
@@ -197,16 +202,13 @@ class MainEmbed(commands.Cog):
             if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                  await phone_cog.handle_interaction(interaction, db, player, state, self)
                  return
-
             if not interaction.response.is_done(): await interaction.response.defer()
-            
             if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"]:
                 if custom_id == "nav_toggle_stats": player.show_stats_in_view = not player.show_stats_in_view
                 elif custom_id == "nav_toggle_inventory": player.show_inventory_in_view = not player.show_inventory_in_view
                 db.commit()
                 await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView(player))
                 return
-            
             if custom_id == "nav_actions":
                 await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=ActionsView(player))
                 return
@@ -214,7 +216,6 @@ class MainEmbed(commands.Cog):
                 views = {"action_eat_menu": EatView, "action_drink_menu": DrinkView, "action_smoke_menu": SmokeView}
                 await interaction.edit_original_response(view=views[custom_id](player))
                 return
-            
             cooker_brain = self.bot.get_cog("CookerBrain")
             action_map = { "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint, "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower, "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate, "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda, "eat_sandwich": cooker_brain.perform_eat_sandwich, "eat_tacos": cooker_brain.use_tacos, "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette, "smoke_ecigarette": cooker_brain.use_ecigarette }
             if custom_id in action_map:
@@ -224,7 +225,6 @@ class MainEmbed(commands.Cog):
                     await interaction.followup.send(f"✅ {message}", ephemeral=True)
                 else:
                     await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
-                
                 db.commit()
                 await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView(player))
                 return
