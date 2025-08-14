@@ -162,7 +162,7 @@ class MainEmbed(commands.Cog):
             if player.show_stats_in_view:
                 embed.set_thumbnail(url=image_url)
 
-        embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\""*
+        embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
         if state and state.is_test_mode and state.game_start_time:
             admin_cog = self.bot.get_cog("AdminCog")
