@@ -444,8 +444,12 @@ class AdminCog(commands.Cog):
             db.refresh(state)
 
             # L'appel ici est correct car il utilise la méthode du cog.
-            game_view = DashboardView(show_stats=True, image_hidden=False)
-            game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild, game_view)
+            player.show_stats_in_view = True
+            player.image_hidden_in_view = False
+            db.commit()
+            db.refresh(player)
+            game_view = DashboardView(player)
+            game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
             
             game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
             game_message = await game_channel.send(content="**--- DÉBUT DE LA JOURNÉE DE TEST ACCÉLÉRÉE ---**", embed=game_embed, view=game_view)
@@ -531,7 +535,7 @@ class AdminCog(commands.Cog):
                     db.refresh(state)
 
                     game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
-                    game_view = DashboardView()
+                    game_view = DashboardView(player)
                     game_message = await game_channel.send(embed=game_embed, view=game_view)
                     
                     state.game_message_id = game_message.id

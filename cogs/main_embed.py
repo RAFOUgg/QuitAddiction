@@ -24,28 +24,24 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
 class DashboardView(ui.View):
     """
     La vue principale et unifiée du tableau de bord.
-    Elle gère son propre état (stats visibles, image cachée).
+    Elle lit son état depuis l'objet PlayerProfile.
     """
-    def __init__(self, show_stats: bool = False, image_hidden: bool = False):
+    def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
-        self.show_stats = show_stats
-        self.image_hidden = image_hidden
-        self.update_buttons()
+        self.update_buttons(player)
 
-    def update_buttons(self):
-        """Met à jour les boutons en fonction de l'état actuel de la vue."""
+    def update_buttons(self, player: PlayerProfile):
+        """Met à jour les boutons en fonction de l'état du joueur."""
         self.clear_items()
         self.add_item(ui.Button(label="🏃‍♂️ Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions"))
         self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
         self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
 
-        # Bouton pour afficher/cacher les stats (le "cerveau")
-        stats_label = "Cacher Cerveau" if self.show_stats else "Afficher Cerveau"
-        stats_style = discord.ButtonStyle.success if self.show_stats else discord.ButtonStyle.secondary
+        stats_label = "Cacher Cerveau" if player.show_stats_in_view else "Afficher Cerveau"
+        stats_style = discord.ButtonStyle.success if player.show_stats_in_view else discord.ButtonStyle.secondary
         self.add_item(ui.Button(label=stats_label, style=stats_style, custom_id="nav_toggle_stats", row=1, emoji="🧠"))
 
-        # Bouton pour afficher/cacher l'image
-        image_label = "Afficher Image" if self.image_hidden else "Cacher Image"
+        image_label = "Afficher Image" if player.image_hidden_in_view else "Cacher Image"
         self.add_item(ui.Button(label=image_label, style=discord.ButtonStyle.grey, custom_id="nav_toggle_image", row=1, emoji="🖼️"))
 
 
@@ -91,8 +87,8 @@ class SmokeView(ui.View):
         super().__init__(timeout=60)
         if player.cigarettes > 0:
             self.add_item(ui.Button(label=f"Fumer Cigarette ({player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
-        if player.ecigarettes > 0:
-            self.add_item(ui.Button(label=f"Vapoter ({player.ecigarettes})", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
+        if player.e_cigarettes > 0:
+            self.add_item(ui.Button(label=f"Vapoter ({player.e_cigarettes})", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
         
 class InventoryView(ui.View):
@@ -105,9 +101,6 @@ class InventoryView(ui.View):
 class MainEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Enregistrement des vues persistantes pour qu'elles fonctionnent après un redémarrage
-        self.bot.add_view(DashboardView())
-        self.bot.add_view(InventoryView())
 
     @staticmethod
     def get_character_thoughts(player: PlayerProfile) -> str:
@@ -129,7 +122,7 @@ class MainEmbed(commands.Cog):
             if condition: return text
         return "Pour l'instant, ça va à peu près."
 
-    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, view: DashboardView) -> discord.Embed:
+    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         asset_cog = self.bot.get_cog("AssetManager")
         image_name = "neutral"
@@ -138,15 +131,14 @@ class MainEmbed(commands.Cog):
         if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
             image_name = player.last_action
         else:
-            # Logique des états passifs, du plus urgent au moins urgent
             if player.stomachache > 70: image_name = "hand_stomach"
             elif player.fatigue > 85: image_name = "scratch_eye"
             elif player.stress > 70 or player.health < 40 or player.withdrawal_severity > 60: image_name = "sad"
-            elif player.craving_nicotine > 75: image_name = "neutral_hold_e_cig" # Il hésite...
+            elif player.craving_nicotine > 75: image_name = "neutral_hold_e_cig"
             
         image_url = asset_cog.get_url(image_name) if asset_cog else None
         if image_url:
-            if view.image_hidden:
+            if player.image_hidden_in_view:
                 embed.set_thumbnail(url=image_url)
             else:
                 embed.set_image(url=image_url)
@@ -156,42 +148,22 @@ class MainEmbed(commands.Cog):
         if state and state.is_test_mode and state.game_start_time:
             admin_cog = self.bot.get_cog("AdminCog")
             if admin_cog:
-                # --- Calcul de l'horloge de jeu ---
-                # Ratio : 24h de jeu (86400s) pour 20min réelles (1200s) -> ratio de 72
                 TIME_RATIO = (24 * 3600) / (admin_cog.TEST_DURATION_MINUTES * 60)
-                
                 elapsed_real_seconds = (datetime.datetime.utcnow() - state.game_start_time).total_seconds()
                 elapsed_game_seconds = elapsed_real_seconds * TIME_RATIO
-                
                 start_time_in_seconds = (state.game_day_start_hour or 8) * 3600
                 current_game_total_seconds = start_time_in_seconds + elapsed_game_seconds
-                
-                # Formatage en HH:MM
                 game_hour = int((current_game_total_seconds / 3600) % 24)
                 game_minute = int((current_game_total_seconds % 3600) / 60)
                 time_str = f"{game_hour:02d}:{game_minute:02d}"
-
-                # --- Préparation du champ de debug ---
                 progress_percent = (elapsed_real_seconds / (admin_cog.TEST_DURATION_MINUTES * 60)) * 100
                 progress_bar = generate_progress_bar(progress_percent, 100, length=20)
-                
-                # Utilise les nouveaux logs générés par chain_reactions
                 logs = player.recent_logs if player.recent_logs else "- RAS"
-
-                embed.add_field(
-                    name="🕒 Horloge de Jeu (Test)",
-                    value=f"**Jour 1 - {time_str}**",
-                    inline=False
-                )
-                
-                debug_info = (
-                    f"**Progression:** {progress_bar}\n"
-                    f"**Journal d'Événements :**\n```md\n{logs}\n```"
-                )
+                embed.add_field(name="🕒 Horloge de Jeu (Test)", value=f"**Jour 1 - {time_str}**", inline=False)
+                debug_info = (f"**Progression:** {progress_bar}\n" f"**Journal d'Événements :**\n```md\n{logs}\n```")
                 embed.add_field(name="⚙️ Moniteur de Test", value=debug_info, inline=False)
                 
-        # La vue (view) nous dit si on doit afficher les stats
-        if view.show_stats:
+        if player.show_stats_in_view:
             vital_needs = (f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
                            f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
                            f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`")
@@ -209,7 +181,7 @@ class MainEmbed(commands.Cog):
                              f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
                              f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
             embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
-            embed.add_field(name="\u200b", value="\u200b", inline=False) # Spacer
+            embed.add_field(name="\u200b", value="\u200b", inline=False)
             symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n"
                         f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n"
                         f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`")
@@ -236,45 +208,44 @@ class MainEmbed(commands.Cog):
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return
-        try:
-            await interaction.response.defer()
-        except (discord.errors.InteractionResponded, discord.errors.NotFound):
-            return
-
+        
         custom_id = interaction.data["custom_id"]
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player or not state:
-                await interaction.followup.send("Erreur: Profil ou état introuvable.", ephemeral=True)
+                await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
                 return
 
+            # Defer after basic checks
+            await interaction.response.defer()
+
             # --- GESTION DES INTERACTIONS ---
-            # Phone (logique externe)
             if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state)
                 return
 
-            # Toggle des états de la vue
-            if custom_id in ("nav_toggle_stats", "nav_toggle_image"):
-                view = interaction.message.view
-                if isinstance(view, DashboardView):
-                    if custom_id == "nav_toggle_stats":
-                        view.show_stats = not view.show_stats
-                    else: # nav_toggle_image
-                        view.image_hidden = not view.image_hidden
-                    
-                    view.update_buttons() # Met à jour les labels/styles des boutons
-                    new_embed = self.generate_dashboard_embed(player, state, interaction.guild, view)
-                    await interaction.edit_original_response(embed=new_embed, view=view)
+            if custom_id == "nav_toggle_stats":
+                player.show_stats_in_view = not player.show_stats_in_view
+                db.commit()
+                new_embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                new_view = DashboardView(player)
+                await interaction.edit_original_response(embed=new_embed, view=new_view)
                 return
 
-            # Navigation principale
+            if custom_id == "nav_toggle_image":
+                player.image_hidden_in_view = not player.image_hidden_in_view
+                db.commit()
+                new_embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                new_view = DashboardView(player)
+                await interaction.edit_original_response(embed=new_embed, view=new_view)
+                return
+
             if custom_id == "nav_main_menu":
-                view = DashboardView()
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild, view), view=view)
+                view = DashboardView(player)
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=view)
                 return
             elif custom_id == "nav_actions":
                 await interaction.edit_original_response(view=ActionsView(player))
@@ -286,7 +257,6 @@ class MainEmbed(commands.Cog):
                 await interaction.edit_original_response(view=PhoneMainView(player))
                 return
 
-            # Menus d'actions secondaires
             action_menus = {
                 "action_eat_menu": EatView(player),
                 "action_drink_menu": DrinkView(player),
@@ -296,7 +266,6 @@ class MainEmbed(commands.Cog):
                 await interaction.edit_original_response(view=action_menus[custom_id])
                 return
 
-            # Actions concrètes
             cooker_brain = self.bot.get_cog("CookerBrain")
             message = None
             action_map = {
@@ -316,11 +285,9 @@ class MainEmbed(commands.Cog):
                 db.commit()
                 await interaction.followup.send(f"✅ {message}", ephemeral=True)
                 
-                # Après l'action, on retourne au menu des actions pour voir le cooldown
-                # et l'embed principal pour voir les stats mises à jour.
-                view = DashboardView(show_stats=True) # Affiche les stats après une action
+                view = DashboardView(player)
                 await interaction.edit_original_response(
-                    embed=self.generate_dashboard_embed(player, state, interaction.guild, view),
+                    embed=self.generate_dashboard_embed(player, state, interaction.guild),
                     view=ActionsView(player)
                 )
 
@@ -332,4 +299,10 @@ class MainEmbed(commands.Cog):
             db.close()
 
 async def setup(bot):
-    await bot.add_cog(MainEmbed(bot))
+    cog = MainEmbed(bot)
+    await bot.add_cog(cog)
+    # We need to add the persistent views to the bot
+    # But DashboardView is now stateful based on the player, so we can't add a generic one.
+    # We will rely on the on_interaction listener to handle all interactions.
+    # bot.add_view(InventoryView()) # This one is stateless, it's fine.
+

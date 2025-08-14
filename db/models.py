@@ -144,6 +144,8 @@ class PlayerProfile(Base):
     # --- For image switching ---
     last_action: str = Column(String, default=None)
     last_action_time: datetime.datetime = Column(DateTime, nullable=True)
+    show_stats_in_view: bool = Column(Boolean, default=False)
+    image_hidden_in_view: bool = Column(Boolean, default=False)
 
     __table_args__ = (UniqueConstraint('guild_id', name='uq_guild_player'),)
 
