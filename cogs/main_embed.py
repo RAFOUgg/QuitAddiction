@@ -291,55 +291,43 @@ class MainEmbed(commands.Cog):
         if not interaction.data or "custom_id" not in interaction.data:
             return
 
-        # On répond immédiatement pour éviter les timeouts et les "Unknown Interaction".
-        # Cette étape est cruciale et résout le bug principal.
         try:
+            # Répondre immédiatement est la clé pour éviter le crash
             await interaction.response.defer()
         except (discord.errors.InteractionResponded, discord.errors.NotFound):
-            # Soit on a déjà répondu, soit l'interaction est trop vieille. Dans les deux cas, on ignore.
             return
             
         custom_id = interaction.data["custom_id"]
         
-        # Ouvre une seule session de DB pour toute la gestion de l'interaction
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player or not state:
-                await interaction.followup.send("Erreur: Profil ou état du serveur introuvable.", ephemeral=True)
+                await interaction.followup.send("Erreur: Profil ou état introuvable.", ephemeral=True)
                 return
 
             # --- AIGUILLAGE ---
-            # 1. L'interaction concerne le téléphone ?
             phone_cog = self.bot.get_cog("Phone")
+            # Les custom_id du téléphone sont uniques et préfixés
             if phone_cog and custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                 await phone_cog.handle_interaction(interaction, db, player, state)
-                return # L'interaction a été gérée par le cog du téléphone
+                return
 
-            # 2. L'interaction concerne le dashboard principal / les actions
             cooker_brain = self.bot.get_cog("CookerBrain")
-            
-            # --- Logique de navigation ---
+            message, changes, view_to_refresh = None, {}, None
+
+            # --- NAVIGATION PRINCIPALE ---
             if custom_id == "nav_main_menu":
-                embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                view = DashboardView()
-                await interaction.edit_original_response(embed=embed, view=view)
-
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView())
             elif custom_id == "nav_actions":
-                embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                await interaction.edit_original_response(embed=embed, view=ActionsView(player))
-
+                await interaction.edit_original_response(view=ActionsView(player))
             elif custom_id == "nav_inventory":
-                embed = self.generate_inventory_embed(player, interaction.guild)
-                await interaction.edit_original_response(embed=embed, view=InventoryView())
-            
+                await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=InventoryView())
             elif custom_id == "nav_phone":
-                embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                embed.description = "Vous ouvrez votre téléphone."
-                await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
-
-            # --- Menus d'action dynamiques ---
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=PhoneMainView(player))
+            
+            # --- MENUS D'ACTIONS SECONDAIRES ---
             elif custom_id == "action_eat_menu":
                 await interaction.edit_original_response(embed=discord.Embed(title="🍽️ Que voulez-vous manger ?"), view=EatView(player))
             elif custom_id == "action_drink_menu":
@@ -348,33 +336,30 @@ class MainEmbed(commands.Cog):
                 await interaction.edit_original_response(embed=discord.Embed(title="🚬 Que voulez-vous fumer ?"), view=SmokeView(player))
             elif custom_id == "action_poop_menu":
                 await interaction.edit_original_response(embed=discord.Embed(title="💩 Besoin pressant..."), view=PoopView(player))
-            elif custom_id.startswith("eat_") or custom_id.startswith("drink_") or custom_id.startswith("smoke_") or custom_id == "do_poop":
-                # Appelle la méthode correspondante de CookerBrain selon l'action
-                cooker_brain = self.bot.get_cog("CookerBrain")
-                # ...mapping à compléter selon les méthodes de CookerBrain...
-                # Ex: message, changes = cooker_brain.use_soup(player) etc.
-                # ...existing code...
-                pass
-            # ...autres actions...
-            # --- Actions concrètes (à compléter dans CookerBrain) ---
+
+            # --- Actions concrètes ---
             elif custom_id == "action_sleep":
-                 message, changes = cooker_brain.perform_sleep(player)
-                 db.commit()
-                 # retour au menu principal après action
-                 await interaction.followup.send(message, ephemeral=True)
-                 embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                 await interaction.edit_original_response(embed=embed, view=ActionsView(player))
-            else:
-                 await interaction.followup.send(f"Action '{custom_id}' non reconnue.", ephemeral=True)
-            
+                message, changes = cooker_brain.perform_sleep(player)
+            elif custom_id == "action_urinate":
+                message, changes = cooker_brain.perform_urinate(player)
+            elif custom_id == "smoke_cigarette":
+                message, changes = cooker_brain.perform_smoke(player)
+            elif custom_id == "eat_food":
+                 message, changes = cooker_brain.perform_eat(player)
+
+            # Si une action concrète a été effectuée
+            if message:
+                db.commit()
+                await interaction.followup.send(f"✅ {message}", ephemeral=True)
+                # Remettre à jour la vue des actions pour actualiser les cooldowns
+                await interaction.edit_original_response(view=ActionsView(player))
+
         except Exception as e:
             print(f"Erreur critique dans le listener on_interaction: {e}")
             traceback.print_exc()
-            if not interaction.is_expired():
-                await interaction.followup.send("Une erreur majeure est survenue.", ephemeral=True)
             db.rollback()
         finally:
-            db.close() # S'assure que la connexion est toujours fermée
+            db.close()
 
 async def setup(bot):
     await bot.add_cog(MainEmbed(bot))
