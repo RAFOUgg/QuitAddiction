@@ -260,8 +260,13 @@ class AdminCog(commands.Cog):
     def __init__(self, bot): self.bot = bot
     BASE_DAILY_RATES = {"hunger": 150, "thirst": 200, "bladder": 120, "stress": 40, "boredom": 200, "hygiene": 100}
     DIFFICULTY_MULTIPLIERS = {"peaceful": 0.75, "medium": 1.0, "hard": 1.5}
-    DURATION_SETTINGS = {"test_day": {"minutes_per_day": 24, "label": "Test (Jour = 24 mins)"}, "day": {"minutes_per_day": 1440, "label": "Jour (Jour = 24h)"}, "short": {"minutes_per_day": 10080, "label": "Court (Jour = 7 jours)"}, "medium": {"minutes_per_day": 20160, "label": "Moyen (Jour = 14 jours)"}, "long": {"minutes_per_day": 43200, "label": "Long (Jour = 30 jours)"}}
-
+    DURATION_SETTINGS = {
+        "test_day": {"minutes_per_day": 24,     "label": "Test (Jour = 24 mins)"},
+        "day":      {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
+        "short":    {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
+        "medium":   {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
+        "long":     {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
+    }
     def _update_game_parameters(self, state: ServerState):
         difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "day"
         multiplier = self.DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
