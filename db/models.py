@@ -127,6 +127,7 @@ class PlayerProfile(Base):
     last_action_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     last_action: Optional[str] = Column(String, nullable=True)
     last_action_time: Optional[datetime.datetime] = Column(DateTime, nullable=True)
+    action_cooldown_end_time: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     #... (autres timestamps)
     last_eaten_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     last_drank_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
