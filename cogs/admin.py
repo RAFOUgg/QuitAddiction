@@ -298,11 +298,11 @@ class AdminCog(commands.Cog):
         difficulty = state.game_mode or "medium"
         duration_key = state.duration_key or "day"
 
-        multiplier = DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
-        duration_setting = DURATION_SETTINGS.get(duration_key, DURATION_SETTINGS["day"])
+        multiplier = self.DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
+        duration_setting = self.DURATION_SETTINGS.get(duration_key, self.DURATION_SETTINGS["day"])
         
         # Set final degradation rates
-        for rate_name, base_value in BASE_DAILY_RATES.items():
+        for rate_name, base_value in self.BASE_DAILY_RATES.items():
             final_rate = base_value * multiplier
             setattr(state, f"degradation_rate_{rate_name}", final_rate)
             
@@ -558,8 +558,8 @@ class AdminCog(commands.Cog):
         difficulty = state.game_mode or "medium"
         duration_key = state.duration_key or "day"
         
-        embed.add_field(name="Difficulté Actuelle", value=f"`{difficulty.capitalize()}` (Multiplicateur: x{DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)})", inline=False)
-        embed.add_field(name="Durée Actuelle", value=f"`{DURATION_SETTINGS.get(duration_key, {}).get('label')}`", inline=False)
+        embed.add_field(name="Difficulté Actuelle", value=f"`{difficulty.capitalize()}` (Multiplicateur: x{self.DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)})", inline=False)
+        embed.add_field(name="Durée Actuelle", value=f"`{self.DURATION_SETTINGS.get(duration_key, {}).get('label')}`", inline=False)
         
         return embed
 
@@ -572,7 +572,7 @@ class AdminCog(commands.Cog):
 
     class GameDifficultySelect(ui.Select):
         def __init__(self, guild_id: str, cog: 'AdminCog', current_difficulty: str):
-            options = [discord.SelectOption(label=f"{key.capitalize()}", value=key, default=(key == current_difficulty)) for key in DIFFICULTY_MULTIPLIERS.keys()]
+            options = [discord.SelectOption(label=f"{key.capitalize()}", value=key, default=(key == current_difficulty)) for key in self.DIFFICULTY_MULTIPLIERS.keys()]
             super().__init__(placeholder="Choisissez une difficulté...", options=options, row=0)
             self.guild_id = guild_id
             self.cog = cog
@@ -596,7 +596,7 @@ class AdminCog(commands.Cog):
 
     class GameDurationSelect(ui.Select):
         def __init__(self, guild_id: str, cog: 'AdminCog', current_duration: str):
-            options = [discord.SelectOption(label=data["label"], value=key, default=(key == current_duration)) for key, data in DURATION_SETTINGS.items()]
+            options = [discord.SelectOption(label=data["label"], value=key, default=(key == current_duration)) for key, data in self.DURATION_SETTINGS.items()]
             super().__init__(placeholder="Choisissez une durée (échelle de temps)...", options=options, row=1)
             self.guild_id = guild_id
             self.cog = cog
@@ -639,7 +639,7 @@ class AdminCog(commands.Cog):
         difficulty = state.game_mode or "medium"
         duration_key = state.duration_key or "day"
         mode_str = f"`{difficulty.capitalize()}`"
-        duration_str = f"`{DURATION_SETTINGS.get(duration_key, {}).get('label')}`"
+        duration_str = f"`{self.DURATION_SETTINGS.get(duration_key, {}).get('label')}`"
 
         embed.add_field(name="▶️ Statut Général", value=f"**Jeu:** `{'En cours' if state.game_started else 'Non démarré'}`", inline=False)
         embed.add_field(name="🕹️ Paramètres de Jeu", value=f"**Difficulté :** {mode_str}\n**Échelle de Temps :** {duration_str}", inline=False)
