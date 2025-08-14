@@ -58,6 +58,13 @@ class PlayerProfile(Base):
     happiness: float = Column(Float, default=50.0)
     boredom: float = Column(Float, default=0.0)
     
+    # --- NEW: Physical/Mental states for visuals ---
+    stomachache: float = Column(Float, default=0.0)  # Mal de ventre
+    headache: float = Column(Float, default=0.0)     # Already present, but ensure it's used
+    urge_to_pee: float = Column(Float, default=0.0)  # Envie pressante
+    craving: float = Column(Float, default=0.0)      # Envie de fumer/boire
+    # ...add more as needed...
+
     # === SECTION 4: SYMPTÔMES SPÉCIFIQUES (lié à la conso & santé) ===
     nausea: float = Column(Float, default=0.0)
     dizziness: float = Column(Float, default=0.0)
@@ -88,6 +95,17 @@ class PlayerProfile(Base):
     water_bottles: int = Column(Integer, default=2)
     food_servings: int = Column(Integer, default=1)
     joints: int = Column(Integer, default=0)
+    # --- NEW: Inventory items ---
+    soup_bowls: int = Column(Integer, default=0)
+    whisky_bottles: int = Column(Integer, default=0)
+    wine_bottles: int = Column(Integer, default=0)
+    soda_cans: int = Column(Integer, default=0)
+    salad_servings: int = Column(Integer, default=0)
+    orange_juice: int = Column(Integer, default=0)
+    vaporizer: int = Column(Integer, default=0)
+    ecigarettes: int = Column(Integer, default=0)
+    chilum: int = Column(Integer, default=0)
+    bhang: int = Column(Integer, default=0)
 
     # --- Cooldowns & Timestamps ---
     last_update: datetime.datetime = Column(DateTime, default=datetime.datetime.utcnow)
@@ -107,6 +125,10 @@ class PlayerProfile(Base):
 
     # --- Logging pour le mode test ---
     recent_logs: str = Column(Text, default="")
+
+    # --- For image switching ---
+    last_action: str = Column(String, default=None)
+    last_action_time: datetime.datetime = Column(DateTime, nullable=True)
 
     __table_args__ = (UniqueConstraint('guild_id', name='uq_guild_player'),)
 

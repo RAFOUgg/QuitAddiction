@@ -98,10 +98,27 @@ class MainEmbed(commands.Cog):
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
         asset_cog = self.bot.get_cog("AssetManager")
+        # --- NEW: Action-based image logic ---
         image_name = "neutral"
-        if player.stress > 70 or player.hunger > 70 or player.health < 40:
-            image_name = "sad"
-            embed.color = 0xe74c3c
+        now = datetime.datetime.utcnow()
+        action_image_timeout = 10  # seconds to show action image after action
+
+        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < action_image_timeout:
+            image_name = player.last_action  # e.g., "eat", "drink", "urinate", etc.
+        else:
+            # Fallback to state-based images
+            if player.stomachache > 60:
+                image_name = "stomachache"
+            elif player.headache > 60:
+                image_name = "headache"
+            elif player.urge_to_pee > 80:
+                image_name = "urge_to_pee"
+            elif player.craving > 70:
+                image_name = "craving"
+            elif player.stress > 70 or player.hunger > 70 or player.health < 40:
+                image_name = "sad"
+            # ...add more as you add images...
+
         image_url = asset_cog.get_url(image_name) if asset_cog else None
 
         if image_url:
@@ -118,19 +135,24 @@ class MainEmbed(commands.Cog):
                 now = datetime.datetime.utcnow()
                 elapsed_time = now - state.game_start_time
                 elapsed_seconds = elapsed_time.total_seconds()
-                
                 minutes, seconds = divmod(int(elapsed_seconds), 60)
                 elapsed_str = f"{minutes:02d}:{seconds:02d}"
 
                 test_total_seconds = admin_cog.TEST_DURATION_MINUTES * 60
                 progress_percent = (elapsed_seconds / test_total_seconds) * 100
                 progress_bar = generate_progress_bar(progress_percent, 100, length=20)
-                
                 logs = player.recent_logs if player.recent_logs else "No autonomous actions yet."
+
+                # --- Ajout du repère de vitesse ---
+                normal_days = 31  # Partie normale "medium"
+                normal_seconds = normal_days * 24 * 60 * 60
+                speedup = int(normal_seconds / test_total_seconds)
+                speedup_str = f"x{speedup} plus rapide qu'une partie normale de {normal_days} jours"
 
                 debug_info = (
                     f"**Temps Écoulé:** `{elapsed_str}` / `{admin_cog.TEST_DURATION_MINUTES}:00`\n"
                     f"**Progression:** {progress_bar}\n"
+                    f"**Vitesse de simulation:** `{speedup_str}`\n"
                     f"**Logs Autonomes:**\n```\n{logs}\n```"
                 )
                 embed.add_field(name="📊 Test-Mode Monitoring", value=debug_info, inline=False)
@@ -165,16 +187,34 @@ class MainEmbed(commands.Cog):
         return embed
 
     def generate_inventory_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
-        # ... (logique inchangée)
         embed = discord.Embed(title="👖 Inventaire du Cuisinier", color=0x2ecc71)
         embed.description = "Contenu de vos poches et de votre portefeuille."
-        inventory_list = (
-            f"🚬 Cigarettes: **{player.cigarettes}**\n"
-            f"🍺 Bières: **{player.beers}**\n"
-            f"💧 Bouteilles d'eau: **{player.water_bottles}**\n"
-            f"🍔 Portions de nourriture: **{player.food_servings}**\n"
-            f"🌿 Joints: **{player.joints}**"
-        )
+        # Liste des items et leur emoji/label
+        inventory_items = [
+            ("cigarettes", "🚬 Cigarettes"),
+            ("beers", "🍺 Bières"),
+            ("water_bottles", "💧 Bouteilles d'eau"),
+            ("food_servings", "🍔 Portions de nourriture"),
+            ("joints", "🌿 Joints"),
+            ("soup_bowls", "🍲 Bols de soupe"),
+            ("whisky_bottles", "🥃 Whisky"),
+            ("wine_bottles", "🍷 Vin"),
+            ("soda_cans", "🥤 Soda"),
+            ("salad_servings", "🥗 Salade"),
+            ("orange_juice", "🧃 Jus d'orange"),
+            ("vaporizer", "🌬️ Vaporisateur"),
+            ("ecigarettes", "💨 Cigarette électronique"),
+            ("chilum", "🪔 Chilum"),
+            ("bhang", "🥛 Bhang"),
+        ]
+        # Affiche uniquement les items possédés (>0)
+        inventory_list = ""
+        for attr, label in inventory_items:
+            val = getattr(player, attr, 0)
+            if isinstance(val, (int, float)) and val > 0:
+                inventory_list += f"{label}: **{val}**\n"
+        if not inventory_list:
+            inventory_list = "*Aucun objet dans l'inventaire.*"
         embed.add_field(name="Consommables", value=inventory_list, inline=True)
         embed.add_field(name="Argent", value=f"💰 **{player.wallet}$**", inline=True)
         embed.set_footer(text=f"Jeu sur le serveur {guild.name}")

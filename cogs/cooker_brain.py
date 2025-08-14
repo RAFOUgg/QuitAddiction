@@ -16,6 +16,8 @@ class CookerBrain(commands.Cog):
         player.stress = clamp(player.stress - 10, 0, 100)
         player.happiness = clamp(player.happiness + 5, 0, 100)
         player.last_shower_at = datetime.datetime.utcnow()
+        player.last_action = "shower"
+        player.last_action_time = datetime.datetime.utcnow()
         changes = {"🧼 Hygiène": "100%", "😨 Stress": "-10", "😊 Humeur": "+5"}
         return "Vous prenez une bonne douche. Ça fait du bien !", changes
     
@@ -25,6 +27,8 @@ class CookerBrain(commands.Cog):
         player.hunger = clamp(player.hunger - 50.0, 0, 100)
         player.nausea = clamp(player.nausea - 10.0, 0, 100)
         player.last_eaten_at = datetime.datetime.utcnow()
+        player.last_action = "eat"
+        player.last_action_time = datetime.datetime.utcnow()
         changes = {"🍔 Faim": "-50", "🤢 Nausée": "-10"}
         return "Vous avez mangé une portion.", changes
 
@@ -36,6 +40,8 @@ class CookerBrain(commands.Cog):
             player.thirst = clamp(player.thirst - 60.0, 0, 100)
             player.dry_mouth = clamp(player.dry_mouth - 70.0, 0, 100)
             player.last_drank_at = datetime.datetime.utcnow()
+            player.last_action = "drink"
+            player.last_action_time = datetime.datetime.utcnow()
             changes = {"💧 Soif": "-60", "👄 Bouche Sèche": "-70"}
             return "Vous avez bu une bouteille d'eau.", changes
         else:
@@ -44,6 +50,8 @@ class CookerBrain(commands.Cog):
             player.tox = clamp(player.tox + 5.0, 0, 100)
             player.intoxication_level = clamp(player.intoxication_level + 10, 0, 100)
             player.last_drank_at = datetime.datetime.utcnow()
+            player.last_action = "drink"
+            player.last_action_time = datetime.datetime.utcnow()
             changes = {"💧 Soif": "-35", "☠️ Toxines": "+5", "😵 Défonce": "+10"}
             return "À défaut d'eau, vous avez bu une bière...", changes
 
@@ -59,6 +67,8 @@ class CookerBrain(commands.Cog):
         player.health = clamp(player.health + health_gain, 0, 100)
         player.stress = clamp(player.stress - stress_loss, 0, 100)
         player.last_slept_at = datetime.datetime.utcnow()
+        player.last_action = "sleep"
+        player.last_action_time = datetime.datetime.utcnow()
         changes = {"⚡ Énergie": f"+{energy_gain:.0f}", "🥱 Fatigue": f"-{fatigue_loss:.0f}", "❤️ Santé": f"+{health_gain:.0f}", "😨 Stress": f"-{stress_loss:.0f}"}
         return f"Vous avez dormi (qualité: {sleep_quality:.0%}).", changes
 
@@ -71,6 +81,8 @@ class CookerBrain(commands.Cog):
         player.tox = clamp(player.tox + 8.0, 0, 100)
         player.dry_mouth = clamp(player.dry_mouth + 40.0, 0, 100)
         player.last_smoked_at = datetime.datetime.utcnow()
+        player.last_action = "smoke"
+        player.last_action_time = datetime.datetime.utcnow()
         changes = {"😨 Stress": "-25", "😊 Humeur": "+15", "☠️ Toxines": "+8", "👄 Bouche Sèche": "+40"}
         return "Vous avez fumé une cigarette.", changes
         
@@ -78,8 +90,35 @@ class CookerBrain(commands.Cog):
         player.bladder = 0.0
         player.pain = clamp(player.pain - 5, 0, 100)
         player.last_urinated_at = datetime.datetime.utcnow()
+        player.last_action = "urinate"
+        player.last_action_time = datetime.datetime.utcnow()
         changes = {"🚽 Vessie": "Vidée", "🤕 Douleur": "-5"}
         return "Ah... ça soulage !", changes
+
+    # --- NEW: Item use methods for new items ---
+    def use_soup(self, player: PlayerProfile) -> (str, dict):
+        if player.soup_bowls <= 0: return "Vous n'avez plus de soupe !", {}
+        player.soup_bowls -= 1
+        player.hunger = clamp(player.hunger - 30, 0, 100)
+        player.health = clamp(player.health + 5, 0, 100)
+        player.nausea = clamp(player.nausea - 5, 0, 100)
+        player.last_action = "soup"
+        player.last_action_time = datetime.datetime.utcnow()
+        changes = {"🍲 Soupe": "-1", "🍔 Faim": "-30", "❤️ Santé": "+5", "🤢 Nausée": "-5"}
+        return "Vous dégustez un bol de soupe chaude.", changes
+
+    def use_beer(self, player: PlayerProfile) -> (str, dict):
+        if player.beers <= 0: return "Vous n'avez plus de bière !", {}
+        player.beers -= 1
+        player.thirst = clamp(player.thirst - 20, 0, 100)
+        player.intoxication_level = clamp(player.intoxication_level + 15, 0, 100)
+        player.happiness = clamp(player.happiness + 5, 0, 100)
+        player.last_action = "beer"
+        player.last_action_time = datetime.datetime.utcnow()
+        changes = {"🍺 Bière": "-1", "💧 Soif": "-20", "😵 Défonce": "+15", "😊 Humeur": "+5"}
+        return "Vous buvez une bière fraîche.", changes
+
+    # ...repeat for whisky, wine, soda, salad, orange juice, vaporizer, ecigarette, chilum, bhang...
 
 async def setup(bot):
     await bot.add_cog(CookerBrain(bot))

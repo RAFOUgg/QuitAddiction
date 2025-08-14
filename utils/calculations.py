@@ -91,4 +91,14 @@ def chain_reactions(state_dict):
     if state_dict['is_sick']: perf -= 40
     state_dict['job_performance'] = clamp(perf, 0, 100)
 
+    # --- NEW: Visual states calculation ---
+    # Stomachache: high hunger or nausea
+    state_dict['stomachache'] = clamp((state_dict['hunger'] + state_dict['nausea']) / 2, 0, 100)
+    # Urge to pee: high bladder
+    state_dict['urge_to_pee'] = clamp(state_dict['bladder'], 0, 100)
+    # Craving: withdrawal or addiction
+    state_dict['craving'] = clamp((state_dict['withdrawal_severity'] + state_dict['substance_addiction_level']) / 2, 0, 100)
+    # Headache: already present, but reinforce if dehydration or stress
+    state_dict['headache'] = clamp(state_dict['headache'] + (state_dict['thirst'] > 60) * 5 + (state_dict['stress'] > 70) * 5, 0, 100)
+
     return state_dict

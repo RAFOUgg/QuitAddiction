@@ -86,6 +86,10 @@ class Scheduler(commands.Cog):
                 # --- 4. RÉACTIONS EN CHAÎNE ---
                 state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
                 updated_state = chain_reactions(state_dict)
+                # --- NEW: Detailed logging in test mode ---
+                if server_state.is_test_mode:
+                    print(f"[TEST][{server_state.guild_id}] Chain reaction input: {state_dict}")
+                    print(f"[TEST][{server_state.guild_id}] Chain reaction output: {updated_state}")
                 for key, value in updated_state.items():
                     if hasattr(player, key): setattr(player, key, value)
                 
@@ -133,6 +137,9 @@ class Scheduler(commands.Cog):
                 except Exception as e:
                     print(f"Erreur lors du rafraîchissement de l'UI par le scheduler: {e}")
                     traceback.print_exc()
+
+                if server_state.is_test_mode:
+                    print(f"[TEST][{server_state.guild_id}] Player stats after tick: {[ (k, getattr(player, k)) for k in ['health','energy','hunger','thirst','bladder','fatigue','sanity','stress','happiness','boredom','pain','nausea','dizziness','headache','craving','urge_to_pee','stomachache'] ]}")
 
         except Exception as e:
             print(f"Erreur critique dans Scheduler.tick: {e}")

@@ -28,6 +28,8 @@ class UberEatsView(ui.View):
         self.add_item(ui.Button(label="Tacos (6$)", emoji="🌮", style=discord.ButtonStyle.success, custom_id="ubereats_buy_tacos", disabled=(player.wallet < 6)))
         self.add_item(ui.Button(label="Pizza (12$)", emoji="🍕", style=discord.ButtonStyle.success, custom_id="ubereats_buy_pizza", disabled=(player.wallet < 12)))
         self.add_item(ui.Button(label="Salade (8$)", emoji="🥗", style=discord.ButtonStyle.success, custom_id="ubereats_buy_salad", disabled=(player.wallet < 8)))
+        self.add_item(ui.Button(label="Bol de Soupe (5$)", emoji="🍲", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soup", disabled=(player.wallet < 5)))
+        self.add_item(ui.Button(label="Jus d'Orange (3$)", emoji="🧃", style=discord.ButtonStyle.success, custom_id="ubereats_buy_orange_juice", disabled=(player.wallet < 3)))
         # Le bouton retour ramène au menu principal du téléphone
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=1))
 
@@ -39,6 +41,13 @@ class ShopView(ui.View):
         self.add_item(ui.Button(label="Acheter Cigarettes (5$) [x10]", style=discord.ButtonStyle.secondary, custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5), emoji="🚬"))
         self.add_item(ui.Button(label="Acheter Bière (3$) [x1]", style=discord.ButtonStyle.blurple, custom_id="shop_buy_beer", disabled=(player.wallet < 3), emoji="🍺"))
         self.add_item(ui.Button(label="Acheter Eau (1$) [x1]", style=discord.ButtonStyle.primary, custom_id="shop_buy_water", disabled=(player.wallet < 1), emoji="💧"))
+        self.add_item(ui.Button(label="Acheter Whisky (15$) [x1]", style=discord.ButtonStyle.secondary, custom_id="shop_buy_whisky", disabled=(player.wallet < 15), emoji="🥃"))
+        self.add_item(ui.Button(label="Acheter Vin (10$) [x1]", style=discord.ButtonStyle.secondary, custom_id="shop_buy_wine", disabled=(player.wallet < 10), emoji="🍷"))
+        self.add_item(ui.Button(label="Acheter Soda (2$) [x1]", style=discord.ButtonStyle.primary, custom_id="shop_buy_soda", disabled=(player.wallet < 2), emoji="🥤"))
+        self.add_item(ui.Button(label="Acheter E-cigarette (30$)", style=discord.ButtonStyle.secondary, custom_id="shop_buy_ecigarette", disabled=(player.wallet < 30), emoji="💨"))
+        self.add_item(ui.Button(label="Acheter Vaporisateur (40$)", style=discord.ButtonStyle.secondary, custom_id="shop_buy_vaporizer", disabled=(player.wallet < 40), emoji="🌬️"))
+        self.add_item(ui.Button(label="Acheter Chilum (25$)", style=discord.ButtonStyle.secondary, custom_id="shop_buy_chilum", disabled=(player.wallet < 25), emoji="🪔"))
+        self.add_item(ui.Button(label="Acheter Bhang (20$)", style=discord.ButtonStyle.secondary, custom_id="shop_buy_bhang", disabled=(player.wallet < 20), emoji="🥛"))
         # Le bouton retour ramène bien au menu principal du téléphone
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=1))
 
@@ -129,6 +138,20 @@ class Phone(commands.Cog):
                     player.wallet -= 3; player.beers += 1; message = "Vous avez acheté une bière."
                 elif custom_id == "shop_buy_water" and player.wallet >= 1:
                     player.wallet -= 1; player.water_bottles += 1; message = "Vous avez acheté une bouteille d'eau."
+                elif custom_id == "shop_buy_whisky" and player.wallet >= 15:
+                    player.wallet -= 15; player.whisky_bottles += 1; message = "Vous avez acheté une bouteille de whisky."
+                elif custom_id == "shop_buy_wine" and player.wallet >= 10:
+                    player.wallet -= 10; player.wine_bottles += 1; message = "Vous avez acheté une bouteille de vin."
+                elif custom_id == "shop_buy_soda" and player.wallet >= 2:
+                    player.wallet -= 2; player.soda_cans += 1; message = "Vous avez acheté une canette de soda."
+                elif custom_id == "shop_buy_ecigarette" and player.wallet >= 30:
+                    player.wallet -= 30; player.ecigarettes += 1; message = "Vous avez acheté une cigarette électronique."
+                elif custom_id == "shop_buy_vaporizer" and player.wallet >= 40:
+                    player.wallet -= 40; player.vaporizer += 1; message = "Vous avez acheté un vaporisateur."
+                elif custom_id == "shop_buy_chilum" and player.wallet >= 25:
+                    player.wallet -= 25; player.chilum += 1; message = "Vous avez acheté un chilum."
+                elif custom_id == "shop_buy_bhang" and player.wallet >= 20:
+                    player.wallet -= 20; player.bhang += 1; message = "Vous avez acheté du bhang."
                 db.commit(); db.refresh(player)
                 await interaction.followup.send(f"🛍️ {message}", ephemeral=True)
                 await interaction.edit_original_response(embed=self.generate_shop_embed(player), view=ShopView(player))
@@ -143,13 +166,17 @@ class Phone(commands.Cog):
                     cost = 12; message = "Vous avez commandé une pizza."
                 elif custom_id == "ubereats_buy_salad" and player.wallet >= 8:
                     cost = 8; message = "Vous avez commandé une salade (pour la bonne conscience)."
+                elif custom_id == "ubereats_buy_soup" and player.wallet >= 5:
+                    cost = 5; message = "Vous avez commandé un bol de soupe."
+                    player.soup_bowls += 1
+                elif custom_id == "ubereats_buy_orange_juice" and player.wallet >= 3:
+                    cost = 3; message = "Vous avez commandé un jus d'orange."
+                    player.orange_juice += 1
 
                 if cost > 0:
                     player.wallet -= cost
-                    player.food_servings += 1
                     db.commit(); db.refresh(player)
                     await interaction.followup.send(f"🍔 {message}", ephemeral=True)
-                    # Rafraîchit l'embed et la vue pour mettre à jour le portefeuille et les boutons
                     await interaction.edit_original_response(embed=self.generate_ubereats_embed(player), view=UberEatsView(player))
                 else:
                     await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
