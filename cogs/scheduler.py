@@ -7,7 +7,7 @@ from db.models import ServerState, PlayerProfile
 import datetime
 import traceback
 from utils.calculations import chain_reactions
-from utils.helpers import clamp
+from utils.helpers import clamp, get_player_notif_settings
 import random 
 from cogs.main_embed import DashboardView
 
@@ -22,6 +22,23 @@ class Scheduler(commands.Cog):
 
     def cog_unload(self):
         self.tick.cancel()
+
+    async def _send_notification(self, channel: discord.TextChannel, player: PlayerProfile, title: str, message: str, notif_key: str):
+        """Vérifie les paramètres du joueur et envoie une notification."""
+        settings = get_player_notif_settings(player)
+        if not settings.get(notif_key, True):
+            return # Le joueur a désactivé ce type de notification
+
+        # Anti-spam : ne pas renvoyer la même notification si elle est déjà dans l'historique récent
+        if title in player.notification_history:
+            return
+
+        embed = discord.Embed(title=title, description=message, color=discord.Color.orange())
+        try:
+            await channel.send(embed=embed)
+            player.notification_history += f"\n{title}" # Ajoute au log pour éviter le spam
+        except (discord.Forbidden, discord.HTTPException) as e:
+            print(f"Could not send notification to channel {channel.id}: {e}")
 
     @tasks.loop(minutes=1)
     async def tick(self):
@@ -57,34 +74,28 @@ class Scheduler(commands.Cog):
                 player.recent_logs = "\n".join(f"- {log}" for log in new_logs)
                 
                 # --- 3. ÉVÉNEMENTS & NOTIFICATIONS ---
-                if player.health < 20 and "Santé critique" not in player.notification_history:
-                    notif = "⚠️ Santé critique !"
-                    player.notification_history += f"\n{notif}"
+                channel = self.bot.get_channel(int(server_state.game_channel_id))
+                if channel:
+                    if player.health < 20:
+                        await self._send_notification(channel, player, "Santé Critique", "Votre santé est au plus bas ! Trouvez un moyen de vous soigner.", "low_vitals")
+                    if player.stress > 80:
+                        await self._send_notification(channel, player, "Stress Élevé", "Vous êtes au bord de la crise de nerfs. Calmez-vous !", "low_vitals")
+                    if player.craving_nicotine > 80:
+                        await self._send_notification(channel, player, "Forte Envie de Fumer", "L'envie de nicotine est presque insoutenable.", "cravings")
 
                 # --- 4. MISE À JOUR ET COMMIT ---
                 player.last_update = current_time
                 db.commit()
 
-                # --- 5. RAFRAÎCHISSEMENT DE L'INTERFACE (Logique améliorée) ---
+                # --- 5. RAFRAÎCHISSEMENT DE L'INTERFACE ---
                 try:
                     guild = self.bot.get_guild(int(server_state.guild_id))
-                    channel = self.bot.get_channel(int(server_state.game_channel_id))
                     if guild and channel and server_state.game_message_id:
                         game_message = await channel.fetch_message(int(server_state.game_message_id))
-                        
-                        # NOUVEAU : On récupère la vue actuelle pour conserver les préférences de l'utilisateur
-                        current_view = game_message.view
-                        if not isinstance(current_view, DashboardView):
-                            # Si la vue est invalide ou a expiré, on en recrée une par défaut
-                            current_view = DashboardView()
-
-                        # On passe la vue actuelle à la fonction de génération de l'embed
-                        new_embed = main_embed_cog.generate_dashboard_embed(player, server_state, guild, current_view)
-                        
-                        # On ré-applique la vue pour s'assurer que les boutons ne disparaissent pas
-                        await game_message.edit(embed=new_embed, view=current_view)
+                        new_embed = main_embed_cog.generate_dashboard_embed(player, server_state, guild)
+                        await game_message.edit(embed=new_embed, view=DashboardView(player))
                 except (discord.NotFound, discord.Forbidden):
-                    pass # Le message ou le salon a été supprimé, ce n'est pas grave.
+                    pass 
                 except Exception as e:
                     print(f"Erreur non critique lors du rafraîchissement de l'UI pour la guilde {server_state.guild_id}: {e}")
 

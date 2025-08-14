@@ -11,7 +11,6 @@ class CookerBrain(commands.Cog):
     # --- ACTIONS DE BASE ---
 
     def perform_sleep(self, player: PlayerProfile) -> (str, dict):
-        # Le sommeil est réparateur, mais sa qualité dépend du stress et de la douleur.
         sleep_quality = 1.0 - (player.pain / 200.0) - (player.stress / 300.0)
         energy_gain = 70.0 * sleep_quality
         fatigue_loss = 80.0 * sleep_quality
@@ -26,6 +25,24 @@ class CookerBrain(commands.Cog):
         player.last_action = "neutral_sleep"
         player.last_action_time = datetime.datetime.utcnow()
         return f"Vous avez dormi (qualité: {sleep_quality:.0%}). L'énergie revient peu à peu.", {}
+
+    def perform_shower(self, player: PlayerProfile) -> (str, dict):
+        hygiene_gain = 70.0
+        stress_loss = 15.0
+        player.hygiene = clamp(player.hygiene + hygiene_gain, 0, 100)
+        player.stress = clamp(player.stress - stress_loss, 0, 100)
+        player.last_shower_at = datetime.datetime.utcnow()
+        player.last_action = "neutral_shower"
+        player.last_action_time = datetime.datetime.utcnow()
+        return "Vous prenez une douche. Vous vous sentez propre et un peu plus détendu.", {}
+
+    def perform_urinate(self, player: PlayerProfile) -> (str, dict):
+        bladder_relief = player.bladder
+        player.bladder = 0
+        player.last_urinated_at = datetime.datetime.utcnow()
+        player.last_action = "neutral"
+        player.last_action_time = datetime.datetime.utcnow()
+        return f"Ahhh... ça va mieux. Vous avez soulagé une envie pressante ({bladder_relief:.0f}%).", {}
 
     # --- BOISSONS ---
 
@@ -42,10 +59,10 @@ class CookerBrain(commands.Cog):
     def use_soda(self, player: PlayerProfile) -> (str, dict):
         if player.soda_cans <= 0: return "Vous n'avez plus de soda !", {}
         player.soda_cans -= 1
-        player.thirst = clamp(player.thirst - 25, 0, 100) # Le sucre, ça n'hydrate pas vraiment.
-        player.happiness = clamp(player.happiness + 15, 0, 100) # Un petit plaisir coupable.
-        player.energy = clamp(player.energy + 5, 0, 100) # Un léger coup de fouet.
-        player.hunger = clamp(player.hunger - 5, 0, 100) # Coupe un peu la faim.
+        player.thirst = clamp(player.thirst - 25, 0, 100)
+        player.happiness = clamp(player.happiness + 15, 0, 100)
+        player.energy = clamp(player.energy + 5, 0, 100)
+        player.hunger = clamp(player.hunger - 5, 0, 100)
         player.last_drank_at = datetime.datetime.utcnow()
         player.last_action = "neutral_drinking_soda"
         player.last_action_time = datetime.datetime.utcnow()
@@ -58,45 +75,55 @@ class CookerBrain(commands.Cog):
         player.food_servings -= 1
         player.hunger = clamp(player.hunger - 50.0, 0, 100)
         player.nausea = clamp(player.nausea - 10.0, 0, 100)
-        player.happiness = clamp(player.happiness + 5, 0, 100) # C'est mieux que rien.
+        player.happiness = clamp(player.happiness + 5, 0, 100)
         player.last_eaten_at = datetime.datetime.utcnow()
         player.last_action = "neutral_eat_sandwich"
         player.last_action_time = datetime.datetime.utcnow()
         return "Vous mangez un sandwich basique. Ça cale l'estomac.", {}
 
     def use_tacos(self, player: PlayerProfile) -> (str, dict):
-        # Note : Ajoutez `tacos: int` à votre modèle PlayerProfile pour que ça marche.
         if player.tacos <= 0: return "Vous n'avez pas de tacos !", {}
         player.tacos -= 1
         player.hunger = clamp(player.hunger - 45, 0, 100)
-        player.happiness = clamp(player.happiness + 20, 0, 100) # Un vrai réconfort !
+        player.happiness = clamp(player.happiness + 20, 0, 100)
         player.stress = clamp(player.stress - 5, 0, 100)
         player.last_eaten_at = datetime.datetime.utcnow()
         player.last_action = "neutral_eat_tacos"
         player.last_action_time = datetime.datetime.utcnow()
         return "Un tacos bien garni ! Un vrai moment de plaisir qui remonte le moral.", {}
 
+    def use_salad(self, player: PlayerProfile) -> (str, dict):
+        if player.salad_servings <= 0: return "Vous n'avez pas de salade !", {}
+        player.salad_servings -= 1
+        player.hunger = clamp(player.hunger - 25, 0, 100)
+        player.health = clamp(player.health + 5, 0, 100)
+        player.happiness = clamp(player.happiness + 10, 0, 100)
+        player.last_eaten_at = datetime.datetime.utcnow()
+        player.last_action = "neutral_eat_salad"
+        player.last_action_time = datetime.datetime.utcnow()
+        return "Une salade fraîche et saine. C'est bon pour le corps et l'esprit.", {}
+
     # --- FUMER ---
 
     def perform_smoke_cigarette(self, player: PlayerProfile) -> (str, dict):
         if player.cigarettes <= 0: return "Vous n'avez plus de cigarettes !", {}
         player.cigarettes -= 1
-        player.stress = clamp(player.stress - 30.0, 0, 100) # Le "fix" le plus puissant.
-        player.happiness = clamp(player.happiness + 5.0, 0, 100) # Un plaisir chimique, pas un vrai bonheur.
-        player.withdrawal_severity = 0 # Annule complètement le manque.
-        player.tox = clamp(player.tox + 10.0, 0, 100) # Contrepartie: très toxique.
+        player.stress = clamp(player.stress - 30.0, 0, 100)
+        player.happiness = clamp(player.happiness + 5.0, 0, 100)
+        player.withdrawal_severity = 0
+        player.tox = clamp(player.tox + 10.0, 0, 100)
         player.dry_mouth = clamp(player.dry_mouth + 40.0, 0, 100)
-        player.hunger = clamp(player.hunger - 10, 0, 100) # Coupe-faim.
+        player.hunger = clamp(player.hunger - 10, 0, 100)
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "smoke_cig"
         player.last_action_time = datetime.datetime.utcnow()
         return "Vous allumez une cigarette. Le stress s'envole... pour l'instant.", {}
 
     def use_ecigarette(self, player: PlayerProfile) -> (str, dict):
-        if player.ecigarettes <= 0: return "Votre e-cigarette est vide.", {}
-        player.stress = clamp(player.stress - 15, 0, 100) # Moins efficace contre le stress.
-        player.withdrawal_severity = clamp(player.withdrawal_severity - 25, 0, 100) # Calme le manque, mais ne l'annule pas.
-        player.tox = clamp(player.tox + 2.0, 0, 100) # Beaucoup moins toxique.
+        if player.e_cigarettes <= 0: return "Votre e-cigarette est vide.", {}
+        player.stress = clamp(player.stress - 15, 0, 100)
+        player.withdrawal_severity = clamp(player.withdrawal_severity - 25, 0, 100)
+        player.tox = clamp(player.tox + 2.0, 0, 100)
         player.dry_mouth = clamp(player.dry_mouth + 15.0, 0, 100)
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "vapote_e_cig"

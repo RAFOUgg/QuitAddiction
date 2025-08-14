@@ -1,5 +1,7 @@
 # --- utils/helpers.py ---
 import datetime
+import json
+from db.models import PlayerProfile
 
 def clamp(value, min_val, max_val):
     """Limite une valeur à une plage spécifiée."""
@@ -16,3 +18,22 @@ def format_time_delta(td: datetime.timedelta) -> str:
         return f"{minutes}m"
     hours = minutes // 60
     return f"{hours}h {minutes % 60}m"
+
+def get_player_notif_settings(player: PlayerProfile) -> dict:
+    """Charge les paramètres de notification du joueur à partir du JSON en base de données."""
+    default_settings = {
+        "low_vitals": True,
+        "cravings": True,
+        "friend_messages": True
+    }
+    if not player.notifications_config:
+        return default_settings.copy()
+    try:
+        settings = json.loads(player.notifications_config)
+        # Ensure all keys from default are present
+        for key, value in default_settings.items():
+            if key not in settings:
+                settings[key] = value
+        return settings
+    except json.JSONDecodeError:
+        return default_settings.copy()

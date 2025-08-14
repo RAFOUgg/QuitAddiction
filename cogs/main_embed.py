@@ -101,8 +101,39 @@ class MainEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def get_image_url(self, player: PlayerProfile) -> str | None:
+        """Helper to get the current image URL for the player."""
+        now = datetime.datetime.utcnow()
+        asset_cog = self.bot.get_cog("AssetManager")
+        if not asset_cog:
+            return None
+
+        image_name = "neutral"
+        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
+            image_name = player.last_action
+        elif player.fatigue > 85: image_name = "neutral_sleep"
+        elif player.stress > 70 or player.health < 40 or player.withdrawal_severity > 60: image_name = "sad"
+        elif player.thirst > 70 and player.craving_alcohol > 60: image_name = "sad_drinking"
+        elif player.stomachache > 70: image_name = "hand_stomach"
+        elif player.headache > 60: image_name = "scratch_eye"
+        elif player.craving_nicotine > 75: image_name = "neutral_hold_e_cig"
+        elif player.hygiene < 20: image_name = "neutral_shower"
+        
+        return asset_cog.get_url(image_name)
+
     @staticmethod
     def get_character_thoughts(player: PlayerProfile) -> str:
+        # High-priority combinations
+        if player.hunger > 70 and player.stress > 60:
+            return "J'ai l'estomac dans les talons et les nerfs à vif. Un rien pourrait me faire craquer."
+        if player.withdrawal_severity > 60 and player.health < 40:
+            return "Chaque partie de mon corps me fait souffrir. Le manque me ronge de l'intérieur, je suis à bout."
+        if player.fatigue > 80 and player.boredom > 70:
+            return "Je suis épuisé, mais je m'ennuie tellement que je n'arrive même pas à fermer l'œil."
+        if player.thirst > 80 and player.hygiene < 30:
+            return "J'ai la gorge sèche et je me sens sale. Un verre d'eau et une douche, c'est tout ce que je demande."
+
+        # Single-condition thoughts (from highest to lowest priority)
         thoughts = {
             95: (player.thirst > 85, "J'ai la gorge complètement sèche, je pourrais boire n'importe quoi."),
             90: (player.hunger > 80, "Mon estomac gargouille si fort, il faut que je mange."),
@@ -119,38 +150,19 @@ class MainEmbed(commands.Cog):
         for priority in sorted(thoughts.keys(), reverse=True):
             condition, text = thoughts[priority]
             if condition: return text
+            
         return "Pour l'instant, ça va à peu près."
-
-    def get_image_name(self, player: PlayerProfile, now: datetime.datetime) -> str:
-        """Détermine le nom de l'image à afficher en fonction de l'état du joueur."""
-        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
-            return player.last_action
-
-        if player.fatigue > 85: return "neutral_sleep"
-        if player.stress > 70 or player.health < 40 or player.withdrawal_severity > 60: return "sad"
-        if player.thirst > 70 and player.craving_alcohol > 60: return "sad_drinking"
-        if player.stomachache > 70: return "hand_stomach"
-        if player.headache > 60: return "scratch_eye"
-        if player.craving_nicotine > 75: return "neutral_hold_e_cig"
-        if player.hygiene < 20: return "neutral_shower"
-        
-        return "neutral"
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
-        asset_cog = self.bot.get_cog("AssetManager")
-        now = datetime.datetime.utcnow()
-        
-        image_name = self.get_image_name(player, now)
-        image_url = asset_cog.get_url(image_name) if asset_cog else None
+        image_url = self.get_image_url(player)
         
         if image_url:
+            embed.set_image(url=image_url)
             if player.show_stats_in_view:
                 embed.set_thumbnail(url=image_url)
-            else:
-                embed.set_image(url=image_url)
 
-        embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
+        embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\""*
 
         if state and state.is_test_mode and state.game_start_time:
             admin_cog = self.bot.get_cog("AdminCog")
@@ -210,6 +222,11 @@ class MainEmbed(commands.Cog):
         inventory_list = "".join([f"{label}: **{getattr(player, attr, 0)}**\n" for attr, label in inventory_items if getattr(player, attr, 0) > 0])
         embed.add_field(name="Consommables", value=inventory_list or "*Vide*", inline=True)
         embed.add_field(name="Argent", value=f"💰 **{player.wallet}$**", inline=True)
+        
+        image_url = self.get_image_url(player)
+        if image_url:
+            embed.set_thumbnail(url=image_url)
+            
         return embed
 
     @commands.Cog.listener()
@@ -227,7 +244,7 @@ class MainEmbed(commands.Cog):
                     except discord.errors.InteractionResponded: pass
                     return
                 phone_cog = self.bot.get_cog("Phone")
-                if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state)
+                if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state, self)
                 return
 
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
@@ -272,6 +289,7 @@ class MainEmbed(commands.Cog):
             action_map = {
                 "action_sleep": cooker_brain.perform_sleep,
                 "action_shower": cooker_brain.perform_shower,
+                "action_urinate": cooker_brain.perform_urinate,
                 "drink_water": cooker_brain.perform_drink_water,
                 "drink_soda": cooker_brain.use_soda,
                 "eat_sandwich": cooker_brain.perform_eat_sandwich,
