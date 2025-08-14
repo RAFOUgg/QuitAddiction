@@ -30,15 +30,21 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
 # --- VUES ---
 class DashboardView(ui.View):
     """La vue principale et unifiée du tableau de bord."""
-    def __init__(self):
+    def __init__(self, image_is_hidden: bool = False):
         super().__init__(timeout=None)
         self.add_item(ui.Button(label="🏃‍♂️ Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions"))
         self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
         self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
 
+        if image_is_hidden:
+            label, custom_id = "🖼️ Afficher l'image", "nav_toggle_image_to_shown"
+        else:
+            label, custom_id = "🖼️ Cacher l'image", "nav_toggle_image_to_hidden"
+        self.add_item(ui.Button(label=label, style=discord.ButtonStyle.grey, custom_id=custom_id, row=1))
+
 class ActionsView(ui.View):
     """La vue pour les actions du joueur, affichée sous le dashboard principal."""
-    def __init__(self, player: PlayerProfile):
+    def __init__(self, player: PlayerProfile, image_is_hidden: bool = False):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
         # Cooldown: 10 seconds between actions
@@ -50,8 +56,15 @@ class ActionsView(ui.View):
         self.add_item(ui.Button(label=f"Fumer (x{player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="action_smoke", emoji="🚬", disabled=(player.cigarettes <= 0 or cooldown_active)))
         if player.bladder > 30:
             self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=(cooldown_active)))
+        
         # Bouton unifié pour revenir à la vue principale du dashboard
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
+        
+        if image_is_hidden:
+            label, custom_id = "🖼️ Afficher l'image", "nav_toggle_image_to_shown"
+        else:
+            label, custom_id = "🖼️ Cacher l'image", "nav_toggle_image_to_hidden"
+        self.add_item(ui.Button(label=label, style=discord.ButtonStyle.grey, custom_id=custom_id, row=2))
 
 class InventoryView(ui.View):
     """La vue pour l'inventaire, remplace la vue 'BackView'."""
@@ -80,7 +93,7 @@ class MainEmbed(commands.Cog):
         if player.boredom > 60: return "Je m'ennuie... il ne se passe jamais rien."
         return "Pour l'instant, ça va à peu près."
 
-    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
+    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, show_image_as_thumbnail: bool = False) -> discord.Embed:
         """Génère l'embed de dashboard unique qui affiche TOUJOURS les stats."""
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
@@ -92,7 +105,10 @@ class MainEmbed(commands.Cog):
         image_url = asset_cog.get_url(image_name) if asset_cog else None
 
         if image_url:
-            embed.set_thumbnail(url=image_url)
+            if show_image_as_thumbnail:
+                embed.set_thumbnail(url=image_url)
+            else:
+                embed.set_image(url=image_url)
 
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
@@ -181,21 +197,24 @@ class MainEmbed(commands.Cog):
             if not player or not state:
                 return await interaction.followup.send("Erreur: Profil ou état du serveur introuvable.", ephemeral=True)
 
+            # Determine current image state from the message that triggered the interaction
+            image_is_currently_hidden = False
+            if interaction.message and interaction.message.embeds:
+                # The image is hidden if the .image attribute is empty.
+                image_is_currently_hidden = not interaction.message.embeds[0].image
+
             # --- Nouvelle Logique de Navigation ---
             if custom_id == "nav_main_menu":
-                # Ce bouton ramène TOUJOURS au dashboard principal
-                embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                view = DashboardView()
+                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=image_is_currently_hidden)
+                view = DashboardView(image_is_hidden=image_is_currently_hidden)
                 await interaction.edit_original_response(embed=embed, view=view)
 
             elif custom_id == "nav_actions":
-                # Affiche le menu d'actions sous le dashboard
-                embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                view = ActionsView(player)
+                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=image_is_currently_hidden)
+                view = ActionsView(player, image_is_hidden=image_is_currently_hidden)
                 await interaction.edit_original_response(embed=embed, view=view)
 
             elif custom_id == "nav_inventory":
-                # Affiche l'écran d'inventaire
                 embed = self.generate_inventory_embed(player, interaction.guild)
                 view = InventoryView()
                 await interaction.edit_original_response(embed=embed, view=view)
@@ -203,15 +222,33 @@ class MainEmbed(commands.Cog):
             elif custom_id == "nav_phone":
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog:
-                    embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                    embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=True) # Always hide for phone
                     embed.description = "Vous ouvrez votre téléphone."
-
                     await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
                 else: 
                     await interaction.followup.send("Erreur: Le module téléphone n'est pas chargé.", ephemeral=True)
 
+            elif custom_id.startswith("nav_toggle_image"):
+                on_actions_view = False
+                if interaction.message and interaction.message.components:
+                    for row in interaction.message.components:
+                        for component in row.children:
+                            if getattr(component, 'custom_id', None) == 'action_shower':
+                                on_actions_view = True
+                                break
+                        if on_actions_view: break
+                
+                if custom_id == "nav_toggle_image_to_hidden":
+                    embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=True)
+                    view = ActionsView(player, image_is_hidden=True) if on_actions_view else DashboardView(image_is_hidden=True)
+                    await interaction.edit_original_response(embed=embed, view=view)
+
+                elif custom_id == "nav_toggle_image_to_shown":
+                    embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=False)
+                    view = ActionsView(player, image_is_hidden=False) if on_actions_view else DashboardView(image_is_hidden=False)
+                    await interaction.edit_original_response(embed=embed, view=view)
+
             elif custom_id.startswith("action_"):
-                # --- Logique de gestion des actions (largement inchangée) ---
                 cooker_brain = self.bot.get_cog("CookerBrain")
                 if player.last_action_at and (datetime.datetime.utcnow() - player.last_action_at).total_seconds() < 10:
                     return await interaction.followup.send("Vous agissez trop vite ! Attendez un peu.", ephemeral=True)
@@ -220,7 +257,7 @@ class MainEmbed(commands.Cog):
                     "action_eat": cooker_brain.perform_eat, "action_drink": cooker_brain.perform_drink,
                     "action_sleep": cooker_brain.perform_sleep, "action_smoke": cooker_brain.perform_smoke,
                     "action_urinate": cooker_brain.perform_urinate,
-                    "action_shower": cooker_brain.perform_shower # AJOUT
+                    "action_shower": cooker_brain.perform_shower
                 }
                 message, changes = action_map[custom_id](player)
                 
@@ -232,9 +269,8 @@ class MainEmbed(commands.Cog):
                 feedback_str = " ".join([f"**{stat}:** `{val}`" for stat, val in changes.items()])
                 await interaction.followup.send(f"✅ {message}\n{feedback_str}", ephemeral=True)
                 
-                # Rafraîchit l'embed et la vue (pour mettre à jour les cooldowns et l'inventaire sur les boutons)
-                final_embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                final_view = ActionsView(player)
+                final_embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=image_is_currently_hidden)
+                final_view = ActionsView(player, image_is_hidden=image_is_currently_hidden)
                 await interaction.edit_original_response(embed=final_embed, view=final_view)
 
         except Exception as e:
