@@ -5,11 +5,6 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, BigInt
 import datetime
 from typing import Optional
 
-# Les lignes suivantes ont été supprimées car elles recréaient une Base vide,
-# ce qui est la cause de l'erreur "no such table".
-# from sqlalchemy.orm import declarative_base
-# Base = declarative_base()
-
 class ServerState(Base):
     __tablename__ = "server_state"
     id: int = Column(Integer, primary_key=True)
@@ -17,7 +12,6 @@ class ServerState(Base):
     admin_role_id: Optional[int] = Column(BigInteger, nullable=True)
     game_channel_id: Optional[int] = Column(BigInteger, nullable=True)
     game_message_id: Optional[int] = Column(BigInteger, nullable=True)
-    notification_role_id: Optional[int] = Column(BigInteger, nullable=True)
     game_started: bool = Column(Boolean, default=False)
     game_start_time: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     game_day_start_hour: int = Column(Integer, default=8)
@@ -30,18 +24,15 @@ class ServerState(Base):
     degradation_rate_energy: float = Column(Float, default=5.0)
     degradation_rate_stress: float = Column(Float, default=3.0)
     degradation_rate_boredom: float = Column(Float, default=7.0)
-    degradation_rate_hygiene: float = Column(Float, default=4.0) # Nouvelle ligne
-    notify_on_low_vital_stat: bool = Column(Boolean, default=True)
+    degradation_rate_hygiene: float = Column(Float, default=4.0)
     is_test_mode: bool = Column(Boolean, default=False)
+
+    # Notification Role IDs
     notify_vital_low_role_id: Optional[int] = Column(BigInteger, nullable=True)
     notify_critical_role_id: Optional[int] = Column(BigInteger, nullable=True)
-    notify_envie_fumer_role_id: Optional[int] = Column(BigInteger, nullable=True)
+    notify_craving_role_id: Optional[int] = Column(BigInteger, nullable=True)
     notify_friend_message_role_id: Optional[int] = Column(BigInteger, nullable=True)
     notify_shop_promo_role_id: Optional[int] = Column(BigInteger, nullable=True)
-    notify_on_critical_event: bool = Column(Boolean, default=True)
-    notify_on_envie_fumer: bool = Column(Boolean, default=True)
-    notify_on_friend_message: bool = Column(Boolean, default=True)
-    notify_on_shop_promo: bool = Column(Boolean, default=True)
 
 
 class PlayerProfile(Base):
@@ -49,6 +40,7 @@ class PlayerProfile(Base):
     id: int = Column(Integer, primary_key=True)
     guild_id: str = Column(String, nullable=False, index=True, unique=True)
 
+    # ... (rest of PlayerProfile model as before)
     # === SECTION 1: SANTÉ PHYSIQUE DE BASE ===
     health: float = Column(Float, default=100.0)
     energy: float = Column(Float, default=100.0)
@@ -80,7 +72,6 @@ class PlayerProfile(Base):
     # === SECTION 4: SYMPTÔMES SPÉCIFIQUES (lié à la conso & santé) ===
     nausea: float = Column(Float, default=0.0)
     dizziness: float = Column(Float, default=0.0)
-    headache: float = Column(Float, default=0.0)
     dry_mouth: float = Column(Float, default=0.0)
     sore_throat: float = Column(Float, default=0.0)
     
@@ -100,6 +91,7 @@ class PlayerProfile(Base):
 
     # === SECTION 7: AUTRES & MÉTA-DONNÉES ===
     wallet: int = Column(Integer, default=20)  # 20€ par défaut
+    view_mode: str = Column(String, default="dashboard") # NOUVEAU
     
     # --- Inventaire ---
     food_servings: int = Column(Integer, default=1)  # 1 sandwich

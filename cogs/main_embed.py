@@ -43,7 +43,9 @@ class DashboardView(ui.View):
 
 
 class ActionsView(ui.View):
-    """La vue pour les actions du joueur, affichée sous le dashboard principal."""
+    """
+    La vue pour les actions du joueur, affichée sous le dashboard principal.
+    """
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
@@ -236,11 +238,21 @@ class MainEmbed(commands.Cog):
         custom_id = interaction.data["custom_id"]
         db = SessionLocal()
         try:
+            # Fetch state early to check game_message_id
+            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
+
+            # CRITICAL FIX: Ignore interactions that are not on the main game message
+            # This prevents conflicts with other cogs like admin.py
+            if state and state.game_message_id and interaction.message.id != state.game_message_id:
+                # If it's a phone interaction, it might be coming from a phone message, so let phone cog handle it.
+                # Otherwise, ignore it.
+                if not custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
+                    return
+
             if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                 player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-                state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-                if not player or not state:
-                    try: await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
+                if not player:
+                    try: await interaction.response.send_message("Erreur: Profil du joueur introuvable.", ephemeral=True)
                     except discord.errors.InteractionResponded: pass
                     return
                 phone_cog = self.bot.get_cog("Phone")
@@ -248,8 +260,7 @@ class MainEmbed(commands.Cog):
                 return
 
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not player or not state:
+            if not player:
                 try: await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
                 except discord.errors.InteractionResponded: pass
                 return

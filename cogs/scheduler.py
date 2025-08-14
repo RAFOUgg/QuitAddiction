@@ -23,7 +23,7 @@ class Scheduler(commands.Cog):
     def cog_unload(self):
         self.tick.cancel()
 
-    async def _send_notification(self, channel: discord.TextChannel, player: PlayerProfile, title: str, message: str, notif_key: str):
+    async def _send_notification(self, channel: discord.TextChannel, player: PlayerProfile, title: str, message: str, role_id: int | None, notif_key: str):
         """Vérifie les paramètres du joueur et envoie une notification."""
         settings = get_player_notif_settings(player)
         if not settings.get(notif_key, True):
@@ -34,8 +34,10 @@ class Scheduler(commands.Cog):
             return
 
         embed = discord.Embed(title=title, description=message, color=discord.Color.orange())
+        content = f"<@&{role_id}>" if role_id else None
+
         try:
-            await channel.send(embed=embed)
+            await channel.send(content=content, embed=embed)
             player.notification_history += f"\n{title}" # Ajoute au log pour éviter le spam
         except (discord.Forbidden, discord.HTTPException) as e:
             print(f"Could not send notification to channel {channel.id}: {e}")
@@ -77,11 +79,11 @@ class Scheduler(commands.Cog):
                 channel = self.bot.get_channel(int(server_state.game_channel_id))
                 if channel:
                     if player.health < 20:
-                        await self._send_notification(channel, player, "Santé Critique", "Votre santé est au plus bas ! Trouvez un moyen de vous soigner.", "low_vitals")
+                        await self._send_notification(channel, player, "Santé Critique", "Votre santé est au plus bas ! Trouvez un moyen de vous soigner.", server_state.notify_vital_low_role_id, "low_vitals")
                     if player.stress > 80:
-                        await self._send_notification(channel, player, "Stress Élevé", "Vous êtes au bord de la crise de nerfs. Calmez-vous !", "low_vitals")
+                        await self._send_notification(channel, player, "Stress Élevé", "Vous êtes au bord de la crise de nerfs. Calmez-vous !", server_state.notify_vital_low_role_id, "low_vitals")
                     if player.craving_nicotine > 80:
-                        await self._send_notification(channel, player, "Forte Envie de Fumer", "L'envie de nicotine est presque insoutenable.", "cravings")
+                        await self._send_notification(channel, player, "Forte Envie de Fumer", "L'envie de nicotine est presque insoutenable.", server_state.notify_craving_role_id, "cravings")
 
                 # --- 4. MISE À JOUR ET COMMIT ---
                 player.last_update = current_time
