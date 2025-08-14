@@ -18,7 +18,7 @@ class ServerState(Base):
     game_day_start_hour: int = Column(Integer, default=8)
     game_mode: str = Column(String, default="medium")
     duration_key: Optional[str] = Column(String, nullable=True, default="medium")
-    game_tick_interval_minutes: int = Column(Integer, default=30)
+    game_minutes_per_day: int = Column(Integer, default=720) # Durée en minutes réelles pour un jour de jeu (24h)
     degradation_rate_hunger: float = Column(Float, default=10.0)
     degradation_rate_thirst: float = Column(Float, default=8.0)
     degradation_rate_bladder: float = Column(Float, default=15.0)

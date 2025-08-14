@@ -262,30 +262,67 @@ class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
-    GAME_MODES = {
-        "peaceful": {"tick_interval_minutes": 60, "rates": {"hunger": 5.0, "thirst": 4.0, "bladder": 5.0, "energy": 3.0, "stress": 1.0, "boredom": 2.0, "hygiene": 2.0}},
-        "medium": {"tick_interval_minutes": 30, "rates": {"hunger": 10.0, "thirst": 8.0, "bladder": 15.0, "energy": 5.0, "stress": 3.0, "boredom": 7.0, "hygiene": 4.0}},
-        "hard": {"tick_interval_minutes": 15, "rates": {"hunger": 20.0, "thirst": 16.0, "bladder": 30.0, "energy": 10.0, "stress": 6.0, "boredom": 14.0, "hygiene": 8.0}}
+    # Step 1: Define base degradation for a standard 24-hour game day.
+    BASE_DAILY_RATES = {
+        "hunger": 150,      # Approx. 3 meals (3 * 50)
+        "thirst": 200,      # Approx. 4 water bottles (4 * 60, rounded down)
+        "bladder": 120,     # Fills up reasonably
+        "stress": 40,       # Base stress from daily life
+        "boredom": 200,     # Needs activities to be kept down
+        "hygiene": 100,     # Needs one shower per day
     }
-    GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, "test_day": {"label": "Test Day [24 Min]"} }
 
+    # Step 2: Define difficulty multipliers.
+    DIFFICULTY_MULTIPLIERS = {
+        "peaceful": 0.75,
+        "medium": 1.0,
+        "hard": 1.5,
+    }
+
+    # Step 3: Define duration settings (how long a game day is in real minutes).
+    DURATION_SETTINGS = {
+        "test_day": {"minutes_per_day": 24,     "label": "Test (Jour = 24 mins)"},
+        "day":      {"minutes_per_day": 1440,   "label": "Jour (Jour = 24h)"},
+        "short":    {"minutes_per_day": 10080,  "label": "Court (Jour = 7 jours)"},
+        "medium":   {"minutes_per_day": 20160,  "label": "Moyen (Jour = 14 jours)"},
+        "long":     {"minutes_per_day": 43200,  "label": "Long (Jour = 30 jours)"}, # Adjusted 72 to 30 for sanity
+    }
     MAX_OPTION_LENGTH = 100
     MIN_OPTION_LENGTH = 1
     # --- FINALIZED: Test day settings for 24 min duration ---
     TEST_DURATION_MINUTES = 24 
     TEST_RATE_MULTIPLIER = 60 # (24h * 60min) / 24min = 60. Rates are 60x faster.
 
+    def _update_game_parameters(self, state: ServerState):
+        """Recalculates and sets game parameters based on stored mode and duration."""
+        difficulty = state.game_mode or "medium"
+        duration_key = state.duration_key or "day"
+
+        multiplier = DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
+        duration_setting = DURATION_SETTINGS.get(duration_key, DURATION_SETTINGS["day"])
+        
+        # Set final degradation rates
+        for rate_name, base_value in BASE_DAILY_RATES.items():
+            final_rate = base_value * multiplier
+            setattr(state, f"degradation_rate_{rate_name}", final_rate)
+            
+        # Set game day duration
+        state.game_minutes_per_day = duration_setting["minutes_per_day"]
+        
+        logger.info(f"Game parameters updated for guild {state.guild_id}: Difficulty={difficulty}, Duration={duration_key}")
+
     @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
     @app_commands.default_permissions(administrator=True)
     async def config(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-
         guild_id_str = str(interaction.guild.id)
         db = SessionLocal()
         try:
             state = db.query(ServerState).filter_by(guild_id=guild_id_str).first()
             if not state:
                 state = ServerState(guild_id=guild_id_str)
+                # Set default values for the first time
+                self._update_game_parameters(state)
                 db.add(state)
                 db.commit()
                 db.refresh(state)
@@ -390,7 +427,7 @@ class AdminCog(commands.Cog):
             options, id_mapping = self.cog.create_options_and_mapping(all_roles, "role", interaction.guild)
             
             view = ui.View()
-            view.add_item(SetAllRolesSelect(self.guild_id, id_mapping, self.cog, options))
+            view.add_item(SetAllNotificationsRole(self.guild_id, id_mapping, self.cog, options))
             view.add_item(self.cog.BackButton("Retour aux notifications", self.guild_id, discord.ButtonStyle.secondary, 1, self.cog, target_menu="notifications_config"))
             
             embed = discord.Embed(
@@ -499,129 +536,121 @@ class AdminCog(commands.Cog):
 
 
     # --- Mode & Duration Section ---
-    class SetupGameModeButton(ui.Button):
+    class ModeAndDurationButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
             super().__init__(label=label, style=style, row=row, disabled=disabled, emoji="🕹️")
             self.guild_id = guild_id
             self.cog = cog
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.edit_message(embed=self.cog.generate_setup_game_mode_embed(), view=self.cog.generate_setup_game_mode_view(self.guild_id))
-
-    def generate_setup_game_mode_embed(self) -> discord.Embed:
-        return discord.Embed(title="🎮 Mode & Duration Setup", description="Select a difficulty and duration for the game.", color=discord.Color.teal())
-
-    def generate_setup_game_mode_view(self, guild_id: str) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
-        view.add_item(self.GameModeSelect(guild_id, "mode", 0, self)); view.add_item(self.GameDurationSelect(guild_id, "duration", 1, self)); view.add_item(self.BackButton("Back to Settings", guild_id, discord.ButtonStyle.secondary, 2, self))
-        return view
-
-    class GameModeSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int, cog: 'AdminCog'):
-            options = [discord.SelectOption(label="Peaceful", description="Low degradation rates.", value="peaceful"), discord.SelectOption(label="Medium (Default)", description="Standard degradation rates.", value="medium"), discord.SelectOption(label="Hard", description="High degradation rates. More challenging.", value="hard")]
-            super().__init__(placeholder="Choose a difficulty mode...", options=options, custom_id=f"select_gamemode_{guild_id}", row=row); self.guild_id = guild_id; self.cog = cog
-        async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
             try:
-                selected_mode = self.values[0]; state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-                if state and (mode_data := self.cog.GAME_MODES.get(selected_mode)):
-                    state.game_mode, state.game_tick_interval_minutes = selected_mode, mode_data["tick_interval_minutes"]
-                    for key, value in mode_data["rates"].items(): setattr(state, f"degradation_rate_{key}", value)
-                    db.commit()
-                    embed = self.cog.generate_setup_game_mode_embed(); embed.description = f"✅ Difficulty set to **{selected_mode.capitalize()}**.\n{embed.description}"
-                    await interaction.response.edit_message(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
-            finally: db.close()
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                await interaction.response.edit_message(
+                    embed=self.cog.generate_mode_duration_embed(state), 
+                    view=self.cog.generate_mode_duration_view(self.guild_id, state)
+                )
+            finally:
+                db.close()
+    
+    def generate_mode_duration_embed(self, state: ServerState) -> discord.Embed:
+        embed = discord.Embed(title="🎮 Difficulté & Durée", description="Configurez séparément la difficulté du jeu (vitesse des besoins) et la durée (échelle de temps).", color=discord.Color.teal())
+        
+        difficulty = state.game_mode or "medium"
+        duration_key = state.duration_key or "day"
+        
+        embed.add_field(name="Difficulté Actuelle", value=f"`{difficulty.capitalize()}` (Multiplicateur: x{DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)})", inline=False)
+        embed.add_field(name="Durée Actuelle", value=f"`{DURATION_SETTINGS.get(duration_key, {}).get('label')}`", inline=False)
+        
+        return embed
+
+    def generate_mode_duration_view(self, guild_id: str, state: ServerState) -> discord.ui.View:
+        view = discord.ui.View(timeout=180)
+        view.add_item(self.GameDifficultySelect(guild_id, self, state.game_mode))
+        view.add_item(self.GameDurationSelect(guild_id, self, state.duration_key))
+        view.add_item(self.BackButton("Retour aux Paramètres", guild_id, discord.ButtonStyle.secondary, 2, self))
+        return view
+
+    class GameDifficultySelect(ui.Select):
+        def __init__(self, guild_id: str, cog: 'AdminCog', current_difficulty: str):
+            options = [discord.SelectOption(label=f"{key.capitalize()}", value=key, default=(key == current_difficulty)) for key in DIFFICULTY_MULTIPLIERS.keys()]
+            super().__init__(placeholder="Choisissez une difficulté...", options=options, row=0)
+            self.guild_id = guild_id
+            self.cog = cog
+
+        async def callback(self, interaction: discord.Interaction):
+            await interaction.response.defer()
+            selected_difficulty = self.values[0]
+            db = SessionLocal()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                state.game_mode = selected_difficulty
+                self.cog._update_game_parameters(state)
+                db.commit()
+                db.refresh(state)
+                await interaction.edit_original_response(
+                    embed=self.cog.generate_mode_duration_embed(state),
+                    view=self.cog.generate_mode_duration_view(self.guild_id, state)
+                )
+            finally:
+                db.close()
 
     class GameDurationSelect(ui.Select):
-        def __init__(self, guild_id: str, select_type: str, row: int, cog: 'AdminCog'):
-            options = [discord.SelectOption(label=data["label"], value=key) for key, data in cog.GAME_DURATIONS.items()]
-            super().__init__(placeholder="Choose the game duration...", options=options, custom_id=f"select_gameduration_{guild_id}", row=row)
+        def __init__(self, guild_id: str, cog: 'AdminCog', current_duration: str):
+            options = [discord.SelectOption(label=data["label"], value=key, default=(key == current_duration)) for key, data in DURATION_SETTINGS.items()]
+            super().__init__(placeholder="Choisissez une durée (échelle de temps)...", options=options, row=1)
             self.guild_id = guild_id
             self.cog = cog
             
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.defer(ephemeral=True, thinking=True)
-            selected_key = self.values[0]
+            await interaction.response.defer()
+            selected_duration = self.values[0]
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-                if not state or not self.cog.GAME_DURATIONS.get(selected_key):
-                    await interaction.followup.send("Error processing selection.", ephemeral=True)
-                    return
-                
-                state.duration_key = selected_key
+                state.duration_key = selected_duration
+                self.cog._update_game_parameters(state)
                 db.commit()
-
-                if selected_key == "test_day":
-                    await self.start_test_game(interaction, state, db)
-                else:
-                    duration_data = self.cog.GAME_DURATIONS[selected_key]
-                    embed = self.cog.generate_setup_game_mode_embed()
-                    embed.description = f"✅ Game duration set to **{duration_data['label']}**.\n{embed.description}"
-                    # Use edit_original_response for the non-deferred path as well, for consistency
-                    await interaction.edit_original_response(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
-                    # And send a confirmation
-                    await interaction.followup.send(f"Duration set to {duration_data['label']}.", ephemeral=True)
-
-            except Exception as e:
-                logger.error(f"Error in GameDurationSelect callback: {e}", exc_info=True)
-                await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
+                db.refresh(state)
+                await interaction.edit_original_response(
+                    embed=self.cog.generate_mode_duration_embed(state),
+                    view=self.cog.generate_mode_duration_view(self.guild_id, state)
+                )
             finally:
                 db.close()
 
-        async def start_test_game(self, interaction: discord.Interaction, state: ServerState, db: SessionLocal):
-            if not state.game_channel_id:
-                return await interaction.followup.send("❌ **Error:** Configure a game channel before starting a test.", ephemeral=True)
-            if state.game_started:
-                return await interaction.followup.send("❌ **Error:** A game is already in progress.", ephemeral=True)
+    # --- Main Config View Generation ---
+    def generate_config_menu_view(self, guild_id: str, guild: discord.Guild, state: ServerState) -> discord.ui.View:
+        view = discord.ui.View(timeout=None)
+        is_game_running = state.game_started if state else False
+        start_label, start_emoji, start_style = ("Stop Game", "⏹️", discord.ButtonStyle.danger) if is_game_running else ("Start Game", "▶️", discord.ButtonStyle.success)
+        
+        # Use the new ModeAndDurationButton
+        view.add_item(self.ModeAndDurationButton("Difficulté & Durée", guild_id, discord.ButtonStyle.primary, 0, self, disabled=is_game_running))
+        
+        view.add_item(self.ConfigButton(start_label, start_emoji, guild_id, start_style, 0, self))
+        view.add_item(self.GeneralConfigButton("Rôles & Salons", guild_id, discord.ButtonStyle.primary, 0, self, disabled=is_game_running))
+        view.add_item(self.ConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, 1, self))
+        # ... other buttons
+        return view
 
-            main_embed_cog = self.cog.bot.get_cog("MainEmbed")
-            if not main_embed_cog:
-                return await interaction.followup.send("❌ Critical Error: `MainEmbed` module not loaded.", ephemeral=True)
+    def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
+        embed = discord.Embed(title="⚙️ Bot & Game Configuration", description="Utilisez les boutons pour ajuster les paramètres.", color=discord.Color.blue())
+        
+        difficulty = state.game_mode or "medium"
+        duration_key = state.duration_key or "day"
+        mode_str = f"`{difficulty.capitalize()}`"
+        duration_str = f"`{DURATION_SETTINGS.get(duration_key, {}).get('label')}`"
 
-            # Apply test mode settings
-            state.is_test_mode = True
-            mode_data = self.cog.GAME_MODES["hard"] # Use hard mode as base for test
-            for rate_key, base_value in mode_data["rates"].items():
-                setattr(state, f"degradation_rate_{rate_key}", base_value * self.cog.TEST_RATE_MULTIPLIER)
-            state.game_tick_interval_minutes = 1 # Tick every minute for smooth clock updates
-            state.game_day_start_hour = 8 # Game day starts at 8 AM
+        embed.add_field(name="▶️ Statut Général", value=f"**Jeu:** `{'En cours' if state.game_started else 'Non démarré'}`", inline=False)
+        embed.add_field(name="🕹️ Paramètres de Jeu", value=f"**Difficulté :** {mode_str}\n**Échelle de Temps :** {duration_str}", inline=False)
+        
+        admin_role, notif_role, game_channel = (f"<@&{state.admin_role_id}>", f"<@&{state.notification_role_id}>", f"<#{state.game_channel_id}>")
+        embed.add_field(name="📍 Configuration Serveur", value=f"**Rôle Admin:** {admin_role or 'Non défini'}\n**Salon de Jeu:** {game_channel or 'Non défini'}", inline=False)
 
-            # Reset player profile for a clean test
-            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            if player:
-                db.delete(player)
-                db.commit()
-            
-            now = datetime.datetime.utcnow()
-            player = PlayerProfile(
-                guild_id=str(interaction.guild.id), 
-                last_update=now, 
-                recent_logs="--- Test Session Started ---\n"
-            )
-            db.add(player)
-            
-            state.game_started = True
-            state.game_start_time = now
-            db.commit()
-            db.refresh(player)
-            db.refresh(state)
-
-            player.show_stats_in_view = True
-            db.commit()
-            db.refresh(player)
-            
-            game_view = DashboardView(player)
-            game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
-            
-            game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
-            game_message = await game_channel.send(content="**--- ACCELERATED TEST DAY STARTING ---**", embed=game_embed, view=game_view)
-            
-            state.game_message_id = game_message.id
-            db.commit()
-
-            await interaction.followup.send(f"✅ The test game has started in {game_channel.mention}!", ephemeral=True)
-            await interaction.edit_original_response(embed=self.cog.generate_config_menu_embed(state), view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state))
-            
+        rates_desc = f"**Faim/jour:** `{state.degradation_rate_hunger:.0f}` | **Soif/jour:** `{state.degradation_rate_thirst:.0f}`"
+        embed.add_field(name="📉 Taux de Dégradation (calculés)", value=rates_desc, inline=False)
+        embed.set_footer(text="Les changements de difficulté/durée sont désactivés pendant une partie.")
+        return embed
     class BackButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0, cog: 'AdminCog'=None):
             super().__init__(label=label, style=style, row=row, emoji="⬅️")

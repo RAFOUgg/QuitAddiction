@@ -74,16 +74,6 @@ class Scheduler(commands.Cog):
                         setattr(player, key, value)
                 player.recent_logs = "\n".join(f"- {log}" for log in new_logs)
                 
-                # --- 3. ÉVÉNEMENTS & NOTIFICATIONS ---
-                channel = self.bot.get_channel(int(server_state.game_channel_id))
-                if channel:
-                    if player.health < 20:
-                        await self._send_notification(channel, player, "Santé Critique", "Votre santé est au plus bas ! Trouvez un moyen de vous soigner.", server_state.notify_vital_low_role_id, "low_vitals")
-                    if player.stress > 80:
-                        await self._send_notification(channel, player, "Stress Élevé", "Vous êtes au bord de la crise de nerfs. Calmez-vous !", server_state.notify_vital_low_role_id, "low_vitals")
-                    if player.craving_nicotine > 80:
-                        await self._send_notification(channel, player, "Forte Envie de Fumer", "L'envie de nicotine est presque insoutenable.", server_state.notify_craving_role_id, "cravings")
-
                 # --- 4. MISE À JOUR ET COMMIT ---
                 player.last_update = current_time
                 db.commit()
