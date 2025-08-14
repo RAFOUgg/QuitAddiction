@@ -1,4 +1,4 @@
-# --- cogs/scheduler.py (CORRECTED & ENHANCED) ---
+# --- cogs/scheduler.py (MODIFIED) ---
 
 import discord
 from discord.ext import commands, tasks
@@ -8,17 +8,16 @@ import datetime
 import traceback
 from utils.calculations import chain_reactions
 from utils.helpers import clamp, get_player_notif_settings
-import random 
+import random
 from cogs.main_embed import DashboardView
 
 class Scheduler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.tick.start() # Démarrer la tâche à l'initialisation du cog
+        print("Scheduler tick task has been started.")
 
-    async def cog_load(self):
-        if not self.tick.is_running():
-            self.tick.start()
-            print("Scheduler tick started.")
+    # cog_load n'est plus nécessaire car on démarre dans __init__
 
     def cog_unload(self):
         self.tick.cancel()
