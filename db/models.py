@@ -99,14 +99,13 @@ class PlayerProfile(Base):
     cigarettes: int = Column(Integer, default=5)    # 5 cigarettes
     beers: int = Column(Integer, default=0)
     joints: int = Column(Integer, default=0)
-    # --- NEW: Inventory items ---
-    soup_bowls: int = Column(Integer, default=0)
+    tacos: int = Column(Integer, default=0)
+    e_cigarettes: int = Column(Integer, default=0)
     whisky_bottles: int = Column(Integer, default=0)
     wine_bottles: int = Column(Integer, default=0)
     salad_servings: int = Column(Integer, default=0)
     orange_juice: int = Column(Integer, default=0)
     vaporizer: int = Column(Integer, default=0)
-    ecigarettes: int = Column(Integer, default=0)
     chilum: int = Column(Integer, default=0)
     bhang: int = Column(Integer, default=0)
 

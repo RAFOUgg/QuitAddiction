@@ -66,25 +66,33 @@ class ActionsView(ui.View):
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
 
 class EatView(ui.View):
+    """Vue pour choisir quoi manger."""
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=60)
-        if player.food_servings > 0: self.add_item(ui.Button(label=f"Manger Portion ({player.food_servings})", style=discord.ButtonStyle.success, custom_id="eat_food"))
-        if player.soup_bowls > 0: self.add_item(ui.Button(label=f"Manger Soupe ({player.soup_bowls})", style=discord.ButtonStyle.success, custom_id="eat_soup"))
-        if player.salad_servings > 0: self.add_item(ui.Button(label=f"Manger Salade ({player.salad_servings})", style=discord.ButtonStyle.success, custom_id="eat_salad"))
+        if player.food_servings > 0:
+            self.add_item(ui.Button(label=f"Manger Sandwich ({player.food_servings})", style=discord.ButtonStyle.success, custom_id="eat_sandwich"))
+        if getattr(player, 'tacos', 0) > 0:
+            self.add_item(ui.Button(label=f"Manger Tacos ({player.tacos})", style=discord.ButtonStyle.primary, custom_id="eat_tacos"))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
 
 class DrinkView(ui.View):
+    """Vue pour choisir quoi boire."""
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=60)
-        if player.water_bottles > 0: self.add_item(ui.Button(label=f"Boire Eau ({player.water_bottles})", style=discord.ButtonStyle.primary, custom_id="drink_water"))
-        if player.beers > 0: self.add_item(ui.Button(label=f"Boire Bière ({player.beers})", style=discord.ButtonStyle.primary, custom_id="drink_beer"))
+        if player.water_bottles > 0:
+            self.add_item(ui.Button(label=f"Boire Eau ({player.water_bottles})", style=discord.ButtonStyle.primary, custom_id="drink_water"))
+        if player.soda_cans > 0:
+            self.add_item(ui.Button(label=f"Boire Soda ({player.soda_cans})", style=discord.ButtonStyle.blurple, custom_id="drink_soda"))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
 
 class SmokeView(ui.View):
+    """Vue pour choisir quoi fumer."""
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=60)
-        if player.cigarettes > 0: self.add_item(ui.Button(label=f"Fumer Cigarette ({player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
-        if player.joints > 0: self.add_item(ui.Button(label=f"Fumer Joint ({player.joints})", style=discord.ButtonStyle.danger, custom_id="smoke_joint"))
+        if player.cigarettes > 0:
+            self.add_item(ui.Button(label=f"Fumer Cigarette ({player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
+        if player.ecigarettes > 0:
+            self.add_item(ui.Button(label=f"Vapoter ({player.ecigarettes})", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
         
 class InventoryView(ui.View):
@@ -124,18 +132,18 @@ class MainEmbed(commands.Cog):
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, view: DashboardView) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         asset_cog = self.bot.get_cog("AssetManager")
-
         image_name = "neutral"
         now = datetime.datetime.utcnow()
+
         if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
             image_name = player.last_action
         else:
-            if player.stomachache > 60: image_name = "stomachache"
-            elif player.headache > 60: image_name = "headache"
-            elif player.urge_to_pee > 80: image_name = "urge_to_pee"
-            elif player.craving > 70: image_name = "craving"
-            elif player.stress > 70 or player.hunger > 70 or player.health < 40: image_name = "sad"
-        
+            # Logique des états passifs, du plus urgent au moins urgent
+            if player.stomachache > 70: image_name = "hand_stomach"
+            elif player.fatigue > 85: image_name = "scratch_eye"
+            elif player.stress > 70 or player.health < 40 or player.withdrawal_severity > 60: image_name = "sad"
+            elif player.craving_nicotine > 75: image_name = "neutral_hold_e_cig" # Il hésite...
+            
         image_url = asset_cog.get_url(image_name) if asset_cog else None
         if image_url:
             if view.image_hidden:
@@ -290,18 +298,18 @@ class MainEmbed(commands.Cog):
 
             # Actions concrètes
             cooker_brain = self.bot.get_cog("CookerBrain")
-            message, changes = None, {}
+            message = None
             action_map = {
                 "action_sleep": cooker_brain.perform_sleep,
-                "action_urinate": cooker_brain.perform_urinate,
-                "eat_food": cooker_brain.perform_eat,
-                "eat_soup": cooker_brain.use_soup,
-                "drink_water": cooker_brain.perform_drink,
-                "drink_beer": cooker_brain.use_beer,
-                "smoke_cigarette": cooker_brain.perform_smoke,
+                "drink_water": cooker_brain.perform_drink_water,
+                "drink_soda": cooker_brain.use_soda,
+                "eat_sandwich": cooker_brain.perform_eat_sandwich,
+                "eat_tacos": cooker_brain.use_tacos,
+                "smoke_cigarette": cooker_brain.perform_smoke_cigarette,
+                "smoke_ecigarette": cooker_brain.use_ecigarette,
             }
             if custom_id in action_map:
-                message, changes = action_map[custom_id](player)
+                message, _ = action_map[custom_id](player)
 
             if message:
                 player.last_action_at = datetime.datetime.utcnow()
