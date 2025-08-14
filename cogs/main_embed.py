@@ -13,7 +13,6 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ... (Toutes les classes de View et les fonctions generate_progress_bar restent inchangées) ...
 def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 10, high_is_bad: bool = False) -> str:
     if not isinstance(value, (int, float)): value = 0.0
     value = clamp(value, 0, max_value)
@@ -100,7 +99,6 @@ class MainEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ... (les fonctions get_image_url, get_character_thoughts, generate_dashboard_embed restent inchangées) ...
     def get_image_url(self, player: PlayerProfile) -> str | None:
         asset_cog = self.bot.get_cog("AssetManager")
         if not asset_cog: return None
@@ -156,49 +154,57 @@ class MainEmbed(commands.Cog):
                  embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
 
+        # --- NOUVELLE VUE "CERVEAU" COMPACTE ET AMÉLIORÉE ---
         if player.show_stats_in_view:
-            phys_state = (f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n"
-                          f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n"
-                          f"**Hygiène:** {generate_progress_bar(player.hygiene, high_is_bad=False)} `{player.hygiene:.0f}%`\n"
-                          f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`")
-            embed.add_field(name="🧬 État Physique", value=phys_state, inline=True)
+            # Colonne 1: État physique et besoins immédiats
+            col1_title = "🧬 État Général"
+            col1_text = (
+                f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n"
+                f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n"
+                f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
+                f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
+                f"**Hygiène:** {generate_progress_bar(player.hygiene, high_is_bad=False)} `{player.hygiene:.0f}%`"
+            )
+            embed.add_field(name=col1_title, value=col1_text, inline=True)
 
-            vital_needs = (f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
-                           f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
-                           f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`\n"
-                           f"**Intestins:** {generate_progress_bar(player.bowels, high_is_bad=True)} `{player.bowels:.0f}%`")
-            embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=True)
-            embed.add_field(name="\u200b", value="\u200b", inline=False) 
+            # Colonne 2: État mental et force intérieure
+            col2_title = "🧠 Mental & Volonté"
+            col2_text = (
+                f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
+                f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
+                f"**Volonté:** {generate_progress_bar(player.willpower, high_is_bad=False)} `{player.willpower:.0f}%`\n"
+                f"**S. Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n"
+                f"**Culpabilité:** {generate_progress_bar(player.guilt, high_is_bad=True)} `{player.guilt:.0f}%`"
+            )
+            embed.add_field(name=col2_title, value=col2_text, inline=True)
 
-            mental_state = (f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
-                            f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
-                            f"**Volonté:** {generate_progress_bar(player.willpower, high_is_bad=False)} `{player.willpower:.0f}%`\n"
-                            f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
-            embed.add_field(name="🧠 État Mental", value=mental_state, inline=True)
-            
-            addiction_state = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n"
-                               f"**Sevrage:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n"
-                               f"**Tolérance:** {generate_progress_bar(player.substance_tolerance, high_is_bad=True)} `{player.substance_tolerance:.1f}%`\n"
-                               f"**Toxine:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.1f}%`")
-            embed.add_field(name="🚬 Addiction", value=addiction_state, inline=True)
-            embed.add_field(name="\u200b", value="\u200b", inline=False)
+            # Colonne 3: Addiction et ses conséquences physiques
+            # Déterminer l'envie la plus forte
+            cravings = {
+                "Nicotine": player.craving_nicotine,
+                "Alcool": player.craving_alcohol,
+                "Cannabis": player.craving_cannabis
+            }
+            dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1])
+            craving_display = "Nulle"
+            if dominant_craving_val > 10: # Seuil pour afficher l'envie
+                craving_display = f"{dominant_craving_name}"
 
-            symptoms_state = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n"
-                              f"**Culpabilité:** {generate_progress_bar(player.guilt, high_is_bad=True)} `{player.guilt:.0f}%`\n"
-                              f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n"
-                              f"**Mal de tête:** {generate_progress_bar(player.headache, high_is_bad=True)} `{player.headache:.0f}%`")
-            embed.add_field(name="🤢 Malaises & Symptômes", value=symptoms_state, inline=True)
-
-            long_term_state = (f"**Immunité:** {generate_progress_bar(player.immune_system, high_is_bad=False)} `{player.immune_system:.0f}%`\n"
-                               f"**Perf. Travail:** {generate_progress_bar(player.job_performance, high_is_bad=False)} `{player.job_performance:.0f}%`\n"
-                               f"**S. Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`")
-            embed.add_field(name="📈 Statut à Long Terme", value=long_term_state, inline=True)
+            col3_title = "🚬 Addiction & Symptômes"
+            col3_text = (
+                f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n"
+                f"**Sevrage:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n"
+                f"**Toxine:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.1f}%`\n"
+                f"**Envie:** {generate_progress_bar(dominant_craving_val, high_is_bad=True)} `{craving_display}`\n"
+                f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`"
+            )
+            embed.add_field(name=col3_title, value=col3_text, inline=True)
 
         embed.set_footer(text=f"Jeu sur {guild.name}")
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 
-
+    # Le listener on_interaction reste identique à la version précédente, qui était déjà corrigée.
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data:
@@ -206,22 +212,15 @@ class MainEmbed(commands.Cog):
 
         db = SessionLocal()
         try:
-            # --- CORRECTION FINALE : LA GUARD CLAUSE DÉFINITIVE ---
-            # Ce listener ne doit s'occuper QUE des interactions sur le message de jeu principal.
-            # On vérifie si l'interaction a un message attaché, sinon ce n'est pas un bouton de message.
             if interaction.message is None:
                 db.close()
                 return
 
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-            # Si le state n'existe pas, ou si l'ID du message de jeu n'est pas défini,
-            # ou si l'ID du message de l'interaction ne correspond PAS à celui enregistré, on ignore.
             if not state or not state.game_message_id or interaction.message.id != state.game_message_id:
-                # Cette interaction ne nous concerne pas (ex: un bouton du /config). On laisse les autres cogs la gérer.
                 db.close()
                 return
 
-            # À partir d'ici, on est SÛR que l'interaction vient du message de jeu principal.
             custom_id = interaction.data["custom_id"]
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
 
@@ -230,7 +229,6 @@ class MainEmbed(commands.Cog):
                     await interaction.response.send_message("Erreur: Votre profil de joueur est introuvable pour ce message de jeu. Veuillez contacter un admin.", ephemeral=True)
                 return
 
-            # --- Le reste de la logique reste identique ---
             now = datetime.datetime.utcnow()
             if player.action_cooldown_end_time and now < player.action_cooldown_end_time:
                 if not interaction.response.is_done():
@@ -301,7 +299,6 @@ class MainEmbed(commands.Cog):
                     pass
             db.rollback()
         finally:
-            # S'assurer que la session est fermée même si une erreur se produit
             if db.is_active:
                 db.close()
 
