@@ -2,135 +2,81 @@
 
 from .helpers import clamp
 
-def chain_reactions(state_dict, time_since_last_smoke):
+def chain_reactions(state_dict: dict, time_since_last_smoke) -> (dict, list):
     """
     Applique les réactions en chaîne sur un dictionnaire d'état du joueur.
-    C'est le cœur de la simulation de l'état de santé et mental.
+    C'est le cœur de la simulation, avec des effets non-linéaires et des interdépendances.
     """
     logs = []
 
-    if state_dict['health'] < 30:
-        logs.append("❤️ Santé très faible !")
-    if state_dict['hunger'] > 85:
-        logs.append("🍔 Faim dévorante !")
-    if state_dict['thirst'] > 85:
-        logs.append("💧 Soif extrême !")
-    if state_dict['stress'] > 75:
-        logs.append("😨 Stress intense.")
-    if state_dict['withdrawal_severity'] > 60:
-        logs.append("🚬 En état de manque sévère.")
-    if state_dict['fatigue'] > 90:
-        logs.append("🥱 Au bord de l'épuisement.")
-    if state_dict['bladder'] > 95:
-        logs.append("🚽 Envie très urgente !")
+    # --- 0. DECAY & REGENERATION NATURELS ---
+    # La culpabilité s'estompe avec le temps
+    state_dict['guilt'] = clamp(state_dict['guilt'] - 0.2, 0, 100) 
+    # Le mal de tête s'estompe aussi, s'il n'est pas entretenu
+    state_dict['headache'] = clamp(state_dict['headache'] - 0.5, 0, 100) 
 
-    if not logs:
-        logs.append("Tout semble calme...")
-
-
-    # S'assurer que toutes les clés existent pour éviter les KeyErrors
-    all_keys = [
-        'health', 'energy', 'pain', 'tox', 'hunger', 'thirst', 'bladder', 'fatigue', 
-        'sanity', 'stress', 'happiness', 'boredom', 'nausea', 'dizziness', 'headache',
-        'dry_mouth', 'sore_throat', 'substance_addiction_level', 'withdrawal_severity',
-        'intoxication_level', 'willpower', 'hygiene', 'immune_system', 'guilt', 'is_sick',
-        'craving_nicotine', 'craving_alcohol', 'sex_drive', 'job_performance', 'stomachache',
-        'urge_to_pee', 'craving'
-    ]
-    for key in all_keys:
-        state_dict.setdefault(key, 0.0)
-
-    # --- 1. EFFETS DE L'ÉTAT DE SANTÉ ACTUEL ---
-    if state_dict['is_sick']:
-        state_dict['energy'] = clamp(state_dict['energy'] - 0.5, 0, 100)
-        state_dict['fatigue'] = clamp(state_dict['fatigue'] + 0.5, 0, 100)
-        state_dict['pain'] = clamp(state_dict['pain'] + 0.2, 0, 100)
-        state_dict['happiness'] = clamp(state_dict['happiness'] - 0.3, 0, 100)
-        state_dict['headache'] = clamp(state_dict['headache'] + 0.3, 0, 100)
+    # --- 1. MÉCANISMES D'ADDICTION & DE MANQUE ---
+    base_withdrawal_increase = (state_dict['substance_addiction_level'] / 100.0) * 0.5
+    state_dict['withdrawal_severity'] = clamp(state_dict['withdrawal_severity'] + base_withdrawal_increase, 0, 100)
     
-    if state_dict['tox'] > 40:
-        state_dict['nausea'] = clamp(state_dict['nausea'] + state_dict['tox'] * 0.08, 0, 100)
-        state_dict['immune_system'] = clamp(state_dict['immune_system'] - 0.1, 0, 100)
-
-    if state_dict['thirst'] > 60:
-        state_dict['headache'] = clamp(state_dict['headache'] + 0.1, 0, 100)
-    if state_dict['hunger'] > 70:
-        state_dict['stress'] = clamp(state_dict['stress'] + 0.1, 0, 100)
-        state_dict['energy'] = clamp(state_dict['energy'] - 0.2, 0, 100)
-    if state_dict['bladder'] > 80:
-        state_dict['pain'] = clamp(state_dict['pain'] + 0.2, 0, 100)
-        state_dict['stress'] = clamp(state_dict['stress'] + 0.3, 0, 100)
-    if state_dict['fatigue'] > 75:
-        state_dict['energy'] = clamp(state_dict['energy'] - 0.4, 0, 100)
-        state_dict['willpower'] = clamp(state_dict['willpower'] - 0.3, 0, 100)
-
-    # --- 2. EFFETS DE L'ÉTAT MENTAL ---
-    if state_dict['stress'] > 50:
-        state_dict['immune_system'] = clamp(state_dict['immune_system'] - 0.2, 0, 100)
-        state_dict['happiness'] = clamp(state_dict['happiness'] - 0.1, 0, 100)
-        state_dict['willpower'] = clamp(state_dict['willpower'] - 0.2, 0, 100)
-        state_dict['headache'] = clamp(state_dict['headache'] + 0.1, 0, 100)
-
     if state_dict['withdrawal_severity'] > 10:
         severity = state_dict['withdrawal_severity']
-        state_dict['stress'] = clamp(state_dict['stress'] + severity * 0.03, 0, 100)
-        state_dict['happiness'] = clamp(state_dict['happiness'] - severity * 0.04, 0, 100)
-        state_dict['willpower'] = clamp(state_dict['willpower'] - severity * 0.05, 0, 100)
+        # Le manque génère du stress, et ce de plus en plus fort.
+        state_dict['stress'] = clamp(state_dict['stress'] + (severity / 100.0) * 0.7, 0, 100)
+        # Le manque pèse sur le moral
+        state_dict['happiness'] = clamp(state_dict['happiness'] - (severity / 100.0) * 0.4, 0, 100)
+        # Le manque sape la volonté
+        state_dict['willpower'] = clamp(state_dict['willpower'] - (severity / 100.0) * 1.2, 0, 100)
+        # Le manque cause des symptômes physiques
+        state_dict['nausea'] = clamp(state_dict['nausea'] + (severity / 100.0) * 0.3, 0, 100)
+        if severity > 60:
+            logs.append("😖 Le manque vous ronge, votre volonté s'effrite.")
+    
+    # Calcul de l'envie (craving) basé sur le manque, le temps, et la volonté faible
+    craving_factor = state_dict['withdrawal_severity'] + (time_since_last_smoke.total_seconds() / 400.0)
+    if state_dict['willpower'] < 30:
+        craving_factor *= 1.5 # Une volonté faible rend l'envie obsédante
+    state_dict['craving_nicotine'] = clamp(craving_factor, 0, 100)
 
-    # L'envie de nicotine est maintenant directement liée au manque et au temps
-    nicotine_craving = state_dict['withdrawal_severity'] + (time_since_last_smoke.total_seconds() / 360)
-    state_dict['craving_nicotine'] = clamp(nicotine_craving, 0, 100)
+    # --- 2. CONSÉQUENCES DES ÉTATS PHYSIQUES ---
+    if state_dict['fatigue'] > 70:
+        # La fatigue dégrade la performance, la volonté et l'énergie
+        fatigue_effect = (state_dict['fatigue'] - 70) / 30.0 # scale from 0 to 1
+        state_dict['energy'] = clamp(state_dict['energy'] - 1.0 * fatigue_effect, 0, 100)
+        state_dict['willpower'] = clamp(state_dict['willpower'] - 0.8 * fatigue_effect, 0, 100)
+        state_dict['job_performance'] = clamp(state_dict['job_performance'] - 1.5 * fatigue_effect, 0, 100)
+        if state_dict['fatigue'] > 90: logs.append("😴 L'épuisement vous paralyse.")
 
-    # NOUVEAU: Logique pour les autres envies
-    # Envie d'alcool quand on est stressé ou malheureux
-    if state_dict['stress'] > 50 or state_dict['happiness'] < 40:
-        craving_bonus = (state_dict['stress'] - 50) * 0.05 + (40 - state_dict['happiness']) * 0.05
-        state_dict['craving_alcohol'] = clamp(state_dict['craving_alcohol'] + craving_bonus, 0, 100)
-    else: # L'envie baisse lentement
-        state_dict['craving_alcohol'] = clamp(state_dict['craving_alcohol'] - 0.5, 0, 100)
+    if state_dict['hygiene'] < 30:
+        hygiene_effect = (30 - state_dict['hygiene']) / 30.0 # scale de 0 à 1
+        state_dict['immune_system'] = clamp(state_dict['immune_system'] - 0.5 * hygiene_effect, 0, 100)
+        state_dict['happiness'] = clamp(state_dict['happiness'] - 0.4 * hygiene_effect, 0, 100)
+        if state_dict['hygiene'] < 10: logs.append("🚿 Vous vous sentez vraiment sale, ça pèse sur le moral.")
+    
+    if state_dict['hunger'] > 80: state_dict['stress'] += 0.5
+    if state_dict['thirst'] > 70: state_dict['headache'] += 0.8
+    if state_dict['bladder'] > 85: state_dict['stress'] += 0.6; state_dict['pain'] += 0.2
+    if state_dict['bowels'] > 80:
+        state_dict['stress'] = clamp(state_dict['stress'] + 0.4, 0, 100)
+        state_dict['pain'] = clamp(state_dict['pain'] + 0.5, 0, 100) # C'est plus douloureux
+        if state_dict['bowels'] > 95:
+            logs.append("💩 Une crampe douloureuse vous rappelle une urgence intestinale !")
+    # --- 3. CONSÉQUENCES DE L'ÉTAT MENTAL ---
+    if state_dict['stress'] > 50:
+        stress_effect = (state_dict['stress'] - 50) / 50.0 # scale
+        state_dict['happiness'] = clamp(state_dict['happiness'] - 0.6 * stress_effect, 0, 100)
+        state_dict['immune_system'] = clamp(state_dict['immune_system'] - 0.7 * stress_effect, 0, 100)
+        state_dict['headache'] = clamp(state_dict['headache'] + 0.5 * stress_effect, 0, 100)
+        # Cercle vicieux : le stress donne envie de solutions rapides
+        state_dict['craving_alcohol'] = clamp(state_dict['craving_alcohol'] + 1.0 * stress_effect, 0, 100)
+        if state_dict['stress'] > 80: logs.append("😨 Le stress devient insupportable.")
 
-    # NOUVEAU: Libido / Envie de sexe
-    # Augmente avec l'ennui, le bonheur et le temps, diminue avec la grosse fatigue, la douleur ou le stress
-    if state_dict['boredom'] > 50 and state_dict['happiness'] > 40:
-        state_dict['sex_drive'] = clamp(state_dict['sex_drive'] + 0.2, 0, 100)
-    if state_dict['fatigue'] > 80 or state_dict['pain'] > 70 or state_dict['stress'] > 60:
-        state_dict['sex_drive'] = clamp(state_dict['sex_drive'] - 1.0, 0, 100)
+    # --- 4. RÉGÉNÉRATION ET ÉQUILIBRE ---
+    if state_dict['stress'] < 40 and state_dict['happiness'] > 50 and state_dict['fatigue'] < 50:
+        state_dict['willpower'] = clamp(state_dict['willpower'] + 0.5, 0, 100)
+        state_dict['health'] = clamp(state_dict['health'] + 0.1, 0, 100)
 
-    # Effets de la CULPABILITÉ (Guilt)
-    if state_dict['guilt'] > 0:
-        state_dict['stress'] = clamp(state_dict['stress'] + state_dict['guilt'] * 0.01, 0, 100)
-        state_dict['guilt'] = clamp(state_dict['guilt'] - 0.1, 0, 100) # La culpabilité s'estompe lentement
-
-    # --- 3. EFFETS DES STATS DE VIE ---
-
-    # Effets de l'HYGIÈNE
-    if state_dict['hygiene'] < 40:
-        state_dict['stress'] = clamp(state_dict['stress'] + 0.1, 0, 100)
-        state_dict['happiness'] = clamp(state_dict['happiness'] - 0.05, 0, 100)
-        state_dict['immune_system'] = clamp(state_dict['immune_system'] - 0.05, 0, 100) # Mauvaise hygiène -> plus de risques
-        
-    # Régénération de la SANTÉ et de la VOLONTÉ (si les conditions sont bonnes)
-    is_healthy = state_dict['stress'] < 30 and state_dict['hunger'] < 50 and state_dict['thirst'] < 50
-    if is_healthy:
-        state_dict['immune_system'] = clamp(state_dict['immune_system'] + 0.1, 0, 100)
-        state_dict['health'] = clamp(state_dict['health'] + 0.05, 0, 100)
-        state_dict['willpower'] = clamp(state_dict['willpower'] + 0.2, 0, 100) # Le calme et le repos restaurent la volonté
-
-    # La PERFORMANCE AU TRAVAIL est une conséquence de l'état général
-    # Note : Le calcul du gain se fera dans le scheduler, ici on met juste à jour la stat pour l'affichage
-    perf = 100
-    perf -= state_dict['fatigue'] * 0.4
-    perf -= state_dict['stress'] * 0.3
-    perf -= state_dict['pain'] * 0.2
-    perf -= state_dict['withdrawal_severity'] * 0.5
-    if state_dict['is_sick']: perf -= 40
-    state_dict['job_performance'] = clamp(perf, 0, 100)
-
-    # --- NEW: Visual states calculation ---
-    state_dict['stomachache'] = clamp((state_dict['hunger'] + state_dict['nausea']) / 2, 0, 100)
-    state_dict['urge_to_pee'] = clamp(state_dict['bladder'], 0, 100)
-    state_dict['craving'] = clamp((state_dict['withdrawal_severity'] + state_dict['substance_addiction_level']) / 2, 0, 100)
-    state_dict['headache'] = clamp(state_dict['headache'] + (state_dict['thirst'] > 60) * 5 + (state_dict['stress'] > 70) * 5, 0, 100)
-
+    # --- 5. STATS COMPOSITES POUR L'AFFICHAGE ---
+    state_dict['stomachache'] = clamp((state_dict['hunger'] * 0.5 + state_dict['nausea']), 0, 100)
     
     return state_dict, logs

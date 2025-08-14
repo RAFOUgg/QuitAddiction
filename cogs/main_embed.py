@@ -37,18 +37,30 @@ class DashboardView(ui.View):
 
 
 class ActionsView(ui.View):
+    """
+    La vue pour les actions du joueur, maintenant avec plus d'options contextuelles.
+    """
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
         cooldown_active = player.last_action_at and (now - player.last_action_at).total_seconds() < 10
+        
         self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️", disabled=cooldown_active))
         self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧", disabled=cooldown_active))
         self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬", disabled=cooldown_active))
         self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", disabled=cooldown_active))
-        if player.bladder > 30:
-            self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=cooldown_active))
+        
+        # --- LOGIQUE DE BOUTONS CONTEXTUELS AMÉLIORÉE ---
+        # Regroupe les actions d'hygiène/besoins sur une deuxième ligne
         if player.hygiene < 40:
             self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.blurple, custom_id="action_shower", emoji="🚿", row=1, disabled=cooldown_active))
+        if player.bladder > 30:
+            style = discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple
+            self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=style, custom_id="action_urinate", emoji="🚽", row=1, disabled=cooldown_active))
+        if player.bowels > 40: # NOUVEAU BOUTON
+            style = discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple
+            self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=style, custom_id="action_defecate", emoji="💩", row=1, disabled=cooldown_active))
+
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
 
 class EatView(ui.View):
@@ -92,26 +104,28 @@ class MainEmbed(commands.Cog):
         self.bot = bot
 
     def get_image_url(self, player: PlayerProfile) -> str | None:
-        """Helper to get the current image URL for the player."""
+        """Logique d'image améliorée pour inclure les nouvelles sensations."""
         now = datetime.datetime.utcnow()
         asset_cog = self.bot.get_cog("AssetManager")
         if not asset_cog: return None
 
-        image_name = "neutral"
-        # Priority 1: Recent Action
+        # Priority 1: Action récente (dure 10s)
         if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
             return asset_cog.get_url(player.last_action)
 
-        # Priority 2: Critical States
-        if player.happiness < 10 and player.stress > 80: image_name = "sob"
+        image_name = "neutral"
+        # Priority 2: Besoins critiques
+        if player.bowels > 85: image_name = "neutral_pooping" # <- Ajouté
         elif player.bladder > 85: image_name = "need_pee"
         elif player.hunger > 85: image_name = "hungry"
-        elif player.fatigue > 85: image_name = "neutral_sleep"
-        elif player.stress > 70 or player.health < 40 or player.withdrawal_severity > 60: image_name = "sad"
-        elif player.thirst > 70 and player.craving_alcohol > 60: image_name = "sad_drinking"
-        elif player.stomachache > 70: image_name = "hand_stomach"
-        elif player.headache > 60: image_name = "scratch_eye"
-        elif player.craving_nicotine > 75: image_name = "neutral_hold_e_cig"
+        # Priority 3: États mentaux et physiques sévères
+        elif player.fatigue > 90: image_name = "neutral_sleep"
+        elif player.happiness < 10 and player.stress > 80: image_name = "sob"
+        elif player.headache > 70: image_name = "scratch_eye" # <- Ajouté
+        elif player.stomachache > 70: image_name = "hand_stomach" # <- Ajouté
+        elif player.stress > 70 or player.health < 40: image_name = "sad"
+        # Priority 4: Autres états
+        elif player.withdrawal_severity > 60: image_name = "neutral_hold_e_cig" # Manque
         elif player.hygiene < 20: image_name = "neutral_shower"
         
         return asset_cog.get_url(image_name)
@@ -292,6 +306,7 @@ class MainEmbed(commands.Cog):
                 "action_sleep": cooker_brain.perform_sleep,
                 "action_shower": cooker_brain.perform_shower,
                 "action_urinate": cooker_brain.perform_urinate,
+                "action_defecate": cooker_brain.perform_defecate, # NOUVELLE ACTION MAPPÉE
                 "drink_water": cooker_brain.perform_drink_water,
                 "drink_soda": cooker_brain.use_soda,
                 "eat_sandwich": cooker_brain.perform_eat_sandwich,
