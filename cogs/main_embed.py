@@ -14,6 +14,7 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     if not isinstance(value, (int, float)): value = 0.0
     value = clamp(value, 0, max_value)
     percent = value / max_value
+    filled_blocks = int(length * percent)
     bar_filled = '🟥' if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3) else '🟧' if (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6) else '🟩'
     bar_empty = '⬛'
     return f"`{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}`"
