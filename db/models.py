@@ -33,6 +33,15 @@ class ServerState(Base):
     degradation_rate_hygiene: float = Column(Float, default=4.0) # Nouvelle ligne
     notify_on_low_vital_stat: bool = Column(Boolean, default=True)
     is_test_mode: bool = Column(Boolean, default=False)
+    notify_vital_low_role_id: Optional[int] = Column(BigInteger, nullable=True)
+    notify_critical_role_id: Optional[int] = Column(BigInteger, nullable=True)
+    notify_envie_fumer_role_id: Optional[int] = Column(BigInteger, nullable=True)
+    notify_friend_message_role_id: Optional[int] = Column(BigInteger, nullable=True)
+    notify_shop_promo_role_id: Optional[int] = Column(BigInteger, nullable=True)
+    notify_on_critical_event: bool = Column(Boolean, default=True)
+    notify_on_envie_fumer: bool = Column(Boolean, default=True)
+    notify_on_friend_message: bool = Column(Boolean, default=True)
+    notify_on_shop_promo: bool = Column(Boolean, default=True)
 
 
 class PlayerProfile(Base):
