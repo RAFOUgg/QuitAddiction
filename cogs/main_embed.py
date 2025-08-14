@@ -7,28 +7,23 @@ from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import datetime
 import traceback
-from .phone import PhoneMainView, Phone
+from .phone import PhoneMainView, Phone # Correction: Import direct de la vue
 from utils.helpers import clamp
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 5, high_is_bad: bool = False) -> str:
-    """Génère une barre de progression de 5 emojis (1 emoji = 20%)."""
     if not isinstance(value, (int, float)): value = 0.0
     value = clamp(value, 0, max_value)
-    
-    # CORRECTION : Utilisation de round() au lieu de int() pour corriger les erreurs d'arrondi.
-    # 99.99% sera maintenant correctement arrondi à 5 blocs.
     filled_blocks = round((value / max_value) * length)
-    
     percent = value / max_value
     bar_filled = '🟥' if (high_is_bad and percent > 0.75) or (not high_is_bad and percent < 0.25) else '🟧' if (high_is_bad and percent > 0.5) or (not high_is_bad and percent < 0.5) else '🟩'
     bar_empty = '⬛'
     return f"{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}"
 
-# --- VUES (inchangées) ---
-# ... (Les classes de View restent les mêmes) ...
+# --- VUES ---
+
 class DashboardView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
@@ -96,7 +91,6 @@ class SmokeView(ui.View):
         if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
-
 # --- COG ---
 
 class MainEmbed(commands.Cog):
@@ -104,6 +98,7 @@ class MainEmbed(commands.Cog):
         self.bot = bot
 
     def get_image_url(self, player: PlayerProfile) -> str | None:
+        # ... (code inchangé)
         asset_cog = self.bot.get_cog("AssetManager")
         if not asset_cog: return None
         now = datetime.datetime.utcnow()
@@ -125,6 +120,7 @@ class MainEmbed(commands.Cog):
 
     @staticmethod
     def get_character_thoughts(player: PlayerProfile) -> str:
+        # ... (code inchangé)
         if player.hunger > 70 and player.stress > 60: return "J'ai l'estomac dans les talons et les nerfs à vif. Un rien pourrait me faire craquer."
         if player.withdrawal_severity > 60 and player.health < 40: return "Chaque partie de mon corps me fait souffrir. Le manque me ronge de l'intérieur, je suis à bout."
         if player.fatigue > 80 and player.boredom > 70: return "Je suis épuisé, mais je m'ennuie tellement que je n'arrive même pas à fermer l'œil."
@@ -134,12 +130,11 @@ class MainEmbed(commands.Cog):
         return "Pour l'instant, ça va à peu près."
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
+        # ... (code inchangé)
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         if image_url := self.get_image_url(player):
             embed.set_image(url=image_url)
-
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
-
         if player.show_inventory_in_view:
             inventory_items = [
                 ("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"),
@@ -147,7 +142,6 @@ class MainEmbed(commands.Cog):
                 ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")
             ]
             inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items if getattr(player, attr, 0) > 0]
-            
             if inventory_list:
                 mid_point = len(inventory_list) // 2 + (len(inventory_list) % 2)
                 col1 = "\n".join(inventory_list[:mid_point])
@@ -157,12 +151,9 @@ class MainEmbed(commands.Cog):
             else:
                  embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
-
         if player.show_stats_in_view:
             def stat_line(name: str, value: float, high_is_bad: bool):
-                # Le padding est ajusté pour un meilleur alignement.
                 return f"`{name:<11}` {generate_progress_bar(value, high_is_bad=high_is_bad)} `{int(value):>3}%`"
-
             col1_title = "🧬 Physique & Besoins"
             col1_text = (
                 f"{stat_line('Santé', player.health, False)}\n"
@@ -173,7 +164,6 @@ class MainEmbed(commands.Cog):
                 f"{stat_line('Soif', player.thirst, True)}"
             )
             embed.add_field(name=col1_title, value=col1_text, inline=True)
-
             col2_title = "🧠 Mental & Émotions"
             col2_text = (
                 f"{stat_line('Humeur', player.happiness, False)}\n"
@@ -184,11 +174,9 @@ class MainEmbed(commands.Cog):
                 f"{stat_line('Ennui', player.boredom, True)}"
             )
             embed.add_field(name=col2_title, value=col2_text, inline=True)
-            
             cravings = { "Nico": player.craving_nicotine, "Alco": player.craving_alcohol, "Weed": player.craving_cannabis }
             dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1])
             envie_text = f"{stat_line(f'Envie', dominant_craving_val, True)}"
-
             col3_title = "🚬 Addiction & Symptômes"
             col3_text = (
                 f"{stat_line('Dépendance', player.substance_addiction_level, True)}\n"
@@ -199,15 +187,13 @@ class MainEmbed(commands.Cog):
                 f"{stat_line('Nausée', player.nausea, True)}"
             )
             embed.add_field(name=col3_title, value=col3_text, inline=True)
-
         embed.set_footer(text=f"Jeu sur {guild.name}")
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
-        if not interaction.data or "custom_id" not in interaction.data:
-            return
+        if not interaction.data or "custom_id" not in interaction.data: return
 
         db = SessionLocal()
         try:
@@ -226,17 +212,28 @@ class MainEmbed(commands.Cog):
                 return
             
             custom_id = interaction.data["custom_id"]
-            is_phone_interaction = custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_"))
-            if is_phone_interaction:
-                phone_cog = self.bot.get_cog("Phone")
-                if phone_cog:
-                    await phone_cog.handle_interaction(interaction, db, player, state, self)
+            
+            # --- ROUTEUR D'INTERACTION PRINCIPAL ---
+            phone_cog = self.bot.get_cog("Phone")
+            # Le bouton "phone_open" est géré ici pour passer à la vue du téléphone
+            if custom_id == "phone_open":
+                if not interaction.response.is_done(): await interaction.response.defer()
+                await interaction.edit_original_response(
+                    embed=phone_cog.generate_phone_main_embed(player, self),
+                    view=PhoneMainView(player)
+                )
                 return
             
+            # Toutes les autres interactions du téléphone sont déléguées
+            if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
+                 await phone_cog.handle_interaction(interaction, db, player, state, self)
+                 return
+
             if not interaction.response.is_done():
                 await interaction.response.defer()
-
-            if custom_id in ["nav_toggle_stats", "nav_toggle_inventory"]:
+            
+            # --- GESTION DES ACTIONS ET MISE À JOUR DE LA VUE ---
+            if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"]:
                 if custom_id == "nav_toggle_stats":
                     player.show_stats_in_view = not player.show_stats_in_view
                 elif custom_id == "nav_toggle_inventory":
@@ -248,10 +245,7 @@ class MainEmbed(commands.Cog):
                 )
                 return
             
-            if custom_id == "nav_main_menu":
-                 await interaction.edit_original_response(view=DashboardView(player))
-                 return
-            elif custom_id == "nav_actions":
+            if custom_id == "nav_actions":
                 await interaction.edit_original_response(view=ActionsView(player))
                 return
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
@@ -260,15 +254,7 @@ class MainEmbed(commands.Cog):
                 return
             
             cooker_brain = self.bot.get_cog("CookerBrain")
-            action_map = {
-                "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint,
-                "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower,
-                "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate,
-                "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda,
-                "eat_sandwich": cooker_brain.perform_eat_sandwich, "eat_tacos": cooker_brain.use_tacos,
-                "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette,
-                "smoke_ecigarette": cooker_brain.use_ecigarette,
-            }
+            action_map = { "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint, "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower, "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate, "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda, "eat_sandwich": cooker_brain.perform_eat_sandwich, "eat_tacos": cooker_brain.use_tacos, "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette, "smoke_ecigarette": cooker_brain.use_ecigarette }
             if custom_id in action_map:
                 message, _, duration = action_map[custom_id](player)
                 if duration > 0:

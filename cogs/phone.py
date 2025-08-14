@@ -16,8 +16,8 @@ class PhoneMainView(ui.View):
         self.add_item(ui.Button(label="Paramètres", style=discord.ButtonStyle.secondary, custom_id="phone_settings", emoji="⚙️"))
         self.add_item(ui.Button(label="Uber Eats", style=discord.ButtonStyle.success, custom_id="phone_ubereats", emoji="🍔"))
         self.add_item(ui.Button(label="Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop", disabled=(not player.has_unlocked_smokeshop), emoji="🛍️"))
-        # Le bouton de retour est maintenant géré par le routeur principal
-        self.add_item(ui.Button(label="Fermer le téléphone", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
+        # CORRECTION : Le bouton de retour est maintenant le bouton de navigation principal du jeu
+        self.add_item(ui.Button(label="Retour au jeu", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
 
 class SMSView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -37,7 +37,8 @@ class ShopView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
         self.add_item(ui.Button(label="Cigarettes (5$)", emoji="🚬", style=discord.ButtonStyle.secondary, custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5)))
-        self.add_item(ui.Button(label="Bière (3$)", emoji="🍺", style=discord.ButtonStyle.blurple, custom_id="shop_buy_beer", disabled=(player.wallet < 3)))
+        self.add_item(ui.Button(label="Vin (7$)", emoji="🍷", style=discord.ButtonStyle.blurple, custom_id="shop_buy_wine", disabled=(player.wallet < 7))) # Prix ajusté
+        self.add_item(ui.Button(label="Joint (10$)", emoji="🌿", style=discord.ButtonStyle.green, custom_id="shop_buy_joint", disabled=(player.wallet < 10)))
         self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.primary, custom_id="shop_buy_water", disabled=(player.wallet < 1)))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
@@ -62,7 +63,6 @@ class Phone(commands.Cog):
         self.bot = bot
 
     def _add_main_image(self, embed: discord.Embed, player: PlayerProfile, main_embed_cog: commands.Cog):
-        # MODIFIÉ: Utilise set_image pour une grande image
         if image_url := main_embed_cog.get_image_url(player):
             embed.set_image(url=image_url)
 
@@ -93,7 +93,6 @@ class Phone(commands.Cog):
         self._add_main_image(embed, player, main_embed_cog)
         return embed
     
-    # ... autres générateurs d'embeds modifiés de la même manière
     def generate_notifications_embed(self, player: PlayerProfile, state: ServerState, main_embed_cog: commands.Cog) -> discord.Embed:
         embed = discord.Embed(title="🔔 Notifications", color=discord.Color.orange())
         notif_history = player.notification_history.strip().split("\n") if player.notification_history else []
@@ -107,15 +106,11 @@ class Phone(commands.Cog):
         return embed
 
     async def handle_interaction(self, interaction: discord.Interaction, db: Session, player: PlayerProfile, state: ServerState, main_embed_cog: commands.Cog):
-        try:
-            if not interaction.response.is_done():
-                await interaction.response.defer()
-        except discord.errors.InteractionResponded:
-            pass
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
         custom_id = interaction.data["custom_id"]
         
-        # Dictionnaire des constructeurs d'embed et de vue pour la navigation
         phone_screens = {
             "phone_open": (self.generate_phone_main_embed, PhoneMainView),
             "phone_shop": (self.generate_shop_embed, ShopView),
@@ -125,10 +120,8 @@ class Phone(commands.Cog):
             "phone_settings": (self.generate_settings_embed, SettingsView)
         }
 
-        # Navigation dans le téléphone
         if custom_id in phone_screens:
             embed_func, view_class = phone_screens[custom_id]
-            # La fonction d'embed a besoin d'arguments différents selon le cas
             if custom_id == "phone_notifications":
                 embed = embed_func(player, state, main_embed_cog)
             elif custom_id == "phone_settings":
@@ -138,39 +131,39 @@ class Phone(commands.Cog):
                  return
             else:
                 embed = embed_func(player, main_embed_cog)
-            
             view = view_class(player)
             await interaction.edit_original_response(embed=embed, view=view)
 
-        # Basculer les paramètres de notification
         elif custom_id.startswith("phone_toggle_notif:"):
             key_to_toggle = custom_id.split(":")[1]
             settings = get_player_notif_settings(player)
             settings[key_to_toggle] = not settings.get(key_to_toggle, True)
             player.notifications_config = json.dumps(settings)
             db.commit(); db.refresh(player)
-            
             embed = self.generate_settings_embed(player, main_embed_cog)
             view = SettingsView(player, settings)
             await interaction.edit_original_response(embed=embed, view=view)
 
-        # Logique d'achat
-        elif custom_id.startswith("shop_buy_") or custom_id.startswith("ubereats_buy_"):
+        elif custom_id.startswith(("shop_buy_", "ubereats_buy_")):
             items = {
                 "shop_buy_cigarettes": {"cost": 5, "action": lambda p: setattr(p, 'cigarettes', p.cigarettes + 10), "msg": "Vous avez acheté 10 cigarettes.", "view": ShopView, "embed": self.generate_shop_embed},
-                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', getattr(p, 'tacos', 0) + 1), "msg": "Vous avez commandé un tacos.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
-                # ... Ajoutez les autres articles ici de la même manière
+                "shop_buy_wine": {"cost": 7, "action": lambda p: setattr(p, 'wine_bottles', p.wine_bottles + 1), "msg": "Vous avez acheté une bouteille de vin.", "view": ShopView, "embed": self.generate_shop_embed},
+                "shop_buy_joint": {"cost": 10, "action": lambda p: setattr(p, 'joints', p.joints + 1), "msg": "Vous avez acheté un joint.", "view": ShopView, "embed": self.generate_shop_embed},
+                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', p.tacos + 1), "msg": "Vous avez commandé un tacos.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
+                "ubereats_buy_soda": {"cost": 2, "action": lambda p: setattr(p, 'soda_cans', p.soda_cans + 1), "msg": "Vous avez commandé un soda.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
+                "ubereats_buy_salad": {"cost": 8, "action": lambda p: setattr(p, 'salad_servings', p.salad_servings + 1), "msg": "Vous avez commandé une salade.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
+                "ubereats_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez commandé de l'eau.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
+                "shop_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez acheté de l'eau.", "view": ShopView, "embed": self.generate_shop_embed},
             }
             item = items.get(custom_id)
             if item and player.wallet >= item["cost"]:
                 player.wallet -= item["cost"]
                 item["action"](player)
                 db.commit(); db.refresh(player)
-
                 await interaction.followup.send(f'✅ {item["msg"]}', ephemeral=True)
                 await interaction.edit_original_response(embed=item["embed"](player, main_embed_cog), view=item["view"](player))
             else:
-                await interaction.followup.send(f"⚠️ Transaction échouée.", ephemeral=True)
+                await interaction.followup.send(f"⚠️ Transaction échouée. Pas assez d'argent ?", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Phone(bot))
