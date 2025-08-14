@@ -1,4 +1,4 @@
-# --- cogs/dev_stats_cog.py (FINAL & ROBUST) ---
+# --- cogs/dev_stats_cog.py (FINAL & COMPLETE) ---
 
 import discord
 from discord.ext import commands
@@ -7,8 +7,7 @@ import asyncio
 import aiohttp
 import traceback
 import subprocess
-from datetime import datetime, timedelta, date
-import calendar
+from datetime import datetime, timedelta
 import os
 import dotenv
 from collections import defaultdict
@@ -30,47 +29,8 @@ class DevStatsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    def generate_contribution_graph(self, commits: list) -> str:
-        """Génère un graphique de contribution textuel pour le mois en cours."""
-        today = date.today()
-        # NOTE : Assurez-vous que le bot est sur le serveur où ces emojis sont hébergés.
-        # Le format <a:nom:id> pour les emojis animés ou <:nom:id> pour les statiques est crucial.
-        contribution_emojis = [
-            "<:g_d:1186717540974411887>", "<:g_l:1186717537023348836>", 
-            "<:g_m:1186717534473175111>", "<:g_h:1186717531956551731>", 
-            "<:g_vh:1186717529125023805>"
-        ]
-        
-        commits_per_day = defaultdict(int)
-        for commit in commits:
-            commit_date = datetime.fromisoformat(commit['commit']['author']['date'].replace('Z', '+00:00')).date()
-            if commit_date.year == today.year and commit_date.month == today.month:
-                commits_per_day[commit_date.day] += 1
-        
-        cal = calendar.monthcalendar(today.year, today.month)
-        # CORRECTION : Utilisation d'un caractère spécial (espace insécable) pour les jours vides
-        # et s'assurer que les emojis sont traités comme une seule unité.
-        graph = f"`{'Mo Tu We Th Fr Sa Su'}`\n" 
-
-        for week in cal:
-            week_parts = []
-            for day_num in week:
-                if day_num == 0:
-                    week_parts.append("\u2003") # Espace de largeur M
-                else:
-                    count = commits_per_day.get(day_num, 0)
-                    if count == 0: level = 0
-                    elif count <= 2: level = 1
-                    elif count <= 5: level = 2
-                    elif count <= 9: level = 3
-                    else: level = 4
-                    week_parts.append(contribution_emojis[level])
-            graph += " ".join(week_parts) + "\n"
-            
-        return graph.strip()
-
-    # ... (le reste du fichier dev_stats_cog.py reste identique à la version précédente) ...
     async def get_commit_stats(self) -> dict:
+        """Récupère et analyse TOUS les commits d'un projet pour des statistiques complètes."""
         if not all([GITHUB_TOKEN, GITHUB_REPO_OWNER, GITHUB_REPO_NAME]):
             return {"error": "Missing GitHub configuration in .env file."}
         
@@ -78,49 +38,72 @@ class DevStatsCog(commands.Cog):
         api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/commits"
         
         all_commits = []
-        total_commits_count = 0
-        
+        page = 1
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, headers=headers, params={"per_page": 1}) as response:
-                    if response.status == 200 and 'Link' in response.headers:
-                        link_header = response.headers['Link']
-                        total_commits_count = int(link_header.split('>; rel="last"')[0].split('page=')[-1])
-                
-                since_date = (datetime.utcnow() - timedelta(days=90)).isoformat()
-                async with session.get(api_url, headers=headers, params={"per_page": 100, "since": since_date}) as response:
-                    if response.status != 200:
-                        logger.error(f"GitHub API Error: {response.status} - {await response.text()}")
-                        return {"error": f"GitHub API returned status {response.status}."}
-                    all_commits = await response.json()
-
+                while True:
+                    params = {"per_page": 100, "page": page}
+                    async with session.get(api_url, headers=headers, params=params) as response:
+                        if response.status != 200:
+                            logger.error(f"GitHub API Error: {response.status} - {await response.text()}")
+                            return {"error": f"GitHub API returned status {response.status}."}
+                        
+                        data = await response.json()
+                        if not data:
+                            break # Plus de commits à récupérer
+                        all_commits.extend(data)
+                        page += 1
         except Exception as e:
             logger.error(f"Error fetching commits: {e}", exc_info=True)
             return {"error": "An unexpected error occurred while fetching commits."}
 
         if not all_commits:
-            return {"error": "No commits found in the last 90 days for this repository."}
+            return {"error": "No commits found for this repository."}
 
-        daily_sessions = {}
+        # --- Calculs des statistiques ---
+        now = datetime.now().astimezone()
+        first_commit_date = datetime.fromisoformat(all_commits[-1]['commit']['author']['date'].replace('Z', '+00:00'))
+        last_commit_date = datetime.fromisoformat(all_commits[0]['commit']['author']['date'].replace('Z', '+00:00'))
+
+        commits_last_7_days = 0
+        commits_last_30_days = 0
+        contributors = defaultdict(int)
+        daily_sessions = defaultdict(list)
+
         for commit in all_commits:
             commit_date = datetime.fromisoformat(commit['commit']['author']['date'].replace('Z', '+00:00'))
-            day = commit_date.date()
-            daily_sessions.setdefault(day, []).append(commit_date)
+            
+            if (now - commit_date).days < 7:
+                commits_last_7_days += 1
+            if (now - commit_date).days < 30:
+                commits_last_30_days += 1
+            
+            if commit.get('author'):
+                contributors[commit['author']['login']] += 1
 
+            daily_sessions[commit_date.date()].append(commit_date)
+
+        # Durée de développement estimée sur toute la vie du projet
         total_duration = sum(
-            (max(commits) - min(commits) for commits in daily_sessions.values() if len(commits) > 1),
+            (max(times) - min(times) for times in daily_sessions.values() if len(times) > 1),
             timedelta(0)
         )
+        
+        # Trier les contributeurs par nombre de commits
+        sorted_contributors = sorted(contributors.items(), key=lambda item: item[1], reverse=True)
 
         return {
-            "raw_commits": all_commits,
-            "total_commits_all_time": total_commits_count,
-            "commits_90_days": len(all_commits),
-            "estimated_duration_90_days": total_duration,
-            "last_commit_date": datetime.fromisoformat(all_commits[0]['commit']['author']['date'].replace('Z', '+00:00'))
+            "total_commits": len(all_commits),
+            "first_commit_date": first_commit_date,
+            "last_commit_date": last_commit_date,
+            "estimated_duration": total_duration,
+            "commits_last_7_days": commits_last_7_days,
+            "commits_last_30_days": commits_last_30_days,
+            "top_contributors": sorted_contributors
         }
 
     def get_loc_stats(self) -> dict:
+        """Calcule les stats locales sur les lignes de code."""
         try:
             files_process = subprocess.run(
                 ['git', 'ls-files', '*.py'], 
@@ -128,33 +111,31 @@ class DevStatsCog(commands.Cog):
             )
             file_list = files_process.stdout.strip().split('\n')
             if not file_list or not file_list[0]:
-                return {"total_lines": 0, "total_chars": 0, "total_files": 0}
-            total_lines, total_chars = 0, 0
+                return {"total_lines": 0, "total_files": 0}
+            total_lines = 0
             for filepath in file_list:
                 if not os.path.exists(filepath): continue
                 try:
                     with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                        lines = f.readlines()
-                        total_lines += len(lines)
-                        total_chars += sum(len(line) for line in lines)
+                        total_lines += sum(1 for line in f)
                 except Exception as e:
                     logger.warning(f"Could not read file {filepath}: {e}")
-            return {"total_lines": total_lines, "total_chars": total_chars, "total_files": len(file_list)}
+            return {"total_lines": total_lines, "total_files": len(file_list)}
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            logger.error(f"Git command failed. Is '.git' folder in the container? Error: {e}", exc_info=True)
+            logger.error(f"Git command failed. Error: {e}", exc_info=True)
             return {"error": "Impossible d'exécuter les commandes git locales."}
         except Exception as e:
             logger.error(f"Unexpected error in get_loc_stats: {e}", exc_info=True)
-            return {"error": "An unexpected error occurred while calculating local stats."}
+            return {"error": "An unexpected error occurred."}
 
-    @app_commands.command(name="project_stats", description="[STAFF] Displays project development statistics.")
+    @app_commands.command(name="project_stats", description="[STAFF] Affiche les statistiques complètes du projet.")
     @app_commands.guild_only()
     async def project_stats(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
-            commit_task = self.get_commit_stats()
-            loc_task = asyncio.to_thread(self.get_loc_stats)
-            commit_data, loc_data = await asyncio.gather(commit_task, loc_task)
+            commit_data_task = self.get_commit_stats()
+            loc_data_task = asyncio.to_thread(self.get_loc_stats)
+            commit_data, loc_data = await asyncio.gather(commit_data_task, loc_data_task)
 
             errors = []
             if "error" in commit_data: errors.append(f"GitHub: {commit_data['error']}")
@@ -165,28 +146,38 @@ class DevStatsCog(commands.Cog):
 
             embed = create_styled_embed(
                 title=f"📊 Project Stats - {GITHUB_REPO_NAME}",
-                description=f"A snapshot of development activity for `{calendar.month_name[date.today().month]}`.",
-                color=discord.Color.dark_green()
+                description=f"An overview of the entire development history.",
+                color=discord.Color.from_rgb(4, 30, 66) # Une couleur bleu nuit
             )
 
-            contribution_graph = self.generate_contribution_graph(commit_data['raw_commits'])
-            embed.add_field(name="🗓️ Contribution Calendar", value=contribution_graph, inline=False)
+            # --- Section 1: Stats Clés ---
+            codebase_value = f"**{loc_data['total_lines']:,}** Lines of Code\n**{loc_data['total_files']}** Python Files"
+            embed.add_field(name="<:python:1186326476140511313> Codebase", value=codebase_value, inline=True)
 
-            loc_value = (
-                f"**Total Lines:** `{loc_data['total_lines']:,}`\n"
-                f"**Python Files:** `{loc_data['total_files']}`"
-            )
-            embed.add_field(name="<:python:1186326476140511313> Codebase", value=loc_value, inline=True)
-
-            commit_value = (
-                f"**Total Commits:** `{commit_data['total_commits_all_time']}`\n"
-                f"**Dev Time (90d):** `{format_time_delta(commit_data['estimated_duration_90_days'])}`\n"
-                f"**Last Activity:** <t:{int(commit_data['last_commit_date'].timestamp())}:R>"
-            )
-            embed.add_field(name="<:github:1186326473212874833> Activity", value=commit_value, inline=True)
+            timeline_value = f"**{commit_data['total_commits']}** Total Commits\n**{format_time_delta(commit_data['estimated_duration'])}** Dev Time"
+            embed.add_field(name="<:github:1186326473212874833> Workload", value=timeline_value, inline=True)
             
-            embed.set_footer(text=f"Stats as of {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            project_age = datetime.now().astimezone() - commit_data['first_commit_date']
+            pace_value = f"**{commit_data['commits_last_30_days']}** in 30 days\n**{commit_data['commits_last_7_days']}** in 7 days"
+            embed.add_field(name="📈 Pace", value=pace_value, inline=True)
             
+            # --- Section 2: Timeline ---
+            timeline_str = (
+                f"**Project Age:** {format_time_delta(project_age)}\n"
+                f"**First Commit:** <t:{int(commit_data['first_commit_date'].timestamp())}:D>\n"
+                f"**Last Commit:** <t:{int(commit_data['last_commit_date'].timestamp())}:R>"
+            )
+            embed.add_field(name="🗓️ Project Timeline", value=timeline_str, inline=False)
+            
+            # --- Section 3: Contributeurs ---
+            leaderboard = []
+            for i, (name, count) in enumerate(commit_data['top_contributors'][:5]):
+                emoji = ["🥇", "🥈", "🥉", "🔹", "🔹"][i]
+                leaderboard.append(f"{emoji} **{name}**: `{count}` commits")
+            
+            if leaderboard:
+                embed.add_field(name="🏆 Top Contributors", value="\n".join(leaderboard), inline=False)
+
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             logger.error(f"Critical error in /project_stats: {e}", exc_info=True)
