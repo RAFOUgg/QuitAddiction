@@ -1,4 +1,4 @@
-# --- cogs/phone.py (REFACTORED - NO LISTENER) ---
+# --- cogs/phone.py (REFACTORED) ---
 import discord
 from discord.ext import commands
 from discord import ui
@@ -18,7 +18,7 @@ class PhoneMainView(ui.View):
 class SMSView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone"))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open"))
         
 class UberEatsView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -30,7 +30,7 @@ class UberEatsView(ui.View):
         self.add_item(ui.Button(label="Bol de Soupe (5$)", emoji="🍲", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soup", disabled=(player.wallet < 5)))
         self.add_item(ui.Button(label="Jus d'Orange (3$)", emoji="🧃", style=discord.ButtonStyle.success, custom_id="ubereats_buy_orange_juice", disabled=(player.wallet < 3)))
         self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.success, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=1))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2))
 
 class ShopView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -38,18 +38,22 @@ class ShopView(ui.View):
         self.add_item(ui.Button(label="Acheter Cigarettes (5$)", emoji="🚬", style=discord.ButtonStyle.secondary, custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5)))
         self.add_item(ui.Button(label="Acheter Bière (3$)", emoji="🍺", style=discord.ButtonStyle.blurple, custom_id="shop_buy_beer", disabled=(player.wallet < 3)))
         self.add_item(ui.Button(label="Acheter Eau (1$)", style=discord.ButtonStyle.primary, custom_id="shop_buy_water", disabled=(player.wallet < 1), emoji="💧"))
-        # Ajoutez ici les autres articles
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=2))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2))
 
 class NotificationsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone"))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open"))
 
 class Phone(commands.Cog):
     """Fournit la logique pour les applications du téléphone."""
     def __init__(self, bot):
         self.bot = bot
+
+    def generate_phone_main_embed(self, player: PlayerProfile):
+        embed = discord.Embed(title="📱 Téléphone", description="Choisissez une application.", color=discord.Color.light_grey())
+        embed.set_footer(text=f"Batterie: 100%")
+        return embed
 
     def generate_shop_embed(self, player: PlayerProfile):
         embed = discord.Embed(title="🛍️ Smoke-Shop", description="Faites vos achats ici.", color=discord.Color.purple())
@@ -59,7 +63,7 @@ class Phone(commands.Cog):
     def generate_ubereats_embed(self, player: PlayerProfile):
         embed = discord.Embed(title="🍔 Uber Eats", description="Une petite faim ? Commandez ici.", color=discord.Color.green())
         embed.add_field(name="Votre Portefeuille", value=f"**{player.wallet}$**", inline=False)
-        embed.set_footer(text="Chaque commande ajoute une portion de nourriture en plus de l'item.")
+        embed.set_footer(text="Chaque commande ajoute une portion de nourriture générique.")
         return embed
 
     def generate_sms_embed(self, player: PlayerProfile):
@@ -88,7 +92,9 @@ class Phone(commands.Cog):
         custom_id = interaction.data["custom_id"]
         
         # Navigation
-        if custom_id == "phone_shop":
+        if custom_id == "phone_open":
+            await interaction.edit_original_response(embed=self.generate_phone_main_embed(player), view=PhoneMainView(player))
+        elif custom_id == "phone_shop":
             await interaction.edit_original_response(embed=self.generate_shop_embed(player), view=ShopView(player))
         elif custom_id == "phone_sms":
             await interaction.edit_original_response(embed=self.generate_sms_embed(player), view=SMSView(player))
@@ -105,34 +111,32 @@ class Phone(commands.Cog):
             message = "Transaction échouée ou article non implémenté."
             cost, shop_type = 0, ""
 
-            # Boutique
-            if custom_id == "shop_buy_cigarettes" and player.wallet >= 5:
-                cost = 5; player.cigarettes += 10; message = "Vous avez acheté 10 cigarettes."; shop_type = "shop"
-            elif custom_id == "shop_buy_beer" and player.wallet >= 3:
-                cost = 3; player.beers += 1; message = "Vous avez acheté une bière."; shop_type = "shop"
-            elif custom_id == "shop_buy_water" and player.wallet >=1:
-                cost = 1; player.water_bottles += 1; message = "Vous avez acheté une bouteille d'eau."; shop_type="shop"
-            # Uber Eats
-            elif custom_id == "ubereats_buy_soup" and player.wallet >= 5:
-                cost = 5; player.soup_bowls += 1; message = "Vous avez commandé une soupe."; shop_type = "ubereats"
-            elif custom_id == "ubereats_buy_tacos" and player.wallet >= 6:
-                cost = 6; player.tacos += 1; message = "Vous avez commandé un tacos."; shop_type = "ubereats"
-            elif custom_id == "ubereats_buy_soda" and player.wallet >= 2:
-                cost = 2; player.soda_cans += 1; message = "Vous avez commandé un soda."; shop_type = "ubereats"
-            if cost > 0:
-                player.wallet -= cost
-                if shop_type == "ubereats": player.food_servings +=1 # Bonus de nourriture générique
+            # Articles
+            items = {
+                "shop_buy_cigarettes": {"cost": 5, "action": lambda p: setattr(p, 'cigarettes', p.cigarettes + 10), "msg": "Vous avez acheté 10 cigarettes.", "type": "shop"},
+                "shop_buy_beer": {"cost": 3, "action": lambda p: setattr(p, 'beers', p.beers + 1), "msg": "Vous avez acheté une bière.", "type": "shop"},
+                "shop_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez acheté une bouteille d'eau.", "type": "shop"},
+                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', p.tacos + 1), "msg": "Vous avez commandé un tacos.", "type": "ubereats"},
+                "ubereats_buy_soda": {"cost": 2, "action": lambda p: setattr(p, 'soda_cans', p.soda_cans + 1), "msg": "Vous avez commandé un soda.", "type": "ubereats"},
+                "ubereats_buy_salad": {"cost": 8, "action": lambda p: setattr(p, 'salad_servings', p.salad_servings + 1), "msg": "Vous avez commandé une salade.", "type": "ubereats"},
+            }
+
+            item = items.get(custom_id)
+            if item and player.wallet >= item["cost"]:
+                player.wallet -= item["cost"]
+                item["action"](player)
+                if item["type"] == "ubereats": player.food_servings += 1
                 db.commit(); db.refresh(player)
 
-                # Rafraîchir l'interface
-                shop_emoji = "🛍️" if shop_type == "shop" else "🍔"
-                await interaction.followup.send(f"{shop_emoji} {message}", ephemeral=True)
-                if shop_type == "shop":
+                shop_emoji = "🛍️" if item["type"] == "shop" else "🍔"
+                await interaction.followup.send(f'{shop_emoji} {item["msg"]}', ephemeral=True)
+                
+                if item["type"] == "shop":
                     await interaction.edit_original_response(embed=self.generate_shop_embed(player), view=ShopView(player))
                 else:
                     await interaction.edit_original_response(embed=self.generate_ubereats_embed(player), view=UberEatsView(player))
             else:
-                await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
+                await interaction.followup.send(f"⚠️ Transaction échouée. Fonds insuffisants ou article non valide.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Phone(bot))

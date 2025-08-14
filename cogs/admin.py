@@ -445,7 +445,6 @@ class AdminCog(commands.Cog):
 
             # L'appel ici est correct car il utilise la méthode du cog.
             player.show_stats_in_view = True
-            player.image_hidden_in_view = False
             db.commit()
             db.refresh(player)
             game_view = DashboardView(player)
@@ -631,7 +630,7 @@ class AdminCog(commands.Cog):
         view.add_item(self.BackButton("⬅ Back to Settings", guild_id, discord.ButtonStyle.secondary, 3, self))
         return view
     
-    def generate_notifications_embed(self, guild_id: str) -> discord.Embed:
+    def generate_notifications_embed(self, guild_id: str):
         db = SessionLocal()
         try:
             state = db.query(ServerState).filter_by(guild_id=guild_id).first()

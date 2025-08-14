@@ -35,7 +35,7 @@ class DashboardView(ui.View):
         self.clear_items()
         self.add_item(ui.Button(label="🏃‍♂️ Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions"))
         self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
-        self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
+        self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_open"))
 
         stats_label = "Cacher Cerveau" if player.show_stats_in_view else "Afficher Cerveau"
         stats_style = discord.ButtonStyle.success if player.show_stats_in_view else discord.ButtonStyle.secondary
@@ -227,7 +227,7 @@ class MainEmbed(commands.Cog):
 
             await interaction.response.defer()
 
-            if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
+            if custom_id.startswith("phone_"):
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state)
                 return
@@ -249,9 +249,6 @@ class MainEmbed(commands.Cog):
                 return
             elif custom_id == "nav_inventory":
                 await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=InventoryView())
-                return
-            elif custom_id == "nav_phone":
-                await interaction.edit_original_response(view=PhoneMainView(player))
                 return
 
             action_menus = {
