@@ -41,9 +41,6 @@ class DashboardView(ui.View):
         stats_style = discord.ButtonStyle.success if player.show_stats_in_view else discord.ButtonStyle.secondary
         self.add_item(ui.Button(label=stats_label, style=stats_style, custom_id="nav_toggle_stats", row=1, emoji="🧠"))
 
-        image_label = "Afficher Image" if player.image_hidden_in_view else "Cacher Image"
-        self.add_item(ui.Button(label=image_label, style=discord.ButtonStyle.grey, custom_id="nav_toggle_image", row=1, emoji="🖼️"))
-
 
 class ActionsView(ui.View):
     """La vue pour les actions du joueur, affichée sous le dashboard principal."""
@@ -57,8 +54,8 @@ class ActionsView(ui.View):
         self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", disabled=cooldown_active))
         if player.bladder > 30:
             self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=cooldown_active))
-        if player.fatigue > 60 or player.bladder > 60:
-            self.add_item(ui.Button(label="Caca", style=discord.ButtonStyle.secondary, custom_id="action_poop_menu", emoji="💩", row=1, disabled=cooldown_active))
+        if player.hygiene < 40:
+            self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.blurple, custom_id="action_shower", emoji="🚿", row=1, disabled=cooldown_active))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
 
 class EatView(ui.View):
@@ -69,6 +66,8 @@ class EatView(ui.View):
             self.add_item(ui.Button(label=f"Manger Sandwich ({player.food_servings})", style=discord.ButtonStyle.success, custom_id="eat_sandwich"))
         if getattr(player, 'tacos', 0) > 0:
             self.add_item(ui.Button(label=f"Manger Tacos ({player.tacos})", style=discord.ButtonStyle.primary, custom_id="eat_tacos"))
+        if getattr(player, 'salad_servings', 0) > 0:
+            self.add_item(ui.Button(label=f"Manger Salade ({player.salad_servings})", style=discord.ButtonStyle.success, custom_id="eat_salad"))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
 
 class DrinkView(ui.View):
@@ -111,7 +110,7 @@ class MainEmbed(commands.Cog):
             80: (player.fatigue > 85, "Mes paupières sont lourdes, je pourrais m'endormir debout."),
             75: (player.bladder > 90, "J'ai une envie TRÈS pressante, je vais plus tenir !"),
             70: (player.stress > 70, "J'ai les nerfs à vif, tout m'angoisse."),
-            60: (player.sex_drive > 80, "Je me sens un peu seul... une présence me ferait du bien."),
+            60: (player.hygiene < 20, "Je me sens vraiment sale, une douche me ferait le plus grand bien."),
             50: (player.craving_nicotine > 40, "Une clope me calmerait, là."),
             40: (player.health < 40, "Je... je ne me sens pas bien. J'ai mal partout."),
             30: (player.boredom > 60, "Je m'ennuie... il ne se passe jamais rien."),
@@ -122,23 +121,31 @@ class MainEmbed(commands.Cog):
             if condition: return text
         return "Pour l'instant, ça va à peu près."
 
+    def get_image_name(self, player: PlayerProfile, now: datetime.datetime) -> str:
+        """Détermine le nom de l'image à afficher en fonction de l'état du joueur."""
+        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
+            return player.last_action
+
+        if player.fatigue > 85: return "neutral_sleep"
+        if player.stress > 70 or player.health < 40 or player.withdrawal_severity > 60: return "sad"
+        if player.thirst > 70 and player.craving_alcohol > 60: return "sad_drinking"
+        if player.stomachache > 70: return "hand_stomach"
+        if player.headache > 60: return "scratch_eye"
+        if player.craving_nicotine > 75: return "neutral_hold_e_cig"
+        if player.hygiene < 20: return "neutral_shower"
+        
+        return "neutral"
+
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         asset_cog = self.bot.get_cog("AssetManager")
-        image_name = "neutral"
         now = datetime.datetime.utcnow()
-
-        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
-            image_name = player.last_action
-        else:
-            if player.stomachache > 70: image_name = "hand_stomach"
-            elif player.fatigue > 85: image_name = "scratch_eye"
-            elif player.stress > 70 or player.health < 40 or player.withdrawal_severity > 60: image_name = "sad"
-            elif player.craving_nicotine > 75: image_name = "neutral_hold_e_cig"
-            
+        
+        image_name = self.get_image_name(player, now)
         image_url = asset_cog.get_url(image_name) if asset_cog else None
+        
         if image_url:
-            if player.image_hidden_in_view:
+            if player.show_stats_in_view:
                 embed.set_thumbnail(url=image_url)
             else:
                 embed.set_image(url=image_url)
@@ -174,7 +181,7 @@ class MainEmbed(commands.Cog):
             embed.add_field(name="🔥 Désirs & Envies", value=cravings, inline=True)
             phys_health = (f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`\n"
                            f"**Énergie:** {generate_progress_bar(player.energy)} `{player.energy:.0f}%`\n"
-                           f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`")
+                           f"**Hygiène:** {generate_progress_bar(player.hygiene)} `{player.hygiene:.0f}%`")
             embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=False)
             mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n"
                              f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
@@ -218,10 +225,8 @@ class MainEmbed(commands.Cog):
                 await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
                 return
 
-            # Defer after basic checks
             await interaction.response.defer()
 
-            # --- GESTION DES INTERACTIONS ---
             if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state)
@@ -229,14 +234,6 @@ class MainEmbed(commands.Cog):
 
             if custom_id == "nav_toggle_stats":
                 player.show_stats_in_view = not player.show_stats_in_view
-                db.commit()
-                new_embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                new_view = DashboardView(player)
-                await interaction.edit_original_response(embed=new_embed, view=new_view)
-                return
-
-            if custom_id == "nav_toggle_image":
-                player.image_hidden_in_view = not player.image_hidden_in_view
                 db.commit()
                 new_embed = self.generate_dashboard_embed(player, state, interaction.guild)
                 new_view = DashboardView(player)
@@ -270,10 +267,12 @@ class MainEmbed(commands.Cog):
             message = None
             action_map = {
                 "action_sleep": cooker_brain.perform_sleep,
+                "action_shower": cooker_brain.perform_shower,
                 "drink_water": cooker_brain.perform_drink_water,
                 "drink_soda": cooker_brain.use_soda,
                 "eat_sandwich": cooker_brain.perform_eat_sandwich,
                 "eat_tacos": cooker_brain.use_tacos,
+                "eat_salad": cooker_brain.use_salad,
                 "smoke_cigarette": cooker_brain.perform_smoke_cigarette,
                 "smoke_ecigarette": cooker_brain.use_ecigarette,
             }
@@ -301,8 +300,3 @@ class MainEmbed(commands.Cog):
 async def setup(bot):
     cog = MainEmbed(bot)
     await bot.add_cog(cog)
-    # We need to add the persistent views to the bot
-    # But DashboardView is now stateful based on the player, so we can't add a generic one.
-    # We will rely on the on_interaction listener to handle all interactions.
-    # bot.add_view(InventoryView()) # This one is stateless, it's fine.
-
