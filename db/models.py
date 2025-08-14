@@ -1,10 +1,13 @@
-# --- db/models.py (MODIFIED WITH NEW STATS) ---
+# --- db/models.py (CORRECTED) ---
 
-from db.database import Base
+from db.database import Base  # Importer la Base centralisée
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, BigInteger, UniqueConstraint, Text
 import datetime
-from sqlalchemy.orm import declarative_base
-Base = declarative_base()
+# Les lignes suivantes ont été supprimées car elles recréaient une Base vide,
+# ce qui est la cause de l'erreur "no such table".
+# from sqlalchemy.orm import declarative_base
+# Base = declarative_base()
+
 class ServerState(Base):
     __tablename__ = "server_state"
     id = Column(Integer, primary_key=True)
