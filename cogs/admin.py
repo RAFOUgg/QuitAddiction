@@ -257,119 +257,79 @@ class StopGameConfirmationModal(ui.Modal, title="Confirm Game Stop"):
 
 
 class AdminCog(commands.Cog):
-    """Gestion des configurations du bot et du jeu pour le serveur."""
-    def __init__(self, bot):
-        self.bot = bot
-    
+    def __init__(self, bot): self.bot = bot
     BASE_DAILY_RATES = {"hunger": 150, "thirst": 200, "bladder": 120, "stress": 40, "boredom": 200, "hygiene": 100}
     DIFFICULTY_MULTIPLIERS = {"peaceful": 0.75, "medium": 1.0, "hard": 1.5}
-    DURATION_SETTINGS = {
-        "test_day": {"minutes_per_day": 24, "label": "Test (Jour = 24 mins)"},
-        "day": {"minutes_per_day": 1440, "label": "Jour (Jour = 24h)"},
-        "short": {"minutes_per_day": 10080, "label": "Court (Jour = 7 jours)"},
-        "medium": {"minutes_per_day": 20160, "label": "Moyen (Jour = 14 jours)"},
-        "long": {"minutes_per_day": 43200, "label": "Long (Jour = 30 jours)"},
-    }
+    DURATION_SETTINGS = {"test_day": {"minutes_per_day": 24, "label": "Test (Jour = 24 mins)"}, "day": {"minutes_per_day": 1440, "label": "Jour (Jour = 24h)"}, "short": {"minutes_per_day": 10080, "label": "Court (Jour = 7 jours)"}, "medium": {"minutes_per_day": 20160, "label": "Moyen (Jour = 14 jours)"}, "long": {"minutes_per_day": 43200, "label": "Long (Jour = 30 jours)"}}
 
     def _update_game_parameters(self, state: ServerState):
-        difficulty = state.game_mode or "medium"
-        duration_key = state.duration_key or "day"
+        difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "day"
         multiplier = self.DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
         duration_setting = self.DURATION_SETTINGS.get(duration_key, self.DURATION_SETTINGS["day"])
-        for rate_name, base_value in self.BASE_DAILY_RATES.items():
-            setattr(state, f"degradation_rate_{rate_name}", base_value * multiplier)
+        for rate, value in self.BASE_DAILY_RATES.items(): setattr(state, f"degradation_rate_{rate}", value * multiplier)
         state.game_minutes_per_day = duration_setting["minutes_per_day"]
-        logger.info(f"Paramètres de jeu mis à jour pour {state.guild_id}: Diff={difficulty}, Durée={duration_key}")
 
     @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
     @app_commands.default_permissions(administrator=True)
     async def config(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        db = SessionLocal()
+        await interaction.response.defer(ephemeral=True); db = SessionLocal()
         try:
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
             if not state:
-                state = ServerState(guild_id=str(interaction.guild.id))
-                self._update_game_parameters(state)
+                state = ServerState(guild_id=str(interaction.guild.id)); self._update_game_parameters(state)
                 db.add(state); db.commit(); db.refresh(state)
-            await interaction.followup.send(
-                embed=self.generate_config_menu_embed(state),
-                view=self.generate_config_menu_view(str(interaction.guild.id), interaction.guild, state),
-            )
-        finally:
-            db.close()
-            
+            await interaction.followup.send(embed=self.generate_config_menu_embed(state), view=self.generate_config_menu_view(str(interaction.guild.id), interaction.guild, state))
+        finally: db.close()
+
     def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
         options, id_mapping = [], {}
-        if item_type == "role": sorted_items = sorted(items, key=lambda x: x.position, reverse=True)
-        else: sorted_items = sorted(items, key=lambda x: x.position)
-        
+        sorted_items = sorted(items, key=lambda x: x.position, reverse=(item_type == "role"))
         for item in sorted_items:
             if item_type == "role" and item.is_default(): continue
-            item_id, item_name = str(item.id), item.name
-            label = f"🔹 {item_name}" if item_type == "role" else f"#{item_name}"
+            item_id, item_name = str(item.id), str(item.name); label = f"🔹 {item_name}" if item_type == "role" else f"#{item_name}"
             hashed_id = hashlib.sha256(item_id.encode()).hexdigest()[:25]
             options.append(discord.SelectOption(label=label[:100], value=hashed_id, description=f"ID: {item_id}"))
             id_mapping[hashed_id] = item_id
         if not options: options.append(discord.SelectOption(label="Aucun item trouvé", value="no_items"))
         return options, id_mapping
 
-    # --- Section: Configuration des Notifications ---
     def generate_notifications_config_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(title="🔔 Configuration des Rôles de Notification", color=discord.Color.gold())
-        roles = { "Général": state.notification_role_id, "Vitals Faibles": state.notify_vital_low_role_id, "Événement Critique": state.notify_critical_role_id,
-                  "Manque / Envies": state.notify_craving_role_id, "Message Ami": state.notify_friend_message_role_id, "Promotion Boutique": state.notify_shop_promo_role_id }
+        roles = {"Général": state.notification_role_id, "Vitals Faibles": state.notify_vital_low_role_id, "Événement Critique": state.notify_critical_role_id, "Manque / Envies": state.notify_craving_role_id, "Message Ami": state.notify_friend_message_role_id, "Promotion Boutique": state.notify_shop_promo_role_id}
         value = "\n".join([f"**{name}:** {f'<@&{role_id}>' if role_id else 'Non défini'}" for name, role_id in roles.items()])
-        embed.add_field(name="Rôles Actuels", value=value)
-        embed.set_footer(text="Utilisez les menus pour configurer les rôles.")
+        embed.add_field(name="Rôles Actuels", value=value); embed.set_footer(text="Utilisez les menus pour configurer les rôles.")
         return embed
 
     class NotificationRoleTypeSelect(ui.Select):
         def __init__(self, guild_id: str, cog: 'AdminCog'):
             self.guild_id, self.cog = guild_id, cog
-            options = [ discord.SelectOption(label="Rôle de notification général", value="notification_role_id"),
-                        discord.SelectOption(label="Rôle pour Vitals Faibles", value="notify_vital_low_role_id"),
-                        discord.SelectOption(label="Rôle pour Événement Critique", value="notify_critical_role_id"),
-                        discord.SelectOption(label="Rôle pour Manque / Envies", value="notify_craving_role_id"),
-                        discord.SelectOption(label="Rôle pour Message Ami", value="notify_friend_message_role_id"),
-                        discord.SelectOption(label="Rôle pour Promotion Boutique", value="notify_shop_promo_role_id")]
+            options = [discord.SelectOption(label="Rôle de notification général", value="notification_role_id"), discord.SelectOption(label="Rôle pour Vitals Faibles", value="notify_vital_low_role_id"), discord.SelectOption(label="Rôle pour Événement Critique", value="notify_critical_role_id"), discord.SelectOption(label="Rôle pour Manque / Envies", value="notify_craving_role_id"), discord.SelectOption(label="Rôle pour Message Ami", value="notify_friend_message_role_id"), discord.SelectOption(label="Rôle pour Promotion Boutique", value="notify_shop_promo_role_id")]
             self.options_map = {opt.value: opt.label for opt in options}
             super().__init__(placeholder="Choisir le type de notification à configurer...", options=options, row=0)
-
         async def callback(self, interaction: discord.Interaction):
-            setting_key = self.values[0]
-            all_roles = interaction.guild.roles
+            setting_key = self.values[0]; all_roles = interaction.guild.roles
             options, id_mapping = self.cog.create_options_and_mapping(all_roles, "role", interaction.guild)
-            view = ui.View()
-            select_menu = RoleSelect(self.guild_id, setting_key, id_mapping, self.cog)
-            select_menu.options = options[:25] 
-            view.add_item(select_menu)
+            view = ui.View(); select_menu = RoleSelect(self.guild_id, setting_key, id_mapping, self.cog)
+            select_menu.options = options[:25]; view.add_item(select_menu)
             view.add_item(self.cog.BackButton("Retour", self.guild_id, discord.ButtonStyle.secondary, 1, self.cog, target_menu="notifications_config"))
             await interaction.response.edit_message(content=f"Sélectionnez le rôle pour : **{self.options_map[setting_key]}**", embed=None, view=view)
 
     def generate_notifications_config_view(self, guild_id: str, guild: discord.Guild) -> ui.View:
-        view = ui.View(timeout=180)
-        view.add_item(self.NotificationRoleTypeSelect(guild_id, self))
-        # NOUVELLE LOGIQUE: On ajoute le menu déroulant directement, en lui passant la liste des rôles
+        view = ui.View(timeout=180); view.add_item(self.NotificationRoleTypeSelect(guild_id, self))
         view.add_item(SetAllNotificationsRoleSelect(guild_id, self, guild.roles))
         view.add_item(self.BackButton("Retour au menu principal", guild_id, discord.ButtonStyle.red, 2, self))
         return view
 
-    # --- Section: Difficulté et Durée ---
     class ModeAndDurationButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
-            super().__init__(label=label, style=style, row=row, disabled=disabled, emoji="🕹️")
-            self.guild_id = guild_id; self.cog = cog
+            super().__init__(label=label, style=style, row=row, disabled=disabled, emoji="🕹️"); self.guild_id = guild_id; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-                await interaction.response.edit_message(
-                    embed=self.cog.generate_mode_duration_embed(state), 
-                    view=self.cog.generate_mode_duration_view(self.guild_id, state)
-                )
+                await interaction.response.edit_message(embed=self.cog.generate_mode_duration_embed(state), view=self.cog.generate_mode_duration_view(self.guild_id, state))
             finally: db.close()
-    
+
     def generate_mode_duration_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(title="🎮 Difficulté & Durée", color=discord.Color.teal())
         difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "day"
@@ -378,8 +338,7 @@ class AdminCog(commands.Cog):
         return embed
 
     def generate_mode_duration_view(self, guild_id: str, state: ServerState) -> ui.View:
-        view = ui.View(timeout=180)
-        view.add_item(self.GameDifficultySelect(guild_id, self, state.game_mode))
+        view = ui.View(timeout=180); view.add_item(self.GameDifficultySelect(guild_id, self, state.game_mode))
         view.add_item(self.GameDurationSelect(guild_id, self, state.duration_key))
         view.add_item(self.BackButton("Retour", guild_id, discord.ButtonStyle.secondary, 2, self))
         return view
@@ -387,14 +346,11 @@ class AdminCog(commands.Cog):
     class GameDifficultySelect(ui.Select):
         def __init__(self, guild_id: str, cog: 'AdminCog', current_difficulty: str):
             options = [discord.SelectOption(label=key.capitalize(), value=key, default=(key == current_difficulty)) for key in cog.DIFFICULTY_MULTIPLIERS.keys()]
-            super().__init__(placeholder="Choisissez une difficulté...", options=options, row=0)
-            self.guild_id, self.cog = guild_id, cog
+            super().__init__(placeholder="Choisissez une difficulté...", options=options, row=0); self.guild_id, self.cog = guild_id, cog
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.defer()
-            db = SessionLocal()
+            await interaction.response.defer(); db = SessionLocal()
             try:
-                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-                state.game_mode = self.values[0]
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first(); state.game_mode = self.values[0]
                 self.cog._update_game_parameters(state); db.commit(); db.refresh(state)
                 await interaction.edit_original_response(embed=self.cog.generate_mode_duration_embed(state), view=self.cog.generate_mode_duration_view(self.guild_id, state))
             finally: db.close()
@@ -402,29 +358,23 @@ class AdminCog(commands.Cog):
     class GameDurationSelect(ui.Select):
         def __init__(self, guild_id: str, cog: 'AdminCog', current_duration: str):
             options = [discord.SelectOption(label=data["label"], value=key, default=(key == current_duration)) for key, data in cog.DURATION_SETTINGS.items()]
-            super().__init__(placeholder="Choisissez une durée...", options=options, row=1)
-            self.guild_id, self.cog = guild_id, cog
+            super().__init__(placeholder="Choisissez une durée...", options=options, row=1); self.guild_id, self.cog = guild_id, cog
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.defer()
-            db = SessionLocal()
+            await interaction.response.defer(); db = SessionLocal()
             try:
-                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
-                state.duration_key = self.values[0]
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first(); state.duration_key = self.values[0]
                 self.cog._update_game_parameters(state); db.commit(); db.refresh(state)
                 await interaction.edit_original_response(embed=self.cog.generate_mode_duration_embed(state), view=self.cog.generate_mode_duration_view(self.guild_id, state))
             finally: db.close()
 
-    # --- Section: Configuration Générale (Rôles & Salons) ---
     class GeneralConfigButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
-            super().__init__(label=label, style=style, row=row, disabled=disabled, emoji="⚙️")
-            self.guild_id, self.cog = guild_id, cog
+            super().__init__(label=label, style=style, row=row, disabled=disabled, emoji="⚙️"); self.guild_id, self.cog = guild_id, cog
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).one()
-                await interaction.response.edit_message(embed=self.cog.generate_role_and_channel_config_embed(state),
-                                                         view=self.cog.generate_general_config_view(self.guild_id, interaction.guild))
+                await interaction.response.edit_message(embed=self.cog.generate_role_and_channel_config_embed(state), view=self.cog.generate_general_config_view(self.guild_id, interaction.guild))
             finally: db.close()
 
     def generate_role_and_channel_config_embed(self, state: ServerState) -> discord.Embed:
@@ -436,27 +386,20 @@ class AdminCog(commands.Cog):
         return embed
 
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> ui.View:
-        view = ui.View(timeout=180)
-        view.add_item(self.OpenPaginatorButton("Définir Rôle Admin", guild_id, "admin_role", 0, self))
+        view = ui.View(timeout=180); view.add_item(self.OpenPaginatorButton("Définir Rôle Admin", guild_id, "admin_role", 0, self))
         view.add_item(self.OpenPaginatorButton("Définir Salon de Jeu", guild_id, "game_channel", 1, self))
         view.add_item(self.BackButton("Retour", guild_id, discord.ButtonStyle.secondary, 2, self))
         return view
 
     class OpenPaginatorButton(ui.Button):
         def __init__(self, label: str, guild_id: str, select_type: Literal['admin_role', 'game_channel'], row: int, cog: 'AdminCog'):
-            super().__init__(label=label, style=discord.ButtonStyle.primary, row=row)
-            self.guild_id, self.select_type, self.cog = guild_id, select_type, cog
+            super().__init__(label=label, style=discord.ButtonStyle.primary, row=row); self.guild_id, self.select_type, self.cog = guild_id, select_type, cog
         async def callback(self, interaction: discord.Interaction):
-            item_list = interaction.guild.roles if self.select_type == "admin_role" else \
-                        [ch for ch in interaction.guild.channels if isinstance(ch, discord.TextChannel)]
+            item_list = interaction.guild.roles if self.select_type == "admin_role" else [ch for ch in interaction.guild.channels if isinstance(ch, discord.TextChannel)]
             item_type_str = "role" if self.select_type == "admin_role" else "channel"
             options, id_mapping = self.cog.create_options_and_mapping(item_list, item_type_str, interaction.guild)
-            await interaction.response.edit_message(
-                embed=discord.Embed(title=f"Configuration: {self.label}"),
-                view=PaginatedViewManager(self.guild_id, options, id_mapping, self.select_type, self.cog)
-            )
+            await interaction.response.edit_message(embed=discord.Embed(title=f"Configuration: {self.label}"), view=PaginatedViewManager(self.guild_id, options, id_mapping, self.select_type, self.cog))
 
-    # --- Menu Principal et Boutons ---
     def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(title="⚙️ Configuration du Bot", color=discord.Color.blue())
         difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "day"
@@ -470,31 +413,25 @@ class AdminCog(commands.Cog):
         return embed
 
     def generate_config_menu_view(self, guild_id: str, guild: discord.Guild, state: ServerState) -> ui.View:
-        view = ui.View(timeout=None)
-        is_game_running = state.game_started
+        view = ui.View(timeout=None); is_game_running = state.game_started
         start_label, start_emoji, start_style = ("Arrêter", "⏹️", discord.ButtonStyle.danger) if is_game_running else ("Démarrer", "▶️", discord.ButtonStyle.success)
-        
         view.add_item(self.ModeAndDurationButton("Difficulté & Durée", guild_id, discord.ButtonStyle.primary, 0, self, disabled=is_game_running))
         view.add_item(self.ConfigButton(start_label, start_emoji, guild_id, start_style, 0, self))
         view.add_item(self.GeneralConfigButton("Rôles & Salons", guild_id, discord.ButtonStyle.primary, 0, self, disabled=is_game_running))
         view.add_item(self.ConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, 1, self))
         return view
-        
+
     class BackButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', target_menu: str = "main"):
-            super().__init__(label=label, style=style, row=row, emoji="⬅️")
-            self.guild_id, self.cog, self.target_menu = guild_id, cog, target_menu
+            super().__init__(label=label, style=style, row=row, emoji="⬅️"); self.guild_id, self.cog, self.target_menu = guild_id, cog, target_menu
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.defer()
-            db = SessionLocal()
+            await interaction.response.defer(); db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
                 if self.target_menu == "notifications_config":
-                    embed = self.cog.generate_notifications_config_embed(state)
-                    view = self.cog.generate_notifications_config_view(self.guild_id, interaction.guild)
-                else: # main menu
-                    embed = self.cog.generate_config_menu_embed(state)
-                    view = self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
+                    embed, view = self.cog.generate_notifications_config_embed(state), self.cog.generate_notifications_config_view(self.guild_id, interaction.guild)
+                else:
+                    embed, view = self.cog.generate_config_menu_embed(state), self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
                 await interaction.edit_original_response(embed=embed, view=view, content=None)
             finally: db.close()
 
@@ -506,34 +443,50 @@ class AdminCog(commands.Cog):
         async def callback(self, interaction: discord.Interaction):
             if "Arrêter" in self.label:
                 await interaction.response.send_modal(StopGameConfirmationModal(self.guild_id, self.cog)); return
-
+            
             await interaction.response.defer()
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                followup_message = None
+
                 if "Démarrer" in self.label:
                     if not state.game_channel_id:
-                        await interaction.followup.send("❌ Erreur: Veuillez configurer un salon de jeu.", ephemeral=True); return
-                    main_embed_cog = self.cog.bot.get_cog("MainEmbed")
-                    player = db.query(PlayerProfile).filter_by(guild_id=self.guild_id).first()
-                    now = datetime.datetime.utcnow()
-                    if not player:
-                        player = PlayerProfile(guild_id=self.guild_id, last_update=now)
-                        db.add(player)
-                    state.game_started, state.game_start_time = True, now
-                    db.commit(); db.refresh(player); db.refresh(state)
-                    game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
-                    game_message = await game_channel.send(embed=main_embed_cog.generate_dashboard_embed(player, state, interaction.guild),
-                                                           view=DashboardView(player))
-                    state.game_message_id = game_message.id; db.commit()
-                    await interaction.edit_original_response(embed=self.cog.generate_config_menu_embed(state), view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state))
-                    await interaction.followup.send(f"✅ Le jeu a démarré dans {game_channel.mention}.", ephemeral=True)
-                
+                        followup_message = ("❌ Erreur: Veuillez configurer un salon de jeu avant de démarrer.", True)
+                    else:
+                        main_embed_cog = self.cog.bot.get_cog("MainEmbed")
+                        player = db.query(PlayerProfile).filter_by(guild_id=self.guild_id).first()
+                        now = datetime.datetime.utcnow()
+                        if not player: player = PlayerProfile(guild_id=self.guild_id, last_update=now); db.add(player)
+                        state.game_started, state.game_start_time, state.is_test_mode = True, now, (state.duration_key == 'test_day')
+                        db.commit(); db.refresh(player); db.refresh(state)
+                        
+                        game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
+                        game_message = await game_channel.send(embed=main_embed_cog.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView(player))
+                        state.game_message_id = game_message.id; db.commit()
+                        followup_message = (f"✅ Le jeu a démarré dans {game_channel.mention} !", True)
+
                 elif "Notifications" in self.label:
-                    await interaction.edit_original_response(
-                        embed=self.cog.generate_notifications_config_embed(state),
-                        view=self.cog.generate_notifications_config_view(self.guild_id, interaction.guild)
-                    )
+                    db.refresh(state) # Assurer que l'état est à jour avant de changer de vue
+                    embed = self.cog.generate_notifications_config_embed(state)
+                    view = self.cog.generate_notifications_config_view(self.guild_id, interaction.guild)
+                    await interaction.edit_original_response(embed=embed, view=view)
+                    return # Pas de refresh général à la fin
+
+                # --- MISE À JOUR FINALE ET UNIVERSELLE DE L'INTERFACE ---
+                db.refresh(state)
+                embed = self.cog.generate_config_menu_embed(state)
+                view = self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
+                await interaction.edit_original_response(embed=embed, view=view)
+
+                if followup_message:
+                    await interaction.followup.send(followup_message[0], ephemeral=followup_message[1])
+
+            except Exception as e:
+                logger.error(f"Erreur dans ConfigButton callback: {e}", exc_info=True)
+                if not interaction.is_expired():
+                    await interaction.followup.send("Une erreur critique est survenue.", ephemeral=True)
+                db.rollback()
             finally:
                 db.close()
 
