@@ -22,7 +22,7 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     bar_empty = '⬛'
     return f"`{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}`"
 
-# --- VUES ---
+# --- VUES (inchangées) ---
 
 class DashboardView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -103,8 +103,9 @@ class MainEmbed(commands.Cog):
         asset_cog = self.bot.get_cog("AssetManager")
         if not asset_cog: return None
         now = datetime.datetime.utcnow()
-        image_name = "neutral"
-        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10: return asset_cog.get_url(player.last_action)
+        # AMÉLIORATION: On augmente la durée d'affichage de l'action pour qu'elle corresponde aux plus longs cooldowns.
+        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 25:
+             return asset_cog.get_url(player.last_action)
         if player.bladder >= 99: image_name = "peed"
         elif player.bowels > 85: image_name = "neutral_pooping"
         elif player.bladder > 85: image_name = "need_pee"
@@ -116,6 +117,7 @@ class MainEmbed(commands.Cog):
         elif player.stress > 70 or player.health < 40: image_name = "sad"
         elif player.withdrawal_severity > 60: image_name = "neutral_hold_e_cig"
         elif player.hygiene < 20: image_name = "neutral_shower"
+        else: image_name = "neutral"
         return asset_cog.get_url(image_name)
 
     @staticmethod
@@ -153,6 +155,7 @@ class MainEmbed(commands.Cog):
                  embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
 
+        # AMÉLIORATION : VUE "CERVEAU" ENRICHIE ET MIEUX ORGANISÉE
         if player.show_stats_in_view:
             phys_state = (f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n"
                           f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n"
@@ -165,12 +168,12 @@ class MainEmbed(commands.Cog):
                            f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`\n"
                            f"**Intestins:** {generate_progress_bar(player.bowels, high_is_bad=True)} `{player.bowels:.0f}%`")
             embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=True)
-            embed.add_field(name="\u200b", value="\u200b", inline=False)
+            embed.add_field(name="\u200b", value="\u200b", inline=False) # Espaceur
 
             mental_state = (f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
                             f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
                             f"**Volonté:** {generate_progress_bar(player.willpower, high_is_bad=False)} `{player.willpower:.0f}%`\n"
-                            f"**S. Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`")
+                            f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
             embed.add_field(name="🧠 État Mental", value=mental_state, inline=True)
             
             addiction_state = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n"
@@ -178,6 +181,18 @@ class MainEmbed(commands.Cog):
                                f"**Tolérance:** {generate_progress_bar(player.substance_tolerance, high_is_bad=True)} `{player.substance_tolerance:.1f}%`\n"
                                f"**Toxine:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.1f}%`")
             embed.add_field(name="🚬 Addiction", value=addiction_state, inline=True)
+            embed.add_field(name="\u200b", value="\u200b", inline=False) # Espaceur
+
+            symptoms_state = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n"
+                              f"**Culpabilité:** {generate_progress_bar(player.guilt, high_is_bad=True)} `{player.guilt:.0f}%`\n"
+                              f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n"
+                              f"**Mal de tête:** {generate_progress_bar(player.headache, high_is_bad=True)} `{player.headache:.0f}%`")
+            embed.add_field(name="🤢 Malaises & Symptômes", value=symptoms_state, inline=True)
+
+            long_term_state = (f"**Immunité:** {generate_progress_bar(player.immune_system, high_is_bad=False)} `{player.immune_system:.0f}%`\n"
+                               f"**Perf. Travail:** {generate_progress_bar(player.job_performance, high_is_bad=False)} `{player.job_performance:.0f}%`\n"
+                               f"**S. Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`")
+            embed.add_field(name="📈 Statut à Long Terme", value=long_term_state, inline=True)
 
         embed.set_footer(text=f"Jeu sur {guild.name}")
         embed.timestamp = datetime.datetime.utcnow()
@@ -193,18 +208,14 @@ class MainEmbed(commands.Cog):
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
 
-            # --- CORRECTION: GUARD CLAUSE ---
-            # On vérifie si le joueur existe AVANT TOUTE AUTRE CHOSE.
             if not player:
                 if not interaction.response.is_done():
-                    # C'est la seule réponse pour cette interaction, donc c'est sûr.
                     await interaction.response.send_message("Erreur: Votre profil de joueur est introuvable. Veuillez contacter un admin.", ephemeral=True)
                 db.close()
                 return
 
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
 
-            # --- ROUTEUR D'INTERACTION PRINCIPAL ---
             now = datetime.datetime.utcnow()
             if player.action_cooldown_end_time and now < player.action_cooldown_end_time:
                 if not interaction.response.is_done():
@@ -212,28 +223,23 @@ class MainEmbed(commands.Cog):
                     await interaction.response.send_message(f"⏳ Vous êtes occupé pour encore {remaining} secondes.", ephemeral=True)
                 return
             
-            # --- 1. Déléguer au cog Phone qui gère ses propres réponses ---
             is_phone_interaction = custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_"))
             if is_phone_interaction:
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog:
                     await phone_cog.handle_interaction(interaction, db, player, state, self)
-                # On s'arrête ici car le Phone cog a géré la réponse.
                 return
             
-            # --- 2. Pour tout le reste, on "defer" une seule fois si ce n'est pas déjà fait ---
             if not interaction.response.is_done():
                 await interaction.response.defer()
 
-            # --- 3. Gérer les toggles d'affichage ---
             if custom_id == "nav_toggle_stats":
                 player.show_stats_in_view = not player.show_stats_in_view
             elif custom_id == "nav_toggle_inventory":
                 player.show_inventory_in_view = not player.show_inventory_in_view
             
-            # --- 4. Gérer la navigation ---
             elif custom_id == "nav_main_menu":
-                pass # Ne fait rien, le rafraîchissement final s'en chargera
+                pass
             elif custom_id == "nav_actions":
                 await interaction.edit_original_response(view=ActionsView(player))
                 return
@@ -242,7 +248,6 @@ class MainEmbed(commands.Cog):
                 await interaction.edit_original_response(view=views[custom_id](player))
                 return
 
-            # --- 5. Gérer les actions du jeu ---
             else:
                 cooker_brain = self.bot.get_cog("CookerBrain")
                 action_map = {
@@ -263,10 +268,13 @@ class MainEmbed(commands.Cog):
                         await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
                     
                     db.commit()
-                    await interaction.edit_original_response(view=ActionsView(player))
+                    # CORRIGÉ: On met à jour l'embed ET la vue pour afficher l'image de l'action
+                    await interaction.edit_original_response(
+                        embed=self.generate_dashboard_embed(player, state, interaction.guild),
+                        view=ActionsView(player)
+                    )
                     return
             
-            # --- RAFRAÎCHISSEMENT FINAL ---
             db.commit()
             new_embed = self.generate_dashboard_embed(player, state, interaction.guild)
             new_view = DashboardView(player)
