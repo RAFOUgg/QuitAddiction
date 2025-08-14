@@ -780,7 +780,6 @@ class AdminCog(commands.Cog):
         current_notif_role = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"
         current_game_channel = f"<#{state.game_channel_id}>" if state.game_channel_id else "Not set"
         embed.add_field(name="👑 Admin Role", value=f"Current: {current_admin_role}", inline=False)
-        embed.add_field(name="🔔 Notification Role", value=f"Current: {current_notif_role}", inline=False)
         embed.add_field(name="🎮 Game Channel", value=f"Current: {current_game_channel}", inline=False)
         return embed
 
@@ -803,7 +802,6 @@ class AdminCog(commands.Cog):
     def generate_general_config_view(self, guild_id: str, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View(timeout=180)
         view.add_item(self.OpenPaginatorButton("Set Admin Role", guild_id, "admin_role", 0, self))
-        view.add_item(self.OpenPaginatorButton("Set Notification Role", guild_id, "notification_role", 1, self))
         view.add_item(self.OpenPaginatorButton("Set Game Channel", guild_id, "game_channel", 2, self))
         view.add_item(self.BackButton("Back to Main Menu", guild_id, discord.ButtonStyle.secondary, 3, self))
         return view
