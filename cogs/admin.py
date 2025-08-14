@@ -16,7 +16,7 @@ from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
-from cogs.main_embed import DashboardView, generate_dashboard_embed
+from cogs.main_embed import DashboardView
 
 # --- Setup Logger for this Cog ---
 logger = get_logger(__name__)
@@ -411,9 +411,6 @@ class AdminCog(commands.Cog):
             finally:
                 db.close()
 
-        # ======================================================================
-        # === MÉTHODE CORRIGÉE CI-DESSOUS ===
-        # ======================================================================
         async def start_test_game(self, interaction: discord.Interaction, state: ServerState, db: SessionLocal):
             if not state.game_channel_id:
                 return await interaction.followup.send("❌ **Erreur :** Configurez un salon de jeu avant de lancer un test.", ephemeral=True)
@@ -424,14 +421,12 @@ class AdminCog(commands.Cog):
             if not main_embed_cog:
                 return await interaction.followup.send("❌ Erreur Critique : Module `MainEmbed` non chargé.", ephemeral=True)
 
-            # Paramètres du mode test
             state.is_test_mode = True
             mode_data = self.cog.GAME_MODES["hard"]
             for rate_key, base_value in mode_data["rates"].items():
                 setattr(state, f"degradation_rate_{rate_key}", base_value * self.cog.TEST_RATE_MULTIPLIER)
             state.game_tick_interval_minutes = 1
 
-            # Créer/Réinitialiser le joueur
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             if player:
                 db.delete(player)
@@ -441,31 +436,26 @@ class AdminCog(commands.Cog):
             player = PlayerProfile(guild_id=str(interaction.guild.id), last_update=now, recent_logs="--- Test Session Started ---\n")
             db.add(player)
             
-            # Démarrer la partie
             state.game_started = True
             state.game_start_time = now
-            state.game_day_start_hour = 8 # Démarre la journée à 8h00
+            state.game_day_start_hour = 8
             db.commit()
             db.refresh(player)
             db.refresh(state)
 
-            # --- CORRECTION APPLIQUÉE ICI ---
-            # 1. On crée une instance de la vue du dashboard par défaut.
-            game_view = DashboardView(show_stats=True, image_hidden=False) # On affiche les stats au début du test
-            
-            # 2. On passe cette vue à la fonction qui génère l'embed.
+            # L'appel ici est correct car il utilise la méthode du cog.
+            game_view = DashboardView(show_stats=True, image_hidden=False)
             game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild, game_view)
             
-            # 3. On envoie le message avec l'embed ET la vue.
             game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
             game_message = await game_channel.send(content="**--- DÉBUT DE LA JOURNÉE DE TEST ACCÉLÉRÉE ---**", embed=game_embed, view=game_view)
             
             state.game_message_id = game_message.id
             db.commit()
 
-            # Confirmer à l'admin et mettre à jour le panneau de config
             await interaction.followup.send(f"✅ La partie de test a démarré dans {game_channel.mention} !", ephemeral=True)
             await interaction.edit_original_response(embed=self.cog.generate_config_menu_embed(state), view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state))
+            
     class BackButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0, cog: 'AdminCog'=None):
             super().__init__(label=label, style=style, row=row)
