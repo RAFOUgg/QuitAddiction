@@ -1,15 +1,36 @@
-# --- bot.py (CORRECTED STRUCTURE) ---
+# --- bot.py (CORRECTED & ROBUST STRUCTURE) ---
 import discord
 from discord.ext import commands
 import os
 import asyncio
+import traceback
 
+# Charger la configuration
 from config import BOT_TOKEN, GUILD_ID
-from db.database import init_db
+# Charger le logger
 from utils.logger import get_logger
+# --- NOUVELLE LOGIQUE D'INITIALISATION DE LA BDD ---
+# 1. Importer les objets de connexion et la Base depuis database.py
+from db.database import engine, Base
+
+# 2. IMPORTER EXPLICITEMENT TOUS LES MODÈLES
+# C'est l'étape cruciale. Cela remplit Base.metadata avec vos tables.
+from db.models import ServerState, PlayerProfile, ActionLog
 
 logger = get_logger(__name__)
 COGS_DIR = "cogs"
+
+# 3. CRÉER LES TABLES
+# Cette opération est synchrone et se fait au démarrage, AVANT toute connexion à Discord.
+logger.info("--- Initializing Database Schema ---")
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("--- Database Schema Initialized/Checked ---")
+except Exception as e:
+    logger.critical(f"FATAL: Could not create database tables. Error: {e}")
+    exit() # On ne continue pas si la BDD ne peut pas être créée
+# --- FIN DE LA NOUVELLE LOGIQUE ---
+
 
 class QuitAddictionBot(commands.Bot):
     def __init__(self):
@@ -23,54 +44,45 @@ class QuitAddictionBot(commands.Bot):
         logger.info(f'Logged in as {self.user} (ID: {self.user.id})')
         logger.info('------')
         
+        # L'initialisation des assets se fait ici, après que le bot soit connecté et ait accès aux salons.
         asset_cog = self.get_cog("AssetManager")
-        if asset_cog:
+        if asset_cog and hasattr(asset_cog, 'initialize_assets'):
             await asset_cog.initialize_assets()
         else:
             logger.warning("AssetManager cog not found after setup, cannot initialize assets.")
 
     async def setup_hook(self):
-        # --- MODIFICATION CLÉ ---
-        # 1. Initialiser la DB en premier. Si ça échoue ici, le bot ne démarrera pas, ce qui est bien.
-        logger.info("--- Initializing Database ---")
-        try:
-            init_db()
-            logger.info("✅ Database initialization check complete.")
-        except Exception as e:
-            logger.critical(f"❌ CRITICAL: FAILED TO INITIALIZE DATABASE. SHUTTING DOWN. Error: {e}", exc_info=True)
-            await self.close() # Empêche le bot de démarrer sans DB
-            return
-
-        # 2. Charger les cogs APRÈS l'initialisation de la DB.
+        # La DB est déjà initialisée, on charge juste les cogs.
         logger.info("--- Loading Cogs ---")
         for filename in os.listdir(f'./{COGS_DIR}'):
-            # J'exclus les fichiers non-cogs pour être propre
             if filename.endswith('.py') and not filename.startswith('__'):
                 try:
                     await self.load_extension(f'{COGS_DIR}.{filename[:-3]}')
                     logger.info(f'✅ Cog loaded: {filename}')
                 except commands.errors.NoEntryPointError:
-                    logger.warning(f"⚠️  Skipping {filename}: Not a valid cog (missing setup function).")
+                    # Gère les fichiers .py qui ne sont pas des cogs
+                    pass
                 except Exception as e:
-                    logger.error(f'❌ Failed to load cog {filename}: {type(e).__name__} - {e}', exc_info=True)
+                    logger.error(f'❌ Failed to load cog {filename}:')
+                    traceback.print_exc() # Imprime le traceback complet pour le débogage
         
-        # 3. Synchroniser les commandes
         logger.info("--- Syncing Commands ---")
         try:
-            if self.test_guild:
-                logger.info(f"Syncing commands to test guild: {self.test_guild.id}")
-                self.tree.copy_global_to(guild=self.test_guild)
-                await self.tree.sync(guild=self.test_guild)
-                logger.info("✅ Commands synced to test guild.")
-            else:
-                await self.tree.sync()
-                logger.info("✅ Global slash commands synced.")
+            # Synchronisation des commandes slash
+            await self.tree.sync()
+            logger.info("✅ Global slash commands synced.")
         except Exception as e:
             logger.error(f"❌ Command sync failed: {e}", exc_info=True)
 
+
 async def main():
+    if not BOT_TOKEN:
+        logger.critical("BOT_TOKEN is not set in the environment variables. The bot cannot start.")
+        return
+        
     bot = QuitAddictionBot()
-    await bot.start(BOT_TOKEN)
+    async with bot:
+        await bot.start(BOT_TOKEN)
 
 if __name__ == '__main__':
     try:
