@@ -11,18 +11,11 @@ from typing import List, Tuple, Dict, Literal
 import os
 import traceback
 
-from db.database import SessionLocal
-from db.models import ServerState, PlayerProfile
-from utils.logger import get_logger
-from utils.embed_builder import create_styled_embed
-from cogs.main_embed import DashboardView
-
 # --- CORRECT: Centralized Imports ---
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
-# --- NOUVEL IMPORT NÉCESSAIRE (CORRIGÉ) ---
 from cogs.main_embed import DashboardView
 
 # --- Setup Logger for this Cog ---
@@ -475,12 +468,6 @@ class AdminCog(commands.Cog):
             config_embed = self.cog.generate_config_menu_embed(state)
             config_view = self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
             await interaction.edit_original_response(embed=config_embed, view=config_view)
-
-            except Exception as e:
-                logger.error(f"Error in GameDurationSelect callback: {e}", exc_info=True)
-                await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
-            finally:
-                db.close()
 
         async def start_test_game(self, interaction: discord.Interaction, state: ServerState, db: SessionLocal):
             if not state.game_channel_id:
