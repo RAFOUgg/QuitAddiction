@@ -636,7 +636,13 @@ class AdminCog(commands.Cog):
             embed = discord.Embed(title="🔔 Notification Settings", color=discord.Color.green())
             notif_role_mention = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"
             embed.add_field(name="📍 General Notification Role", value=notif_role_mention, inline=False)
-            embed.add_field(name="🚨 Specific Alert Roles", value=(f"📉 Low Vitals: {f'<@&{state.notify_vital_low_role_id}>' if state.notify_vital_low_role_id else 'Not set'}\n" f"🚨 Critical: {f'<@&{state.notify_critical_role_id}>' if state.notify_critical_role_id else 'Not set'}\n" f"🚬 Cravings: {f'<@&{state.notify_envie_fumer_role_id}>' if state.notify_envie_fumer_role_id else 'Not set'}\n" f"💬 Friend/Quiz Msg: {f'<@&{state.notify_friend_message_role_id}>' if state.notify_friend_message_role_id else 'Not set'}\n" f"🛒 Shop Promos: {f'<@&{state.notify_shop_promo_role_id}>' if state.notify_shop_promo_role_id else 'Not set'}"), inline=False)
+            embed.add_field(name="🚨 Specific Alert Roles", value=(
+                f"📉 Low Vitals: {f'<@&{state.notify_vital_low_role_id}>' if state.notify_vital_low_role_id else 'Not set'}\n"
+                f"🚨 Critical: {f'<@&{state.notify_critical_role_id}>' if state.notify_critical_role_id else 'Not set'}\n"
+                f"🚬 Cravings: {f'<@&{state.notify_craving_role_id}>' if state.notify_craving_role_id else 'Not set'}\n"
+                f"💬 Friend/Quiz Msg: {f'<@&{state.notify_friend_message_role_id}>' if state.notify_friend_message_role_id else 'Not set'}\n"
+                f"🛒 Shop Promos: {f'<@&{state.notify_shop_promo_role_id}>' if state.notify_shop_promo_role_id else 'Not set'}"
+            ), inline=False)
             embed.set_footer(text="Use the buttons below to adjust preferences.")
             return embed
         finally: db.close()

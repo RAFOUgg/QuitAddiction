@@ -1,4 +1,4 @@
-# --- bot.py (CORRECTED & ROBUST) ---
+# --- bot.py (DEFINITIVE & STABLE VERSION) ---
 
 import discord
 from discord.ext import commands
@@ -25,19 +25,13 @@ intents.message_content = True
 intents.members = True
 intents.guilds = True
 
-# --- Custom Bot Class ---
 class QuitAddictionBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Ce flag nous assurera que les opérations lourdes ne se font qu'une seule fois.
         self._synced = False
-        self.asset_manager = None # On stocke une référence pour y accéder facilement
+        self.asset_manager = None
 
     async def setup_hook(self):
-        """
-        Le setup_hook est appelé une seule fois lors de la connexion initiale.
-        C'est l'endroit idéal pour charger les cogs.
-        """
         logger.info("--- Loading Cogs ---")
         for filename in os.listdir(COGS_DIR):
             if filename.endswith(".py") and not filename.startswith("__"):
@@ -47,42 +41,29 @@ class QuitAddictionBot(commands.Bot):
                 except Exception as e:
                     logger.error(f"❌ Failed to load cog {filename}: {e}", exc_info=True)
         
-        # Récupère le cog après chargement
         self.asset_manager = self.get_cog("AssetManager")
 
     async def on_ready(self):
-        """
-        Cet événement est appelé à chaque connexion/reconnexion.
-        Nous utilisons notre flag `_synced` pour n'exécuter les opérations lourdes qu'une fois.
-        """
         logger.info(f"🚀 Logged in as {self.user} (ID: {self.user.id})")
         logger.info("--------------------------------------------------")
 
         if not self._synced:
             logger.info("--- First Time Ready: Syncing commands and initializing assets ---")
             
-            # Synchronise les commandes slash avec Discord.
             try:
-                if DEV_GUILD_ID:
-                    # Si on est en mode dev, on synchronise seulement sur notre serveur. C'est instantané.
-                    guild = discord.Object(id=DEV_GUILD_ID)
-                    self.tree.copy_global_to(guild=guild)
-                    synced = await self.tree.sync(guild=guild)
-                    logger.info(f"✅ Synced {len(synced)} commands to DEVELOPMENT guild (ID: {DEV_GUILD_ID}).")
+                target_guild = discord.Object(id=DEV_GUILD_ID) if DEV_GUILD_ID else None
+                if target_guild:
+                    logger.info(f"Syncing commands to DEVELOPMENT guild (ID: {DEV_GUILD_ID})...")
                 else:
-                    # En production, on synchronise globalement. Peut prendre jusqu'à 1 heure pour se propager.
-                    synced = await self.tree.sync()
-                    logger.info(f"✅ Synced {len(synced)} GLOBAL commands.")
+                    logger.info("Syncing GLOBAL commands...")
+
+                synced = await self.tree.sync(guild=target_guild)
+                logger.info(f"✅ Synced {len(synced)} commands.")
             except Exception as e:
                 logger.error(f"❌ Failed to sync commands: {e}", exc_info=True)
 
-            # Initialise les assets (images)
             if self.asset_manager:
-                try:
-                    await self.asset_manager.initialize_assets()
-                    logger.info("✅ Asset Manager initialized.")
-                except Exception as e:
-                    logger.error(f"❌ Failed to initialize AssetManager: {e}", exc_info=True)
+                await self.asset_manager.initialize_assets()
 
             self._synced = True
             logger.info("--- Bot is fully operational ---")
@@ -91,19 +72,12 @@ class QuitAddictionBot(commands.Bot):
 
 
 def init_db():
-    """Initialise le schéma de la base de données."""
     logger.info("--- Initializing Database Schema ---")
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("--- Database Schema Initialized/Checked ---")
-    except Exception as e:
-        logger.critical(f"FATAL: Could not create database tables. Error: {e}", exc_info=True)
-        exit()
+    Base.metadata.create_all(bind=engine)
+    logger.info("--- Database Schema Initialized/Checked ---")
 
-# --- Point d'Entrée ---
 if __name__ == '__main__':
     init_db()
-
     bot = QuitAddictionBot(command_prefix="!", intents=intents)
     
     async def main():
@@ -113,7 +87,4 @@ if __name__ == '__main__':
         async with bot:
             await bot.start(TOKEN)
 
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        logger.critical(f"Bot failed to start: {e}", exc_info=True)
+    asyncio.run(main())

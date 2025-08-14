@@ -14,6 +14,7 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     if not isinstance(value, (int, float)): value = 0.0
     value = clamp(value, 0, max_value)
     percent = value / max_value
+    filled_blocks = int(length * percent)
     bar_filled = '🟥' if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3) else '🟧' if (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6) else '🟩'
     bar_empty = '⬛'
     return f"`{bar_filled * filled_length}{bar_empty * (length - filled_length)}`"
@@ -253,7 +254,14 @@ class MainEmbed(commands.Cog):
             if state and state.game_message_id and interaction.message.id != state.game_message_id:
                 if not custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                     return
-
+                
+            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
+            if not player:
+                # Si l'interaction n'a pas déjà reçu de réponse (defer/send_message)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("Erreur: Votre profil de joueur est introuvable. Veuillez contacter un admin.", ephemeral=True)
+                return
+            
             if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                 player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
                 if not player:
@@ -262,12 +270,6 @@ class MainEmbed(commands.Cog):
                     return
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state, self)
-                return
-
-            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not player:
-                try: await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
-                except discord.errors.InteractionResponded: pass
                 return
 
             await interaction.response.defer()
