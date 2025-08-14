@@ -93,6 +93,48 @@ class Phone(commands.Cog):
             embed.description = "Aucun nouveau message."
         return embed
 
+    async def handle_interaction(self, interaction: discord.Interaction, db: Session, player: PlayerProfile, state: ServerState):
+        """
+        Gère toutes les interactions liées au téléphone.
+        Renvoie True si l'interaction a été gérée, sinon False.
+        """
+        custom_id = interaction.data["custom_id"]
+        
+        # --- NAVIGATION ---
+        if custom_id == "phone_shop":
+            await interaction.edit_original_response(embed=self.generate_shop_embed(player), view=ShopView(player))
+        elif custom_id == "phone_sms":
+            await interaction.edit_original_response(embed=self.generate_sms_embed(player), view=SMSView(player))
+        elif custom_id == "phone_ubereats":
+            await interaction.edit_original_response(embed=self.generate_ubereats_embed(player), view=UberEatsView(player))
+
+        # --- ACTIONS D'ACHAT (Smoke-Shop) ---
+        elif custom_id.startswith("shop_buy_"):
+            # ... (la logique d'achat reste la même, ex: )
+            message = "Transaction échouée."
+            if custom_id == "shop_buy_cigarettes" and player.wallet >= 5:
+                player.wallet -= 5; player.cigarettes += 10; message = "Vous avez acheté un paquet de 10 cigarettes."
+            # ... autres achats ...
+            db.commit(); db.refresh(player)
+            await interaction.followup.send(f"🛍️ {message}", ephemeral=True)
+            await interaction.edit_original_response(embed=self.generate_shop_embed(player), view=ShopView(player))
+
+        # --- ACTIONS D'ACHAT (Uber Eats) ---
+        elif custom_id.startswith("ubereats_buy_"):
+            # ... (la logique d'achat reste la même)
+            message = "Transaction échouée."
+            # ...
+            if message != "Transaction échouée.":
+                 db.commit(); db.refresh(player)
+                 await interaction.followup.send(f"🍔 {message}", ephemeral=True)
+                 await interaction.edit_original_response(embed=self.generate_ubereats_embed(player), view=UberEatsView(player))
+            else:
+                 await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
+        else:
+            return False # N'a pas géré cette interaction
+            
+        return True
+    
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return

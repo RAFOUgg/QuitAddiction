@@ -63,7 +63,10 @@ class PlayerProfile(Base):
     headache: float = Column(Float, default=0.0)     # Already present, but ensure it's used
     urge_to_pee: float = Column(Float, default=0.0)  # Envie pressante
     craving: float = Column(Float, default=0.0)      # Envie de fumer/boire
-    # ...add more as needed...
+    craving_nicotine = Column(Float, default=0.0, nullable=False)
+    craving_alcohol = Column(Float, default=0.0, nullable=False)
+    craving_cannabis = Column(Float, default=0.0, nullable=False)
+    sex_drive = Column(Float, default=10.0, nullable=False) # Le cuisinier a des besoins...
 
     # === SECTION 4: SYMPTÔMES SPÉCIFIQUES (lié à la conso & santé) ===
     nausea: float = Column(Float, default=0.0)
