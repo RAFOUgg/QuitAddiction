@@ -286,7 +286,11 @@ class MainEmbed(commands.Cog):
             if custom_id == "nav_main_menu":
                 embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=False)
                 view = DashboardView(show_stats=False)
-                await interaction.edit_original_response(embed=embed, view=view)
+                try:
+                    await interaction.edit_original_response(embed=embed, view=view)
+                except discord.NotFound:
+                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                return
 
             elif custom_id == "nav_toggle_stats":
                 # Toggle stats
@@ -299,20 +303,44 @@ class MainEmbed(commands.Cog):
                                 show_stats = True
                 embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=not show_stats)
                 view = DashboardView(show_stats=not show_stats)
-                await interaction.edit_original_response(embed=embed, view=view)
+                try:
+                    await interaction.edit_original_response(embed=embed, view=view)
+                except discord.NotFound:
+                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                return
 
             elif custom_id == "nav_actions":
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=ActionsView(player))
+                embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                view = ActionsView(player)
+                try:
+                    await interaction.edit_original_response(embed=embed, view=view)
+                except discord.NotFound:
+                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                return
+
             elif custom_id == "nav_inventory":
-                await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=InventoryView())
+                embed = self.generate_inventory_embed(player, interaction.guild)
+                view = InventoryView()
+                try:
+                    await interaction.edit_original_response(embed=embed, view=view)
+                except discord.NotFound:
+                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+                return
+
             elif custom_id == "nav_phone":
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog:
                     embed = self.generate_dashboard_embed(player, state, interaction.guild)
                     embed.description = "Vous ouvrez votre téléphone."
-                    await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
+                    view = PhoneMainView(player)
+                    try:
+                        await interaction.edit_original_response(embed=embed, view=view)
+                    except discord.NotFound:
+                        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
                 else:
                     await interaction.followup.send("Erreur: Le module téléphone n'est pas chargé.", ephemeral=True)
+                return
+
             # --- Menus d'action dynamiques ---
             elif custom_id == "action_eat_menu":
                 await interaction.edit_original_response(embed=discord.Embed(title="🍽️ Que voulez-vous manger ?"), view=EatView(player))
