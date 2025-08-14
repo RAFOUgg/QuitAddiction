@@ -537,7 +537,6 @@ class AdminCog(commands.Cog):
                     game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
                     game_view = DashboardView()
                     game_message = await game_channel.send(embed=game_embed, view=game_view)
-                    game_message = await game_channel.send(embed=game_embed, view=game_view)
                     
                     state.game_message_id = game_message.id
                     db.commit()

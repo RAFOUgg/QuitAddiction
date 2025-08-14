@@ -56,7 +56,7 @@ class Phone(commands.Cog):
             if custom_id == "nav_phone":
                 main_embed_cog = self.bot.get_cog("MainEmbed")
                 if not main_embed_cog: return
-                embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild, show_stats=False)
+                embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
                 embed.description = "Vous ouvrez votre téléphone."
                 await interaction.edit_original_response(embed=embed, view=PhoneMainView())
                 return
