@@ -77,7 +77,7 @@ class Phone(commands.Cog):
         if player.messages:
             # Sépare les messages et les affiche
             messages = player.messages.split("\n---\n")
-            formatted_messages = "\n\n".join(f"✉️\n> {msg.replace Bip,'\n> ')}" for msg in messages if msg)
+            formatted_messages = "\n\n".join(f"✉️\n> {msg.replace('\n', '\n> ')}" for msg in messages if msg)
             embed.description = formatted_messages
         else:
             embed.description = "Aucun nouveau message."
