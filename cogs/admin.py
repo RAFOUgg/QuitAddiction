@@ -415,6 +415,64 @@ class AdminCog(commands.Cog):
                 logger.error(f"Erreur dans NotificationRoleTypeSelect: {e}", exc_info=True)
             finally:
                 db.close()
+    
+    class SetAllNotificationsRole(ui.Select):
+        def __init__(self, guild_id: str, id_mapping: dict, cog: 'AdminCog', options: list):
+            self.guild_id = guild_id
+            self.id_mapping = id_mapping
+            self.cog = cog
+            # Limite à 25 options, car un Select ne peut pas en avoir plus.
+            # Pour plus, il faudrait une vue paginée.
+            super().__init__(
+                placeholder="Sélectionnez le rôle unique pour toutes les notifications...",
+                options=options[:25]
+            )
+
+        async def callback(self, interaction: discord.Interaction):
+            await interaction.response.defer()
+            selected_hash = self.values[0]
+            selected_id = self.id_mapping.get(selected_hash)
+
+            if not selected_id:
+                await interaction.followup.send("Erreur : Rôle introuvable.", ephemeral=True)
+                return
+
+            db = SessionLocal()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if not state:
+                    await interaction.followup.send("Erreur : Configuration du serveur introuvable.", ephemeral=True)
+                    return
+
+                # Liste de tous les champs de rôle de notification à mettre à jour
+                notification_role_fields = [
+                    "notification_role_id",
+                    "notify_vital_low_role_id",
+                    "notify_critical_role_id",
+                    "notify_craving_role_id",
+                    "notify_friend_message_role_id",
+                    "notify_shop_promo_role_id"
+                ]
+
+                for field in notification_role_fields:
+                    setattr(state, field, selected_id)
+
+                db.commit()
+                db.refresh(state)
+
+                await interaction.followup.send(f"✅ Tous les rôles de notification ont été définis sur <@&{selected_id}> !", ephemeral=True)
+
+                # Revenir à l'écran de configuration des notifications pour voir le changement
+                new_embed = self.cog.generate_notifications_config_embed(state)
+                new_view = self.cog.generate_notifications_config_view(self.guild_id)
+                await interaction.edit_original_response(embed=new_embed, view=new_view, content=None)
+
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Erreur lors de la définition du rôle de notification unique : {e}", exc_info=True)
+                await interaction.followup.send("Une erreur de base de données est survenue.", ephemeral=True)
+            finally:
+                db.close()
 
     class SetAllNotificationsRoleButton(ui.Button):
         def __init__(self, guild_id: str, cog: 'AdminCog'):
@@ -476,64 +534,6 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 logger.error(f"Error in ProjectStatsButton callback: {e}", exc_info=True)
                 await interaction.followup.send("A critical error occurred while fetching project stats.", ephemeral=True)
-
-    def generate_config_menu_view(self, guild_id: str, guild: discord.Guild, state: ServerState) -> discord.ui.View:
-        view = discord.ui.View(timeout=None)
-        is_game_running = state.game_started if state else False
-
-        if is_game_running:
-            start_stop_label = "Stop Game"
-            start_stop_emoji = "⏹️"
-            start_stop_style = discord.ButtonStyle.danger
-        else:
-            start_stop_label = "Start Game"
-            start_stop_emoji = "▶️"
-            start_stop_style = discord.ButtonStyle.success
-
-        view.add_item(self.SetupGameModeButton("Mode & Duration", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
-        view.add_item(self.ConfigButton(start_stop_label, start_stop_emoji, guild_id, start_stop_style, row=0, cog=self))
-        view.add_item(self.GeneralConfigButton("Roles & Channels", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
-        view.add_item(self.ConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
-        view.add_item(self.ConfigButton("View Stats", "📊", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
-        view.add_item(self.ProjectStatsButton("Project Stats", guild_id, discord.ButtonStyle.secondary, row=1, cog=self))
-        return view
-
-    def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
-        options, id_mapping = [], {}
-        if not guild: return [discord.SelectOption(label="Server Error", value="error_guild", default=True)], {}
-        try:
-            if item_type == "role": sorted_items = sorted(items, key=lambda x: x.position, reverse=True)
-            elif item_type == "channel": sorted_items = sorted(items, key=lambda x: (getattr(x, 'category_id', float('inf')), x.position))
-            else: sorted_items = items
-        except Exception as e: logger.error(f"Error sorting {item_type}s: {e}"); sorted_items = items
-        for item in sorted_items:
-            if not (hasattr(item, 'id') and hasattr(item, 'name')): continue
-            item_id, item_name = str(item.id), item.name
-            if item_type == "role":
-                if item.is_default(): continue
-                label = f"🔹 {item_name}"
-            elif item_type == "channel":
-                if not isinstance(item, discord.TextChannel): continue
-                category_name = item.category.name if item.category else "No Category"
-                label = f"📁 {category_name} | #{item_name}"
-            else: label = item_name
-            label = label[:self.MAX_OPTION_LENGTH]
-            hashed_id = hashlib.sha256(item_id.encode()).hexdigest()[:25]
-            options.append(discord.SelectOption(label=label, value=hashed_id, description=f"ID: {item_id}"))
-            id_mapping[hashed_id] = item_id
-        if not options: options.append(discord.SelectOption(label="No items found", value="no_items", default=True))
-        return options, id_mapping
-
-    def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
-        embed = discord.Embed(title="⚙️ Bot & Game Configuration", description="Use the buttons below to adjust server settings.", color=discord.Color.blue())
-        embed.add_field(name="▶️ **General Status**", value=f"**Game:** `{'In Progress' if state.game_started else 'Not Started'}`\n**Mode:** `{state.game_mode.capitalize() if state.game_mode else 'Medium (Default)'}`\n**Duration:** `{self.GAME_DURATIONS.get(state.duration_key, {}).get('label', 'Medium (31 jours)')}`", inline=False)
-        admin_role, notif_role, game_channel = (f"<@&{state.admin_role_id}>" if state.admin_role_id else "Not set"), (f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"), (f"<#{state.game_channel_id}>" if state.game_channel_id else "Not set")
-        embed.add_field(name="📍 **Server Config**", value=f"**Admin Role:** {admin_role}\n**Notification Role:** {notif_role}\n**Game Channel:** {game_channel}", inline=False)
-        embed.add_field(name="⏱️ **Game Parameters**", value=f"**Tick Interval (min):** `{state.game_tick_interval_minutes or 30}`", inline=False)
-        embed.add_field(name="📉 **Degradation Rates / Tick**", value=f"**Hunger:** `{state.degradation_rate_hunger:.1f}` | **Thirst:** `{state.degradation_rate_thirst:.1f}` | **Bladder:** `{state.degradation_rate_bladder:.1f}`\n**Energy:** `{state.degradation_rate_energy:.1f}` | **Stress:** `{state.degradation_rate_stress:.1f}` | **Boredom:** `{state.degradation_rate_boredom:.1f}` | **Hygiene:** `{state.degradation_rate_hygiene:.1f}`", inline=False)
-        embed.set_footer(text="Use the buttons below to navigate and modify settings.")
-        return embed
-
 
     # --- Mode & Duration Section ---
     class ModeAndDurationButton(ui.Button):

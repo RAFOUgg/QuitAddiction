@@ -81,10 +81,14 @@ class Scheduler(commands.Cog):
                 # --- 5. RAFRAÎCHISSEMENT DE L'INTERFACE ---
                 try:
                     guild = self.bot.get_guild(int(server_state.guild_id))
-                    if guild and channel and server_state.game_message_id:
+                    if guild and server_state.game_channel_id and server_state.game_message_id:
+                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
                         game_message = await channel.fetch_message(int(server_state.game_message_id))
+                        
                         new_embed = main_embed_cog.generate_dashboard_embed(player, server_state, guild)
-                        await game_message.edit(embed=new_embed, view=DashboardView(player))
+                        new_view = DashboardView(player) # Assurez-vous que la vue est aussi mise à jour
+                        await game_message.edit(embed=new_embed, view=new_view)
+
                 except (discord.NotFound, discord.Forbidden):
                     pass 
                 except Exception as e:
