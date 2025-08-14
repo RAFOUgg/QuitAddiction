@@ -1,4 +1,4 @@
-# --- db/models.py (CORRECTED WITH NEW STATS) ---
+# --- db/models.py (CORRECTED WITH NEW ATTRIBUTES) ---
 
 from db.database import Base
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, BigInteger, UniqueConstraint, Text
@@ -18,7 +18,11 @@ class ServerState(Base):
     game_day_start_hour: int = Column(Integer, default=8)
     game_mode: str = Column(String, default="medium")
     duration_key: Optional[str] = Column(String, nullable=True, default="medium")
-    game_minutes_per_day: int = Column(Integer, default=720) # Durée en minutes réelles pour un jour de jeu (24h)
+    game_minutes_per_day: int = Column(Integer, default=720)
+    
+    # CORRECTION: Ajout de la colonne manquante
+    game_tick_interval_minutes: int = Column(Integer, default=30)
+    
     degradation_rate_hunger: float = Column(Float, default=10.0)
     degradation_rate_thirst: float = Column(Float, default=8.0)
     degradation_rate_bladder: float = Column(Float, default=15.0)
@@ -38,7 +42,7 @@ class ServerState(Base):
     # Notification Toggles
     notify_on_low_vital_stat: bool = Column(Boolean, default=True)
     notify_on_critical_event: bool = Column(Boolean, default=True)
-    notify_on_craving: bool = Column(Boolean, default=True) # Renommé pour la cohérence
+    notify_on_craving: bool = Column(Boolean, default=True)
     notify_on_friend_message: bool = Column(Boolean, default=True)
     notify_on_shop_promo: bool = Column(Boolean, default=True)
 
@@ -59,15 +63,15 @@ class PlayerProfile(Base):
     thirst: float = Column(Float, default=0.0)
     bladder: float = Column(Float, default=0.0)
     fatigue: float = Column(Float, default=0.0)
-    bowels: float = Column(Float, default=0.0) # Transit intestinal
+    bowels: float = Column(Float, default=0.0)
 
     # === SECTION 3: ÉTAT MENTAL & ÉMOTIONNEL ===
-    sanity: float = Column(Float, default=100.0) # Santé mentale globale
+    sanity: float = Column(Float, default=100.0)
     stress: float = Column(Float, default=0.0)
     happiness: float = Column(Float, default=50.0)
     boredom: float = Column(Float, default=0.0)
     
-    # === SECTION 4: SYMPTÔMES SPÉCIFIQUES (lié à la conso & santé) ===
+    # === SECTION 4: SYMPTÔMES SPÉCIFIQUES ===
     nausea: float = Column(Float, default=0.0)
     dizziness: float = Column(Float, default=0.0)
     headache: float = Column(Float, default=0.0)
@@ -96,6 +100,10 @@ class PlayerProfile(Base):
     # === SECTION 7: AUTRES & MÉTA-DONNÉES ===
     wallet: int = Column(Integer, default=20)
     show_stats_in_view: bool = Column(Boolean, default=False)
+    
+    # NOUVEAU: Ajout du flag pour l'inventaire
+    show_inventory_in_view: bool = Column(Boolean, default=False)
+    
     recent_logs: str = Column(Text, default="")
     
     # --- Inventaire ---
@@ -119,6 +127,7 @@ class PlayerProfile(Base):
     last_action_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     last_action: Optional[str] = Column(String, nullable=True)
     last_action_time: Optional[datetime.datetime] = Column(DateTime, nullable=True)
+    #... (autres timestamps)
     last_eaten_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     last_drank_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     last_slept_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
@@ -128,7 +137,6 @@ class PlayerProfile(Base):
     sickness_end_time: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     last_defecated_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
 
-
     # --- Flags Narratifs ---
     has_unlocked_smokeshop: bool = Column(Boolean, default=False)
     messages: str = Column(Text, default="")
@@ -137,7 +145,6 @@ class PlayerProfile(Base):
 
 class ActionLog(Base):
     __tablename__ = "action_log"
-    #... (le reste inchangé)
     id: int = Column(Integer, primary_key=True)
     guild_id: str = Column(String, index=True)
     user_id: str = Column(String, index=True)

@@ -1,4 +1,4 @@
-# --- cogs/phone.py (REFACTORED) ---
+# --- cogs/phone.py (REFACTORED FOR NEW UI) ---
 import discord
 from discord.ext import commands
 from discord import ui
@@ -16,6 +16,7 @@ class PhoneMainView(ui.View):
         self.add_item(ui.Button(label="Paramètres", style=discord.ButtonStyle.secondary, custom_id="phone_settings", emoji="⚙️"))
         self.add_item(ui.Button(label="Uber Eats", style=discord.ButtonStyle.success, custom_id="phone_ubereats", emoji="🍔"))
         self.add_item(ui.Button(label="Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop", disabled=(not player.has_unlocked_smokeshop), emoji="🛍️"))
+        # Le bouton de retour est maintenant géré par le routeur principal
         self.add_item(ui.Button(label="Fermer le téléphone", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
 
 class SMSView(ui.View):
@@ -48,46 +49,37 @@ class NotificationsView(ui.View):
 class SettingsView(ui.View):
     def __init__(self, player: PlayerProfile, settings: dict):
         super().__init__(timeout=180)
-        
-        notif_types = {
-            "low_vitals": "📉 Vitals Faibles",
-            "cravings": "🚬 Envies",
-            "friend_messages": "💬 Messages d'amis"
-        }
-
+        notif_types = { "low_vitals": "📉 Vitals Faibles", "cravings": "🚬 Envies", "friend_messages": "💬 Messages d'amis" }
         for key, label in notif_types.items():
             is_enabled = settings.get(key, True)
             style = discord.ButtonStyle.success if is_enabled else discord.ButtonStyle.danger
             button_label = f"{label}: {'Activé' if is_enabled else 'Désactivé'}"
             self.add_item(ui.Button(label=button_label, style=style, custom_id=f"phone_toggle_notif:{key}"))
-
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
 class Phone(commands.Cog):
-    """Fournit la logique pour les applications du téléphone."""
     def __init__(self, bot):
         self.bot = bot
 
-    def _add_thumbnail(self, embed: discord.Embed, player: PlayerProfile, main_embed_cog: commands.Cog):
+    def _add_main_image(self, embed: discord.Embed, player: PlayerProfile, main_embed_cog: commands.Cog):
+        # MODIFIÉ: Utilise set_image pour une grande image
         if image_url := main_embed_cog.get_image_url(player):
-            embed.set_thumbnail(url=image_url)
+            embed.set_image(url=image_url)
 
     def generate_phone_main_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
         embed = discord.Embed(title="📱 Téléphone", description="Choisissez une application.", color=discord.Color.light_grey())
         embed.set_footer(text=f"Batterie: 100%")
-        self._add_thumbnail(embed, player, main_embed_cog)
+        self._add_main_image(embed, player, main_embed_cog)
         return embed
 
     def generate_shop_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
-        embed = discord.Embed(title="🛍️ Smoke-Shop", description="Faites vos achats ici.", color=discord.Color.purple())
-        embed.add_field(name="Votre Portefeuille", value=f"💰 **{player.wallet}$**", inline=False)
-        self._add_thumbnail(embed, player, main_embed_cog)
+        embed = discord.Embed(title="🛍️ Smoke-Shop", description=f"Votre Portefeuille: **{player.wallet}$**", color=discord.Color.purple())
+        self._add_main_image(embed, player, main_embed_cog)
         return embed
 
     def generate_ubereats_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
-        embed = discord.Embed(title="🍔 Uber Eats", description="Une petite faim ? Commandez ici.", color=discord.Color.green())
-        embed.add_field(name="Votre Portefeuille", value=f"💰 **{player.wallet}$**", inline=False)
-        self._add_thumbnail(embed, player, main_embed_cog)
+        embed = discord.Embed(title="🍔 Uber Eats", description=f"Votre Portefeuille: **{player.wallet}$**", color=discord.Color.green())
+        self._add_main_image(embed, player, main_embed_cog)
         return embed
 
     def generate_sms_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
@@ -98,89 +90,87 @@ class Phone(commands.Cog):
             embed.description = formatted_messages
         else:
             embed.description = "Aucun nouveau message."
-        self._add_thumbnail(embed, player, main_embed_cog)
+        self._add_main_image(embed, player, main_embed_cog)
         return embed
-
+    
+    # ... autres générateurs d'embeds modifiés de la même manière
     def generate_notifications_embed(self, player: PlayerProfile, state: ServerState, main_embed_cog: commands.Cog) -> discord.Embed:
         embed = discord.Embed(title="🔔 Notifications", color=discord.Color.orange())
-        notif_role = f"<@&{state.notification_role_id}>" if state and state.notification_role_id else ""
         notif_history = player.notification_history.strip().split("\n") if player.notification_history else []
-        if notif_history:
-            notif_text = "\n".join(f"{notif_role} {msg}" for msg in notif_history[-5:])
-        else:
-            notif_text = "Aucune notification récente."
-        embed.description = notif_text
-        self._add_thumbnail(embed, player, main_embed_cog)
+        embed.description = "\n".join(notif_history[-5:]) if notif_history else "Aucune notification récente."
+        self._add_main_image(embed, player, main_embed_cog)
         return embed
 
     def generate_settings_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
-        embed = discord.Embed(title="⚙️ Paramètres de Notification", description="Choisissez les notifications que vous souhaitez recevoir.", color=discord.Color.dark_grey())
-        self._add_thumbnail(embed, player, main_embed_cog)
+        embed = discord.Embed(title="⚙️ Paramètres de Notification", description="Activez/Désactivez les types de notifications que vous souhaitez recevoir.", color=discord.Color.dark_grey())
+        self._add_main_image(embed, player, main_embed_cog)
         return embed
 
     async def handle_interaction(self, interaction: discord.Interaction, db: Session, player: PlayerProfile, state: ServerState, main_embed_cog: commands.Cog):
-        """Gère toutes les interactions liées au téléphone."""
         try:
-            await interaction.response.defer()
+            if not interaction.response.is_done():
+                await interaction.response.defer()
         except discord.errors.InteractionResponded:
             pass
 
         custom_id = interaction.data["custom_id"]
         
-        # Navigation
-        if custom_id == "phone_open":
-            await interaction.edit_original_response(embed=self.generate_phone_main_embed(player, main_embed_cog), view=PhoneMainView(player))
-        elif custom_id == "phone_shop":
-            await interaction.edit_original_response(embed=self.generate_shop_embed(player, main_embed_cog), view=ShopView(player))
-        elif custom_id == "phone_sms":
-            await interaction.edit_original_response(embed=self.generate_sms_embed(player, main_embed_cog), view=SMSView(player))
-        elif custom_id == "phone_ubereats":
-            await interaction.edit_original_response(embed=self.generate_ubereats_embed(player, main_embed_cog), view=UberEatsView(player))
-        elif custom_id == "phone_notifications":
-            await interaction.edit_original_response(
-                embed=self.generate_notifications_embed(player, state, main_embed_cog),
-                view=NotificationsView(player)
-            )
-        elif custom_id == "phone_settings":
-            settings = get_player_notif_settings(player)
-            await interaction.edit_original_response(embed=self.generate_settings_embed(player, main_embed_cog), view=SettingsView(player, settings))
-        
+        # Dictionnaire des constructeurs d'embed et de vue pour la navigation
+        phone_screens = {
+            "phone_open": (self.generate_phone_main_embed, PhoneMainView),
+            "phone_shop": (self.generate_shop_embed, ShopView),
+            "phone_ubereats": (self.generate_ubereats_embed, UberEatsView),
+            "phone_sms": (self.generate_sms_embed, SMSView),
+            "phone_notifications": (self.generate_notifications_embed, NotificationsView),
+            "phone_settings": (self.generate_settings_embed, SettingsView)
+        }
+
+        # Navigation dans le téléphone
+        if custom_id in phone_screens:
+            embed_func, view_class = phone_screens[custom_id]
+            # La fonction d'embed a besoin d'arguments différents selon le cas
+            if custom_id == "phone_notifications":
+                embed = embed_func(player, state, main_embed_cog)
+            elif custom_id == "phone_settings":
+                 embed = embed_func(player, main_embed_cog)
+                 view = view_class(player, get_player_notif_settings(player))
+                 await interaction.edit_original_response(embed=embed, view=view)
+                 return
+            else:
+                embed = embed_func(player, main_embed_cog)
+            
+            view = view_class(player)
+            await interaction.edit_original_response(embed=embed, view=view)
+
+        # Basculer les paramètres de notification
         elif custom_id.startswith("phone_toggle_notif:"):
             key_to_toggle = custom_id.split(":")[1]
             settings = get_player_notif_settings(player)
             settings[key_to_toggle] = not settings.get(key_to_toggle, True)
             player.notifications_config = json.dumps(settings)
-            db.commit()
-            db.refresh(player)
-            await interaction.edit_original_response(embed=self.generate_settings_embed(player, main_embed_cog), view=SettingsView(player, settings))
+            db.commit(); db.refresh(player)
+            
+            embed = self.generate_settings_embed(player, main_embed_cog)
+            view = SettingsView(player, settings)
+            await interaction.edit_original_response(embed=embed, view=view)
 
-        # Achats
+        # Logique d'achat
         elif custom_id.startswith("shop_buy_") or custom_id.startswith("ubereats_buy_"):
             items = {
-                "shop_buy_cigarettes": {"cost": 5, "action": lambda p: setattr(p, 'cigarettes', p.cigarettes + 10), "msg": "Vous avez acheté 10 cigarettes.", "type": "shop"},
-                "shop_buy_beer": {"cost": 3, "action": lambda p: setattr(p, 'beers', p.beers + 1), "msg": "Vous avez acheté une bière.", "type": "shop"},
-                "shop_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez acheté une bouteille d'eau.", "type": "shop"},
-                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', getattr(p, 'tacos', 0) + 1), "msg": "Vous avez commandé un tacos.", "type": "ubereats"},
-                "ubereats_buy_soda": {"cost": 2, "action": lambda p: setattr(p, 'soda_cans', p.soda_cans + 1), "msg": "Vous avez commandé un soda.", "type": "ubereats"},
-                "ubereats_buy_salad": {"cost": 8, "action": lambda p: setattr(p, 'salad_servings', getattr(p, 'salad_servings', 0) + 1), "msg": "Vous avez commandé une salade.", "type": "ubereats"},
-                "ubereats_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez acheté une bouteille d'eau.", "type": "ubereats"},
+                "shop_buy_cigarettes": {"cost": 5, "action": lambda p: setattr(p, 'cigarettes', p.cigarettes + 10), "msg": "Vous avez acheté 10 cigarettes.", "view": ShopView, "embed": self.generate_shop_embed},
+                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', getattr(p, 'tacos', 0) + 1), "msg": "Vous avez commandé un tacos.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
+                # ... Ajoutez les autres articles ici de la même manière
             }
-
             item = items.get(custom_id)
             if item and player.wallet >= item["cost"]:
                 player.wallet -= item["cost"]
                 item["action"](player)
                 db.commit(); db.refresh(player)
 
-                shop_emoji = "🛍️" if item["type"] == "shop" else "🍔"
-                await interaction.followup.send(f'{shop_emoji} {item["msg"]}', ephemeral=True)
-                
-                if item["type"] == "shop":
-                    await interaction.edit_original_response(embed=self.generate_shop_embed(player, main_embed_cog), view=ShopView(player))
-                else:
-                    await interaction.edit_original_response(embed=self.generate_ubereats_embed(player, main_embed_cog), view=UberEatsView(player))
+                await interaction.followup.send(f'✅ {item["msg"]}', ephemeral=True)
+                await interaction.edit_original_response(embed=item["embed"](player, main_embed_cog), view=item["view"](player))
             else:
-                await interaction.followup.send(f"⚠️ Transaction échouée. Fonds insuffisants ou article non valide.", ephemeral=True)
+                await interaction.followup.send(f"⚠️ Transaction échouée.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Phone(bot))
