@@ -117,6 +117,95 @@ class InventoryView(ui.View):
         self.add_item(ui.Button(label="⬅️ Retour au Tableau de Bord", style=discord.ButtonStyle.grey, custom_id="nav_main_menu"))
 
 # --- COG ---
+def generate_cook_embed(player, state, guild, show_stats=False, image_is_hidden=False):
+    asset_cog = guild._state._get_client().get_cog("AssetManager")
+    image_name = "neutral"
+    now = datetime.datetime.utcnow()
+    action_image_timeout = 10
+    if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < action_image_timeout:
+        image_name = player.last_action
+    else:
+        if player.stomachache > 60:
+            image_name = "stomachache"
+        elif player.headache > 60:
+            image_name = "headache"
+        elif player.urge_to_pee > 80:
+            image_name = "urge_to_pee"
+        elif player.craving > 70:
+            image_name = "craving"
+        elif player.stress > 70 or player.hunger > 70 or player.health < 40:
+            image_name = "sad"
+    image_url = asset_cog.get_url(image_name) if asset_cog else None
+
+    embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
+    if image_url:
+        if image_is_hidden:
+            embed.set_thumbnail(url=image_url)
+        else:
+            embed.set_image(url=image_url)
+    embed.description = f"**Pensées du Cuisinier :**\n*\"{MainEmbed.get_character_thoughts_static(player)}\"*"
+    # Notification
+    notif_role = f"<@&{state.notification_role_id}>" if state and state.notification_role_id else None
+    notif_msg = player.notification_history.strip().split("\n")[-1] if player.notification_history else None
+    if notif_role or notif_msg:
+        embed.add_field(
+            name="🔔 Notification",
+            value=f"{notif_role or ''} {notif_msg or ''}".strip(),
+            inline=False
+        )
+    # Stats si demandé
+    if show_stats:
+        # --- Section Stats (TOUJOURS affichée) ---
+        # NOUVEAU: Besoins Vitaux
+        # Besoins Vitaux
+        vital_needs = (
+            f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
+            f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
+            f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`"
+        )
+        embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=True)
+
+        # Désirs & Envies
+        cravings = (
+            f"🚬 **Tabac:** {generate_progress_bar(player.craving_nicotine, high_is_bad=True)} `{player.craving_nicotine:.0f}%`\n"
+            f"🍺 **Alcool:** {generate_progress_bar(player.craving_alcohol, high_is_bad=True)} `{player.craving_alcohol:.0f}%`\n"
+            f"❤️ **Sexe:** {generate_progress_bar(player.sex_drive, high_is_bad=True)} `{player.sex_drive:.0f}%`"
+        )
+        embed.add_field(name="🔥 Désirs & Envies", value=cravings, inline=True)
+
+        # Santé Physique
+        phys_health = (
+            f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`\n"
+            f"**Énergie:** {generate_progress_bar(player.energy)} `{player.energy:.0f}%`\n"
+            f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n"
+        )
+        embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=False)
+
+        mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n"
+                         f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
+                         f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
+                         f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
+        embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
+
+        embed.add_field(name="\u200b", value="\u200b", inline=False) # Spacer
+
+        symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n"
+                    f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n"
+                    f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n"
+                    f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`")
+        embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
+        
+        addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)}`{player.substance_addiction_level:.1f}%`\n"
+                     f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n"
+                     f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
+        embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
+        
+        if player.is_sick:
+            embed.add_field(name="État Actuel", value="**Malade 🤒**", inline=False)
+    embed.set_footer(text=f"Jeu sur le serveur {guild.name} • Dernière mise à jour :")
+    embed.timestamp = datetime.datetime.utcnow()
+    return embed
+
 class MainEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -124,7 +213,8 @@ class MainEmbed(commands.Cog):
         self.bot.add_view(DashboardView())
         self.bot.add_view(InventoryView())
 
-    def get_character_thoughts(self, player: PlayerProfile) -> str:
+    @staticmethod
+    def get_character_thoughts_static(player: PlayerProfile) -> str:
         thoughts = {
             95: (player.thirst > 85, "J'ai la gorge complètement sèche, je pourrais boire n'importe quoi."),
             90: (player.hunger > 80, "Mon estomac gargouille si fort, il faut que je mange."),
@@ -284,9 +374,8 @@ class MainEmbed(commands.Cog):
             await interaction.response.defer()
         except (discord.errors.InteractionResponded, discord.errors.NotFound):
             return
-            
+
         custom_id = interaction.data["custom_id"]
-        
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
@@ -295,7 +384,6 @@ class MainEmbed(commands.Cog):
                 await interaction.followup.send("Erreur: Profil ou état introuvable.", ephemeral=True)
                 return
 
-            # --- AIGUILLAGE ---
             phone_cog = self.bot.get_cog("Phone")
             if phone_cog and custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                 await phone_cog.handle_interaction(interaction, db, player, state)
@@ -307,53 +395,89 @@ class MainEmbed(commands.Cog):
             # --- NAVIGATION PRINCIPALE ---
             if custom_id == "nav_main_menu":
                 await interaction.edit_original_response(
-                    embed=self.generate_dashboard_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    view=DashboardView(show_stats=False, image_is_hidden=False)
+                )
+            elif custom_id == "nav_toggle_stats":
+                show_stats = False
+                if interaction.message and interaction.message.embeds:
+                    for row in interaction.message.components:
+                        for component in row.children:
+                            if getattr(component, 'custom_id', None) == 'nav_toggle_stats' and component.style == discord.ButtonStyle.success:
+                                show_stats = True
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=not show_stats, image_is_hidden=False),
+                    view=DashboardView(show_stats=not show_stats, image_is_hidden=False)
+                )
+            elif custom_id == "nav_toggle_image_to_hidden":
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=True),
+                    view=DashboardView(show_stats=False, image_is_hidden=True)
+                )
+            elif custom_id == "nav_toggle_image_to_shown":
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
                     view=DashboardView(show_stats=False, image_is_hidden=False)
                 )
             elif custom_id == "nav_actions":
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=ActionsView(player))
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    view=ActionsView(player)
+                )
             elif custom_id == "nav_inventory":
-                await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=InventoryView())
+                await interaction.edit_original_response(
+                    embed=self.generate_inventory_embed(player, interaction.guild),
+                    view=InventoryView()
+                )
             elif custom_id == "nav_phone":
-                embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                embed = generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=True)
                 embed.description = "Vous ouvrez votre téléphone."
                 await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
 
             # --- MENUS D'ACTIONS SECONDAIRES ---
             elif custom_id == "action_eat_menu":
-                await interaction.edit_original_response(embed=discord.Embed(title="🍽️ Que manger ?"), view=EatView(player))
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    view=EatView(player)
+                )
             elif custom_id == "action_drink_menu":
-                await interaction.edit_original_response(embed=discord.Embed(title="💧 Que boire ?"), view=DrinkView(player))
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    view=DrinkView(player)
+                )
             elif custom_id == "action_smoke_menu":
-                await interaction.edit_original_response(embed=discord.Embed(title="🚬 Que fumer ?"), view=SmokeView(player))
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    view=SmokeView(player)
+                )
+            elif custom_id == "action_poop_menu":
+                await interaction.edit_original_response(
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    view=PoopView(player)
+                )
 
             # --- ACTIONS CONCRÈTES ---
             elif custom_id == "action_sleep":
                 message, changes = cooker_brain.perform_sleep(player)
             elif custom_id == "action_urinate":
                 message, changes = cooker_brain.perform_urinate(player)
-            # Actions depuis les sous-menus
             elif custom_id == "eat_food":
-                 message, changes = cooker_brain.perform_eat(player)
+                message, changes = cooker_brain.perform_eat(player)
             elif custom_id == "eat_soup":
-                 message, changes = cooker_brain.use_soup(player)
+                message, changes = cooker_brain.use_soup(player)
             elif custom_id == "drink_water":
-                # La méthode `perform_drink` gère déjà l'eau en priorité
                 message, changes = cooker_brain.perform_drink(player)
             elif custom_id == "drink_beer":
                 message, changes = cooker_brain.use_beer(player)
             elif custom_id == "smoke_cigarette":
                 message, changes = cooker_brain.perform_smoke(player)
 
-            # Si une action concrète a été effectuée
             if message:
                 player.last_action_at = datetime.datetime.utcnow()
                 db.commit()
                 await interaction.followup.send(f"✅ {message}", ephemeral=True)
-                
-                # Après une action, on retourne toujours à la vue des actions pour voir les cooldowns
                 await interaction.edit_original_response(
-                    embed=self.generate_dashboard_embed(player, state, interaction.guild), 
+                    embed=generate_cook_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
                     view=ActionsView(player)
                 )
 
