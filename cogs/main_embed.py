@@ -219,7 +219,7 @@ class MainEmbed(commands.Cog):
     def generate_inventory_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👖 Inventaire du Cuisinier", color=0x2ecc71)
         inventory_items = [("cigarettes", "🚬 Cigarettes"), ("beers", "🍺 Bières"), ("water_bottles", "💧 Bouteilles d'eau"), ("food_servings", "🍔 Portions")]
-        inventory_list = "".join([f"{label}: **{getattr(player, attr, 0)}**\n" for attr, label in inventory_items if getattr(player, attr, 0) > 0])
+        inventory_list = "".join([f"{label}: **{getattr(player, attr, 0)}\n" for attr, label in inventory_items if getattr(player, attr, 0) > 0])
         embed.add_field(name="Consommables", value=inventory_list or "*Vide*", inline=True)
         embed.add_field(name="Argent", value=f"💰 **{player.wallet}$**", inline=True)
         
