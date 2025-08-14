@@ -333,7 +333,7 @@ class AdminCog(commands.Cog):
         
         value = "\n".join([f"**{name}:** {f'<@&{role_id}>' if role_id else 'Non défini'}" for name, role_id in roles.items()])
         embed.add_field(name="Rôles Actuels", value=value)
-        embed.set_footer(text="Utilisez les menus déroulants pour changer un rôle.")
+        embed.set_footer(text="Utilisez le menu pour changer un rôle, ou le bouton vert pour un rôle unique.")
         return embed
 
     # Le menu déroulant pour choisir quel rôle configurer
@@ -379,10 +379,32 @@ class AdminCog(commands.Cog):
             finally:
                 db.close()
 
+    class SetAllNotificationsRoleButton(ui.Button):
+        def __init__(self, guild_id: str, cog: 'AdminCog'):
+            super().__init__(label="Définir un Rôle pour Tout", style=discord.ButtonStyle.success, emoji="👑", row=1)
+            self.guild_id = guild_id
+            self.cog = cog
+        
+        async def callback(self, interaction: discord.Interaction):
+            all_roles = interaction.guild.roles
+            options, id_mapping = self.cog.create_options_and_mapping(all_roles, "role", interaction.guild)
+            
+            view = ui.View()
+            view.add_item(SetAllRolesSelect(self.guild_id, id_mapping, self.cog, options))
+            view.add_item(self.cog.BackButton("Retour aux notifications", self.guild_id, discord.ButtonStyle.secondary, 1, self.cog, target_menu="notifications_config"))
+            
+            embed = discord.Embed(
+                title="👑 Définir un rôle unique",
+                description="Le rôle que vous sélectionnerez ci-dessous sera mentionné pour **toutes** les notifications du bot.",
+                color=discord.Color.green()
+            )
+            await interaction.response.edit_message(embed=embed, view=view, content=None)
+
     def generate_notifications_config_view(self, guild_id: str) -> ui.View:
         view = ui.View(timeout=180)
         view.add_item(self.NotificationRoleTypeSelect(guild_id, self))
-        view.add_item(self.BackButton("Retour au menu principal", guild_id, discord.ButtonStyle.red, 1, self))
+        view.add_item(self.SetAllNotificationsRoleButton(guild_id, self))
+        view.add_item(self.BackButton("Retour au menu principal", guild_id, discord.ButtonStyle.red, 2, self))
         return view
         
     class ProjectStatsButton(ui.Button):
