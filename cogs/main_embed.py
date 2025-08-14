@@ -11,18 +11,11 @@ from .phone import PhoneMainView
 from utils.helpers import clamp
 
 def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 10, high_is_bad: bool = False) -> str:
-    """Génère une barre de progression textuelle et colorée."""
     if not isinstance(value, (int, float)): value = 0.0
     value = clamp(value, 0, max_value)
     percent = value / max_value
     filled_length = int(length * percent)
-    # Define colors based on percentage and whether high is good or bad
-    if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3):
-        bar_filled = '🟥'
-    elif (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6):
-        bar_filled = '🟧'
-    else:
-        bar_filled = '🟩'
+    bar_filled = '🟥' if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3) else '🟧' if (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6) else '🟩'
     bar_empty = '⬛'
     return f"`{bar_filled * filled_length}{bar_empty * (length - filled_length)}`"
 
