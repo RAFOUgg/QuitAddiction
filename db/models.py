@@ -20,10 +20,10 @@ class ServerState(Base):
     notification_role_id: Optional[int] = Column(BigInteger, nullable=True)
     game_started: bool = Column(Boolean, default=False)
     game_start_time: Optional[datetime.datetime] = Column(DateTime, nullable=True)
+    game_day_start_hour: int = Column(Integer, default=8)
     game_mode: str = Column(String, default="medium")
     duration_key: Optional[str] = Column(String, nullable=True, default="medium")
     game_tick_interval_minutes: int = Column(Integer, default=30)
-    # --- AJOUT: Taux de dégradation pour l'hygiène ---
     degradation_rate_hunger: float = Column(Float, default=10.0)
     degradation_rate_thirst: float = Column(Float, default=8.0)
     degradation_rate_bladder: float = Column(Float, default=15.0)

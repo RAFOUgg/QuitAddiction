@@ -145,6 +145,43 @@ class MainEmbed(commands.Cog):
 
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
+        if state and state.is_test_mode and state.game_start_time:
+            admin_cog = self.bot.get_cog("AdminCog")
+            if admin_cog:
+                # --- Calcul de l'horloge de jeu ---
+                # Ratio : 24h de jeu (86400s) pour 20min réelles (1200s) -> ratio de 72
+                TIME_RATIO = (24 * 3600) / (admin_cog.TEST_DURATION_MINUTES * 60)
+                
+                elapsed_real_seconds = (datetime.datetime.utcnow() - state.game_start_time).total_seconds()
+                elapsed_game_seconds = elapsed_real_seconds * TIME_RATIO
+                
+                start_time_in_seconds = (state.game_day_start_hour or 8) * 3600
+                current_game_total_seconds = start_time_in_seconds + elapsed_game_seconds
+                
+                # Formatage en HH:MM
+                game_hour = int((current_game_total_seconds / 3600) % 24)
+                game_minute = int((current_game_total_seconds % 3600) / 60)
+                time_str = f"{game_hour:02d}:{game_minute:02d}"
+
+                # --- Préparation du champ de debug ---
+                progress_percent = (elapsed_real_seconds / (admin_cog.TEST_DURATION_MINUTES * 60)) * 100
+                progress_bar = generate_progress_bar(progress_percent, 100, length=20)
+                
+                # Utilise les nouveaux logs générés par chain_reactions
+                logs = player.recent_logs if player.recent_logs else "- RAS"
+
+                embed.add_field(
+                    name="🕒 Horloge de Jeu (Test)",
+                    value=f"**Jour 1 - {time_str}**",
+                    inline=False
+                )
+                
+                debug_info = (
+                    f"**Progression:** {progress_bar}\n"
+                    f"**Journal d'Événements :**\n```md\n{logs}\n```"
+                )
+                embed.add_field(name="⚙️ Moniteur de Test", value=debug_info, inline=False)
+                
         # La vue (view) nous dit si on doit afficher les stats
         if view.show_stats:
             vital_needs = (f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
@@ -181,7 +218,6 @@ class MainEmbed(commands.Cog):
         return embed
 
     def generate_inventory_embed(self, player: PlayerProfile, guild: discord.Guild) -> discord.Embed:
-        # ... (Cette fonction est correcte et n'a pas besoin de changer)
         embed = discord.Embed(title="👖 Inventaire du Cuisinier", color=0x2ecc71)
         inventory_items = [("cigarettes", "🚬 Cigarettes"), ("beers", "🍺 Bières"), ("water_bottles", "💧 Bouteilles d'eau"), ("food_servings", "🍔 Portions")]
         inventory_list = "".join([f"{label}: **{getattr(player, attr, 0)}**\n" for attr, label in inventory_items if getattr(player, attr, 0) > 0])
