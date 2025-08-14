@@ -18,7 +18,7 @@ class HelpCog(commands.Cog):
 
         embed.add_field(
             name="🧠 Affichage des Stats (Le Cerveau)",
-            value="Cliquez sur le bouton `Afficher Cerveau` pour voir vos statistiques détaillées. Le jeu continue en arrière-plan.",
+            value="Cliquez sur le bouton `🧠 Afficher Cerveau` pour voir vos statistiques détaillées. Le jeu continue en arrière-plan et l'interface principale est mise à jour toutes les minutes.",
             inline=False
         )
 
@@ -33,8 +33,9 @@ class HelpCog(commands.Cog):
         )
 
         embed.add_field(
-            name="⚠️ Besoins Vitaux (0% = Satisfait, 100% = Critique)",
+            name="⚠️ Besoins Vitaux",
             value=(
+                "_(0% = Satisfait, 100% = Critique)_\n"
                 "**Faim :** Monte avec le temps. Mangez pour la réduire.\n"
                 "**Soif :** Monte plus vite que la faim. Buvez pour la réduire.\n"
                 "**Vessie :** Se remplit quand vous buvez. N'attendez pas le dernier moment !"
@@ -43,17 +44,18 @@ class HelpCog(commands.Cog):
         )
         
         embed.add_field(
-            name="🧠 État Mental (0% = Mauvais, 100% = Bon)",
+            name="🤔 État Mental",
             value=(
+                "_(0% = Mauvais, 100% = Bon)_\n"
                 "**Mentale :** Votre santé mentale. Une valeur basse entraîne des conséquences.\n"
-                "**Stress :** Augmente avec les envies et les problèmes. Peut être réduit en fumant ou en se relaxant.\n"
-                "**Humeur :** Votre bonheur général. Manger un bon repas ou boire un soda peut l'améliorer."
+                "**Stress :** Augmente avec les envies et les problèmes.\n"
+                "**Humeur :** Votre bonheur général."
             ),
             inline=True
         )
 
         embed.add_field(
-            name="🚬 Addiction",
+            name="🚬 Addiction & Manque",
             value=(
                 "**Dépendance :** Augmente avec la consommation. Plus elle est haute, plus le manque est sévère.\n"
                 "**Manque :** L'envie physique de consommer. Augmente le stress et diminue le bonheur.\n"
@@ -64,7 +66,7 @@ class HelpCog(commands.Cog):
 
         embed.add_field(
             name="📱 Téléphone",
-            value="Utilisez le téléphone pour accéder à des services utiles comme **Uber Eats** pour la nourriture ou le **Smoke-Shop** pour... autre chose.",
+            value="Utilisez le téléphone pour accéder à des services utiles comme **Uber Eats** pour la nourriture ou le **Smoke-Shop** pour... autre chose. Vous pouvez aussi y gérer vos notifications.",
             inline=False
         )
 

@@ -5,48 +5,45 @@ from discord import ui
 from sqlalchemy.orm import Session
 from db.models import PlayerProfile, ServerState
 import json
-from utils.helpers import get_player_notif_settings # Import the helper
+from utils.helpers import get_player_notif_settings 
 
 # --- VUES ---
 class PhoneMainView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="💬 SMS", style=discord.ButtonStyle.green, custom_id="phone_sms"))
-        self.add_item(ui.Button(label="🔔 Notifications", style=discord.ButtonStyle.primary, custom_id="phone_notifications"))
-        self.add_item(ui.Button(label="⚙️ Paramètres", style=discord.ButtonStyle.secondary, custom_id="phone_settings"))
-        self.add_item(ui.Button(label="🍔 Uber Eats", style=discord.ButtonStyle.success, custom_id="phone_ubereats"))
-        self.add_item(ui.Button(label="🛍️ Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop", disabled=(not player.has_unlocked_smokeshop)))
-        self.add_item(ui.Button(label="⬅️ Fermer le téléphone", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
+        self.add_item(ui.Button(label="SMS", style=discord.ButtonStyle.green, custom_id="phone_sms", emoji="💬"))
+        self.add_item(ui.Button(label="Notifications", style=discord.ButtonStyle.primary, custom_id="phone_notifications", emoji="🔔"))
+        self.add_item(ui.Button(label="Paramètres", style=discord.ButtonStyle.secondary, custom_id="phone_settings", emoji="⚙️"))
+        self.add_item(ui.Button(label="Uber Eats", style=discord.ButtonStyle.success, custom_id="phone_ubereats", emoji="🍔"))
+        self.add_item(ui.Button(label="Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop", disabled=(not player.has_unlocked_smokeshop), emoji="🛍️"))
+        self.add_item(ui.Button(label="Fermer le téléphone", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
 
 class SMSView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", emoji="⬅️"))
         
 class UberEatsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
         self.add_item(ui.Button(label="Tacos (6$)", emoji="🌮", style=discord.ButtonStyle.success, custom_id="ubereats_buy_tacos", disabled=(player.wallet < 6)))
         self.add_item(ui.Button(label="Soda (2$)", emoji="🥤", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soda", disabled=(player.wallet < 2)))
-        self.add_item(ui.Button(label="Pizza (12$)", emoji="🍕", style=discord.ButtonStyle.success, custom_id="ubereats_buy_pizza", disabled=(player.wallet < 12)))
         self.add_item(ui.Button(label="Salade (8$)", emoji="🥗", style=discord.ButtonStyle.success, custom_id="ubereats_buy_salad", disabled=(player.wallet < 8)))
-        self.add_item(ui.Button(label="Bol de Soupe (5$)", emoji="🍲", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soup", disabled=(player.wallet < 5)))
-        self.add_item(ui.Button(label="Jus d'Orange (3$)", emoji="🧃", style=discord.ButtonStyle.success, custom_id="ubereats_buy_orange_juice", disabled=(player.wallet < 3)))
         self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.success, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
 class ShopView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="Acheter Cigarettes (5$)", emoji="🚬", style=discord.ButtonStyle.secondary, custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5)))
-        self.add_item(ui.Button(label="Acheter Bière (3$)", emoji="🍺", style=discord.ButtonStyle.blurple, custom_id="shop_buy_beer", disabled=(player.wallet < 3)))
-        self.add_item(ui.Button(label="Acheter Eau (1$)", style=discord.ButtonStyle.primary, custom_id="shop_buy_water", disabled=(player.wallet < 1), emoji="💧"))
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2))
+        self.add_item(ui.Button(label="Cigarettes (5$)", emoji="🚬", style=discord.ButtonStyle.secondary, custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5)))
+        self.add_item(ui.Button(label="Bière (3$)", emoji="🍺", style=discord.ButtonStyle.blurple, custom_id="shop_buy_beer", disabled=(player.wallet < 3)))
+        self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.primary, custom_id="shop_buy_water", disabled=(player.wallet < 1)))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
 class NotificationsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", emoji="⬅️"))
 
 class SettingsView(ui.View):
     def __init__(self, player: PlayerProfile, settings: dict):
@@ -64,7 +61,7 @@ class SettingsView(ui.View):
             button_label = f"{label}: {'Activé' if is_enabled else 'Désactivé'}"
             self.add_item(ui.Button(label=button_label, style=style, custom_id=f"phone_toggle_notif:{key}"))
 
-        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
 class Phone(commands.Cog):
     """Fournit la logique pour les applications du téléphone."""
@@ -83,14 +80,13 @@ class Phone(commands.Cog):
 
     def generate_shop_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
         embed = discord.Embed(title="🛍️ Smoke-Shop", description="Faites vos achats ici.", color=discord.Color.purple())
-        embed.add_field(name="Votre Portefeuille", value=f"**{player.wallet}$**", inline=False)
+        embed.add_field(name="Votre Portefeuille", value=f"💰 **{player.wallet}$**", inline=False)
         self._add_thumbnail(embed, player, main_embed_cog)
         return embed
 
     def generate_ubereats_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
         embed = discord.Embed(title="🍔 Uber Eats", description="Une petite faim ? Commandez ici.", color=discord.Color.green())
-        embed.add_field(name="Votre Portefeuille", value=f"**{player.wallet}$**", inline=False)
-        embed.set_footer(text="Chaque commande ajoute une portion de nourriture générique.")
+        embed.add_field(name="Votre Portefeuille", value=f"💰 **{player.wallet}$**", inline=False)
         self._add_thumbnail(embed, player, main_embed_cog)
         return embed
 
@@ -164,16 +160,16 @@ class Phone(commands.Cog):
                 "shop_buy_cigarettes": {"cost": 5, "action": lambda p: setattr(p, 'cigarettes', p.cigarettes + 10), "msg": "Vous avez acheté 10 cigarettes.", "type": "shop"},
                 "shop_buy_beer": {"cost": 3, "action": lambda p: setattr(p, 'beers', p.beers + 1), "msg": "Vous avez acheté une bière.", "type": "shop"},
                 "shop_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez acheté une bouteille d'eau.", "type": "shop"},
-                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', p.tacos + 1), "msg": "Vous avez commandé un tacos.", "type": "ubereats"},
+                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', getattr(p, 'tacos', 0) + 1), "msg": "Vous avez commandé un tacos.", "type": "ubereats"},
                 "ubereats_buy_soda": {"cost": 2, "action": lambda p: setattr(p, 'soda_cans', p.soda_cans + 1), "msg": "Vous avez commandé un soda.", "type": "ubereats"},
-                "ubereats_buy_salad": {"cost": 8, "action": lambda p: setattr(p, 'salad_servings', p.salad_servings + 1), "msg": "Vous avez commandé une salade.", "type": "ubereats"},
+                "ubereats_buy_salad": {"cost": 8, "action": lambda p: setattr(p, 'salad_servings', getattr(p, 'salad_servings', 0) + 1), "msg": "Vous avez commandé une salade.", "type": "ubereats"},
+                "ubereats_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez acheté une bouteille d'eau.", "type": "ubereats"},
             }
 
             item = items.get(custom_id)
             if item and player.wallet >= item["cost"]:
                 player.wallet -= item["cost"]
                 item["action"](player)
-                if item["type"] == "ubereats": player.food_servings += 1
                 db.commit(); db.refresh(player)
 
                 shop_emoji = "🛍️" if item["type"] == "shop" else "🍔"

@@ -113,9 +113,9 @@ class PaginatedViewManager(ui.View):
         self.select_menu.placeholder = f"Select... (Page {self.current_page + 1}/{self.total_pages})"
         self.add_item(self.select_menu)
 
-        self.prev_button = ui.Button(label="◀ Prev", style=discord.ButtonStyle.secondary, row=1, disabled=(self.current_page == 0))
+        self.prev_button = ui.Button(label="Prev", emoji="◀️", style=discord.ButtonStyle.secondary, row=1, disabled=(self.current_page == 0))
         self.page_indicator = ui.Button(label=f"{self.current_page + 1}/{self.total_pages}", style=discord.ButtonStyle.grey, disabled=True, row=1)
-        self.next_button = ui.Button(label="Next ▶", style=discord.ButtonStyle.secondary, row=1, disabled=(self.current_page >= self.total_pages - 1))
+        self.next_button = ui.Button(label="Next", emoji="▶️", style=discord.ButtonStyle.secondary, row=1, disabled=(self.current_page >= self.total_pages - 1))
         
         self.prev_button.callback = self.prev_page
         self.next_button.callback = self.next_page
@@ -124,7 +124,7 @@ class PaginatedViewManager(ui.View):
         self.add_item(self.page_indicator)
         self.add_item(self.next_button)
 
-        back_button = self.cog.BackButton("⬅ Back to Config", self.guild_id, discord.ButtonStyle.red, row=2, cog=self.cog)
+        back_button = self.cog.BackButton("Back to Config", self.guild_id, discord.ButtonStyle.red, row=2, cog=self.cog)
         self.add_item(back_button)
 
 
@@ -213,23 +213,23 @@ class AdminCog(commands.Cog):
     """Gestion des configurations du bot et du jeu pour le serveur."""
     def __init__(self, bot):
         self.bot = bot
-    # --- MODIFIED: Added hygiene rates to game modes ---
+    
     GAME_MODES = {
         "peaceful": {"tick_interval_minutes": 60, "rates": {"hunger": 5.0, "thirst": 4.0, "bladder": 5.0, "energy": 3.0, "stress": 1.0, "boredom": 2.0, "hygiene": 2.0}},
         "medium": {"tick_interval_minutes": 30, "rates": {"hunger": 10.0, "thirst": 8.0, "bladder": 15.0, "energy": 5.0, "stress": 3.0, "boredom": 7.0, "hygiene": 4.0}},
         "hard": {"tick_interval_minutes": 15, "rates": {"hunger": 20.0, "thirst": 16.0, "bladder": 30.0, "energy": 10.0, "stress": 6.0, "boredom": 14.0, "hygiene": 8.0}}
     }
-    GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, "test_day": {"label": "Test Day [INSTANT START]"} }
+    GAME_DURATIONS = { "short": {"days": 14, "label": "Court (14 jours)"}, "medium": {"days": 31, "label": "Moyen (31 jours)"}, "long": {"days": 72, "label": "Long (72 jours)"}, "test_day": {"label": "Test Day [24 Min]"} }
 
     MAX_OPTION_LENGTH = 100
     MIN_OPTION_LENGTH = 1
-    TEST_DURATION_MINUTES = 20
-    TEST_RATE_MULTIPLIER = 60
+    # --- FINALIZED: Test day settings for 24 min duration ---
+    TEST_DURATION_MINUTES = 24 
+    TEST_RATE_MULTIPLIER = 60 # (24h * 60min) / 24min = 60. Rates are 60x faster.
 
     @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
     @app_commands.default_permissions(administrator=True)
     async def config(self, interaction: discord.Interaction):
-        # Defer immediately to prevent timeout
         await interaction.response.defer(ephemeral=True)
 
         guild_id_str = str(interaction.guild.id)
@@ -242,7 +242,6 @@ class AdminCog(commands.Cog):
                 db.commit()
                 db.refresh(state)
 
-            # Use followup.send because we deferred
             await interaction.followup.send(
                 embed=self.generate_config_menu_embed(state),
                 view=self.generate_config_menu_view(guild_id_str, interaction.guild, state),
@@ -257,7 +256,7 @@ class AdminCog(commands.Cog):
     # --- Classes de Boutons et Menus ---
     class ProjectStatsButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
-            super().__init__(label=label, style=style, row=row)
+            super().__init__(label=label, style=style, row=row, emoji="📈")
             self.guild_id = guild_id
             self.cog = cog
         async def callback(self, interaction: discord.Interaction):
@@ -293,18 +292,20 @@ class AdminCog(commands.Cog):
         is_game_running = state.game_started if state else False
 
         if is_game_running:
-            start_stop_label = "⏹️ Stop Game"
+            start_stop_label = "Stop Game"
+            start_stop_emoji = "⏹️"
             start_stop_style = discord.ButtonStyle.danger
         else:
-            start_stop_label = "▶️ Start Game"
+            start_stop_label = "Start Game"
+            start_stop_emoji = "▶️"
             start_stop_style = discord.ButtonStyle.success
 
-        view.add_item(self.SetupGameModeButton("🕹️ Mode & Duration", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
-        view.add_item(self.ConfigButton(start_stop_label, guild_id, start_stop_style, row=0, cog=self))
-        view.add_item(self.GeneralConfigButton("⚙️ Roles & Channels", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
-        view.add_item(self.ConfigButton("🔔 Notifications", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
-        view.add_item(self.ConfigButton("📊 View Stats", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
-        view.add_item(self.ProjectStatsButton("📈 Project Stats", guild_id, discord.ButtonStyle.secondary, row=1, cog=self))
+        view.add_item(self.SetupGameModeButton("Mode & Duration", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
+        view.add_item(self.ConfigButton(start_stop_label, start_stop_emoji, guild_id, start_stop_style, row=0, cog=self))
+        view.add_item(self.GeneralConfigButton("Roles & Channels", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
+        view.add_item(self.ConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
+        view.add_item(self.ConfigButton("View Stats", "📊", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
+        view.add_item(self.ProjectStatsButton("Project Stats", guild_id, discord.ButtonStyle.secondary, row=1, cog=self))
         return view
 
     def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
@@ -339,7 +340,7 @@ class AdminCog(commands.Cog):
         admin_role, notif_role, game_channel = (f"<@&{state.admin_role_id}>" if state.admin_role_id else "Not set"), (f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"), (f"<#{state.game_channel_id}>" if state.game_channel_id else "Not set")
         embed.add_field(name="📍 **Server Config**", value=f"**Admin Role:** {admin_role}\n**Notification Role:** {notif_role}\n**Game Channel:** {game_channel}", inline=False)
         embed.add_field(name="⏱️ **Game Parameters**", value=f"**Tick Interval (min):** `{state.game_tick_interval_minutes or 30}`", inline=False)
-        embed.add_field(name="📉 **Degradation Rates / Tick**", value=f"**Hunger:** `{state.degradation_rate_hunger:.1f}` | **Thirst:** `{state.degradation_rate_thirst:.1f}` | **Bladder:** `{state.degradation_rate_bladder:.1f}`\n**Energy:** `{state.degradation_rate_energy:.1f}` | **Stress:** `{state.degradation_rate_stress:.1f}` | **Boredom:** `{state.degradation_rate_boredom:.1f}`", inline=False)
+        embed.add_field(name="📉 **Degradation Rates / Tick**", value=f"**Hunger:** `{state.degradation_rate_hunger:.1f}` | **Thirst:** `{state.degradation_rate_thirst:.1f}` | **Bladder:** `{state.degradation_rate_bladder:.1f}`\n**Energy:** `{state.degradation_rate_energy:.1f}` | **Stress:** `{state.degradation_rate_stress:.1f}` | **Boredom:** `{state.degradation_rate_boredom:.1f}` | **Hygiene:** `{state.degradation_rate_hygiene:.1f}`", inline=False)
         embed.set_footer(text="Use the buttons below to navigate and modify settings.")
         return embed
 
@@ -347,7 +348,7 @@ class AdminCog(commands.Cog):
     # --- Mode & Duration Section ---
     class SetupGameModeButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
-            super().__init__(label=label, style=style, row=row, disabled=disabled)
+            super().__init__(label=label, style=style, row=row, disabled=disabled, emoji="🕹️")
             self.guild_id = guild_id
             self.cog = cog
         async def callback(self, interaction: discord.Interaction):
@@ -358,7 +359,7 @@ class AdminCog(commands.Cog):
 
     def generate_setup_game_mode_view(self, guild_id: str) -> discord.ui.View:
         view = discord.ui.View(timeout=None)
-        view.add_item(self.GameModeSelect(guild_id, "mode", 0, self)); view.add_item(self.GameDurationSelect(guild_id, "duration", 1, self)); view.add_item(self.BackButton("⬅ Back to Settings", guild_id, discord.ButtonStyle.secondary, 2, self))
+        view.add_item(self.GameModeSelect(guild_id, "mode", 0, self)); view.add_item(self.GameDurationSelect(guild_id, "duration", 1, self)); view.add_item(self.BackButton("Back to Settings", guild_id, discord.ButtonStyle.secondary, 2, self))
         return view
 
     class GameModeSelect(ui.Select):
@@ -385,7 +386,7 @@ class AdminCog(commands.Cog):
             self.cog = cog
             
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer(ephemeral=True, thinking=True)
             selected_key = self.values[0]
             db = SessionLocal()
             try:
@@ -398,13 +399,16 @@ class AdminCog(commands.Cog):
                 db.commit()
 
                 if selected_key == "test_day":
-                    # C'est ici que l'erreur se produit, on va corriger la méthode appelée
                     await self.start_test_game(interaction, state, db)
                 else:
                     duration_data = self.cog.GAME_DURATIONS[selected_key]
                     embed = self.cog.generate_setup_game_mode_embed()
                     embed.description = f"✅ Game duration set to **{duration_data['label']}**.\n{embed.description}"
+                    # Use edit_original_response for the non-deferred path as well, for consistency
                     await interaction.edit_original_response(embed=embed, view=self.cog.generate_setup_game_mode_view(self.guild_id))
+                    # And send a confirmation
+                    await interaction.followup.send(f"Duration set to {duration_data['label']}.", ephemeral=True)
+
             except Exception as e:
                 logger.error(f"Error in GameDurationSelect callback: {e}", exc_info=True)
                 await interaction.followup.send(f"An error occurred: {e}", ephemeral=True)
@@ -413,64 +417,68 @@ class AdminCog(commands.Cog):
 
         async def start_test_game(self, interaction: discord.Interaction, state: ServerState, db: SessionLocal):
             if not state.game_channel_id:
-                return await interaction.followup.send("❌ **Erreur :** Configurez un salon de jeu avant de lancer un test.", ephemeral=True)
+                return await interaction.followup.send("❌ **Error:** Configure a game channel before starting a test.", ephemeral=True)
             if state.game_started:
-                return await interaction.followup.send("❌ **Erreur :** Une partie est déjà en cours.", ephemeral=True)
+                return await interaction.followup.send("❌ **Error:** A game is already in progress.", ephemeral=True)
 
             main_embed_cog = self.cog.bot.get_cog("MainEmbed")
             if not main_embed_cog:
-                return await interaction.followup.send("❌ Erreur Critique : Module `MainEmbed` non chargé.", ephemeral=True)
+                return await interaction.followup.send("❌ Critical Error: `MainEmbed` module not loaded.", ephemeral=True)
 
+            # Apply test mode settings
             state.is_test_mode = True
-            mode_data = self.cog.GAME_MODES["hard"]
+            mode_data = self.cog.GAME_MODES["hard"] # Use hard mode as base for test
             for rate_key, base_value in mode_data["rates"].items():
                 setattr(state, f"degradation_rate_{rate_key}", base_value * self.cog.TEST_RATE_MULTIPLIER)
-            state.game_tick_interval_minutes = 1
+            state.game_tick_interval_minutes = 1 # Tick every minute for smooth clock updates
+            state.game_day_start_hour = 8 # Game day starts at 8 AM
 
+            # Reset player profile for a clean test
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             if player:
                 db.delete(player)
                 db.commit()
             
             now = datetime.datetime.utcnow()
-            player = PlayerProfile(guild_id=str(interaction.guild.id), last_update=now, recent_logs="--- Test Session Started ---\n")
+            player = PlayerProfile(
+                guild_id=str(interaction.guild.id), 
+                last_update=now, 
+                recent_logs="--- Test Session Started ---\n"
+            )
             db.add(player)
             
             state.game_started = True
             state.game_start_time = now
-            state.game_day_start_hour = 8
             db.commit()
             db.refresh(player)
             db.refresh(state)
 
-            # L'appel ici est correct car il utilise la méthode du cog.
             player.show_stats_in_view = True
             db.commit()
             db.refresh(player)
+            
             game_view = DashboardView(player)
             game_embed = main_embed_cog.generate_dashboard_embed(player, state, interaction.guild)
             
             game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
-            game_message = await game_channel.send(content="**--- DÉBUT DE LA JOURNÉE DE TEST ACCÉLÉRÉE ---**", embed=game_embed, view=game_view)
+            game_message = await game_channel.send(content="**--- ACCELERATED TEST DAY STARTING ---**", embed=game_embed, view=game_view)
             
             state.game_message_id = game_message.id
             db.commit()
 
-            await interaction.followup.send(f"✅ La partie de test a démarré dans {game_channel.mention} !", ephemeral=True)
+            await interaction.followup.send(f"✅ The test game has started in {game_channel.mention}!", ephemeral=True)
             await interaction.edit_original_response(embed=self.cog.generate_config_menu_embed(state), view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state))
             
     class BackButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int = 0, cog: 'AdminCog'=None):
-            super().__init__(label=label, style=style, row=row)
+            super().__init__(label=label, style=style, row=row, emoji="⬅️")
             self.guild_id = guild_id
             self.cog = cog
         async def callback(self, interaction: discord.Interaction):
-            # Defer to be safe
             await interaction.response.defer()
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
-                # Use edit_original_response since we deferred
                 await interaction.edit_original_response(
                     embed=self.cog.generate_config_menu_embed(state), 
                     view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
@@ -479,8 +487,8 @@ class AdminCog(commands.Cog):
     
     # --- General Purpose Buttons ---
     class ConfigButton(ui.Button):
-        def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
-            super().__init__(label=label, style=style, row=row, disabled=disabled)
+        def __init__(self, label: str, emoji: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
+            super().__init__(label=label, emoji=emoji, style=style, row=row, disabled=disabled)
             self.guild_id = guild_id
             self.label = label
             self.cog = cog
@@ -494,41 +502,32 @@ class AdminCog(commands.Cog):
             await interaction.response.defer()
             db = SessionLocal()
             try:
-                # --- LOGIQUE DE DÉMARRAGE REGROUPÉE ET CORRIGÉE ---
                 if "Start Game" in self.label:
                     state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
                     if not state or not state.game_channel_id:
-                        await interaction.followup.send("❌ **Erreur :** Veuillez d'abord configurer un salon de jeu via `⚙️ Roles & Channels`.", ephemeral=True)
+                        await interaction.followup.send("❌ **Error:** Please configure a game channel via `⚙️ Roles & Channels` first.", ephemeral=True)
                         return
                     
                     try:
                         game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
                     except (NotFound, Forbidden):
-                        await interaction.followup.send("❌ **Erreur :** Le salon de jeu configuré est invalide.", ephemeral=True)
+                        await interaction.followup.send("❌ **Error:** The configured game channel is invalid.", ephemeral=True)
                         return
 
                     main_embed_cog = self.cog.bot.get_cog("MainEmbed")
                     if not main_embed_cog:
-                        await interaction.followup.send("❌ **Erreur Critique :** Le module de jeu (`MainEmbed`) n'est pas chargé.", ephemeral=True)
+                        await interaction.followup.send("❌ **Critical Error:** The game module (`MainEmbed`) is not loaded.", ephemeral=True)
                         return
 
-                    # Vérifier/Créer le profil du joueur
                     player = db.query(PlayerProfile).filter_by(guild_id=str(self.guild_id)).first()
+                    now = datetime.datetime.utcnow()
                     if not player:
-                        player = PlayerProfile(guild_id=str(self.guild_id))
-                        # ===== AJOUT : Initialiser les timestamps pour éviter les erreurs =====
-                        now = datetime.datetime.utcnow()
-                        player.last_eaten_at = now
-                        player.last_drank_at = now
-                        player.last_slept_at = now
-                        player.last_smoked_at = now
-                        player.last_urinated_at = now
-                        # ===== FIN DE L'AJOUT =====
+                        player = PlayerProfile(guild_id=str(self.guild_id), last_update=now, last_eaten_at=now, last_drank_at=now, last_slept_at=now, last_smoked_at=now, last_urinated_at=now, last_shower_at=now)
                         db.add(player)
                     
-                    state.is_test_mode = False # Assure que c'est une partie normale
+                    state.is_test_mode = False 
                     state.game_started = True
-                    state.game_start_time = datetime.datetime.utcnow()
+                    state.game_start_time = now
                     db.commit()
                     db.refresh(player)
                     db.refresh(state)
@@ -544,7 +543,7 @@ class AdminCog(commands.Cog):
                         embed=self.cog.generate_config_menu_embed(state), 
                         view=self.cog.generate_config_menu_view(self.guild_id, interaction.guild, state)
                     )
-                    await interaction.followup.send(f"✅ Le jeu a démarré ! L'interface a été postée dans {game_channel.mention}.", ephemeral=True)
+                    await interaction.followup.send(f"✅ The game has started! The interface has been posted in {game_channel.mention}.", ephemeral=True)
 
                 elif "Notifications" in self.label:
                     await interaction.edit_original_response(
@@ -561,7 +560,7 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 logger.error(f"Error in ConfigButton callback: {e}", exc_info=True)
                 if not interaction.is_expired():
-                    await interaction.followup.send(f"Une erreur critique est survenue.", ephemeral=True)
+                    await interaction.followup.send(f"A critical error occurred.", ephemeral=True)
                 db.rollback()
             finally:
                 db.close()
@@ -569,7 +568,7 @@ class AdminCog(commands.Cog):
     # --- NOUVELLE LOGIQUE POUR ROLES & CHANNELS ---
     class GeneralConfigButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog', disabled: bool = False):
-            super().__init__(label=label, style=style, row=row, disabled=disabled)
+            super().__init__(label=label, style=style, row=row, disabled=disabled, emoji="⚙️")
             self.guild_id = guild_id
             self.cog = cog
         async def callback(self, interaction: discord.Interaction):
@@ -581,7 +580,6 @@ class AdminCog(commands.Cog):
             )
 
     def get_server_state(self, guild_id: str) -> ServerState:
-        """Helper to get server state, opens and closes its own session."""
         db = SessionLocal()
         try:
             return db.query(ServerState).filter_by(guild_id=guild_id).one()
@@ -603,7 +601,7 @@ class AdminCog(commands.Cog):
             super().__init__(label=label, style=discord.ButtonStyle.primary, row=row)
             self.guild_id = guild_id; self.select_type = select_type; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
-            await interaction.response.defer() # Defer as this can take a moment
+            await interaction.response.defer() 
             if not interaction.guild: 
                 await interaction.followup.send("Guild not found.", ephemeral=True); return
             if self.select_type in ["admin_role", "notification_role"]: 
@@ -619,7 +617,7 @@ class AdminCog(commands.Cog):
         view.add_item(self.OpenPaginatorButton("Set Admin Role", guild_id, "admin_role", 0, self))
         view.add_item(self.OpenPaginatorButton("Set Notification Role", guild_id, "notification_role", 1, self))
         view.add_item(self.OpenPaginatorButton("Set Game Channel", guild_id, "game_channel", 2, self))
-        view.add_item(self.BackButton("⬅ Back to Main Menu", guild_id, discord.ButtonStyle.secondary, 3, self))
+        view.add_item(self.BackButton("Back to Main Menu", guild_id, discord.ButtonStyle.secondary, 3, self))
         return view
 
     # --- Sections for Stats & Notifications (largely unchanged) ---
@@ -627,7 +625,7 @@ class AdminCog(commands.Cog):
         return discord.Embed(title="📊 Server Statistics", description="This feature is under development.", color=discord.Color.purple())
     def generate_stats_view(self, guild_id: str) -> discord.ui.View: 
         view = discord.ui.View(timeout=None)
-        view.add_item(self.BackButton("⬅ Back to Settings", guild_id, discord.ButtonStyle.secondary, 3, self))
+        view.add_item(self.BackButton("Back to Settings", guild_id, discord.ButtonStyle.secondary, 3, self))
         return view
     
     def generate_notifications_embed(self, guild_id: str):
@@ -649,13 +647,13 @@ class AdminCog(commands.Cog):
         try:
             state = db.query(ServerState).filter_by(guild_id=guild_id).first()
             if not state:
-                view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=0, cog=self)); return view
+                view.add_item(self.BackButton("Back", guild_id, discord.ButtonStyle.secondary, row=0, cog=self)); return view
             view.add_item(self.NotificationToggle("🔴 Low Vitals", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, self, 0))
             view.add_item(self.NotificationToggle("🔴 Critical Event", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, self, 1))
             view.add_item(self.NotificationToggle("🚬 Cravings", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, self, 1))
             view.add_item(self.NotificationToggle("💬 Friend/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, self, 2))
             view.add_item(self.NotificationToggle("💛 Shop Promo", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.secondary, self, 2))
-            view.add_item(self.BackButton("⬅ Back", guild_id, discord.ButtonStyle.secondary, row=4, cog=self))
+            view.add_item(self.BackButton("Back", guild_id, discord.ButtonStyle.secondary, row=4, cog=self))
             return view
         finally: db.close()
 
@@ -663,7 +661,6 @@ class AdminCog(commands.Cog):
         def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog', row: int):
             super().__init__(label=label, style=style, row=row); self.toggle_key = toggle_key; self.guild_id = guild_id; self.cog = cog
         async def callback(self, interaction: discord.Interaction):
-            # No need to defer here, this is a fast operation
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
@@ -677,12 +674,10 @@ class AdminCog(commands.Cog):
                 db.commit()
                 db.refresh(state)
 
-                # Refresh the view to show the change
                 await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
                 await interaction.followup.send(f"Notifications for '{self.label}' set to {'Enabled' if new_value else 'Disabled'}.", ephemeral=True)
             finally:
                 db.close()
 
-    
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
