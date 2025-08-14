@@ -1,4 +1,4 @@
-# --- cogs/main_embed.py (FINAL VERSION - CORRECTED) ---
+# --- cogs/main_embed.py (FINAL VERSION - IMAGE LOGIC COMPLETE) ---
 
 import discord
 from discord.ext import commands
@@ -7,7 +7,7 @@ from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import datetime
 import traceback
-from .phone import PhoneMainView, Phone # Correction: Import direct de la vue
+from .phone import PhoneMainView, Phone
 from utils.helpers import clamp
 from utils.logger import get_logger
 
@@ -22,8 +22,8 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     bar_empty = '⬛'
     return f"{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}"
 
-# --- VUES ---
-
+# --- VUES (inchangées) ---
+# ... (Les classes de View restent les mêmes) ...
 class DashboardView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
@@ -91,6 +91,7 @@ class SmokeView(ui.View):
         if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
+
 # --- COG ---
 
 class MainEmbed(commands.Cog):
@@ -98,29 +99,42 @@ class MainEmbed(commands.Cog):
         self.bot = bot
 
     def get_image_url(self, player: PlayerProfile) -> str | None:
-        # ... (code inchangé)
         asset_cog = self.bot.get_cog("AssetManager")
         if not asset_cog: return None
         now = datetime.datetime.utcnow()
-        if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 25:
+        
+        is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
+        
+        if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
              return asset_cog.get_url(player.last_action)
+        
+        # --- LOGIQUE D'IMAGE COMPLÈTE ET HIÉRARCHISÉE ---
+        image_name = "neutral" # Par défaut
+        
+        # Urgences et états critiques
         if player.bladder >= 99: image_name = "peed"
+        elif player.happiness < 10 and player.stress > 80: image_name = "sob"
+        # Besoins pressants
         elif player.bowels > 85: image_name = "neutral_pooping"
         elif player.bladder > 85: image_name = "need_pee"
         elif player.hunger > 85: image_name = "hungry"
         elif player.fatigue > 90: image_name = "neutral_sleep"
-        elif player.happiness < 10 and player.stress > 80: image_name = "sob"
+        # Symptômes et malaises
+        elif player.withdrawal_severity > 60: image_name = "neutral_hold_e_cig"
         elif player.headache > 70: image_name = "scratch_eye"
         elif player.stomachache > 70: image_name = "hand_stomach"
+        # NOUVEAU: Santé mentale basse
+        elif player.sanity < 40: image_name = "confused"
+        # États émotionnels négatifs
         elif player.stress > 70 or player.health < 40: image_name = "sad"
-        elif player.withdrawal_severity > 60: image_name = "neutral_hold_e_cig"
+        # Autres
         elif player.hygiene < 20: image_name = "neutral_shower"
-        else: image_name = "neutral"
+        
         return asset_cog.get_url(image_name)
 
     @staticmethod
     def get_character_thoughts(player: PlayerProfile) -> str:
-        # ... (code inchangé)
+        # ... (code inchangé) ...
         if player.hunger > 70 and player.stress > 60: return "J'ai l'estomac dans les talons et les nerfs à vif. Un rien pourrait me faire craquer."
         if player.withdrawal_severity > 60 and player.health < 40: return "Chaque partie de mon corps me fait souffrir. Le manque me ronge de l'intérieur, je suis à bout."
         if player.fatigue > 80 and player.boredom > 70: return "Je suis épuisé, mais je m'ennuie tellement que je n'arrive même pas à fermer l'œil."
@@ -130,17 +144,13 @@ class MainEmbed(commands.Cog):
         return "Pour l'instant, ça va à peu près."
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
-        # ... (code inchangé)
+        # ... (code inchangé) ...
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         if image_url := self.get_image_url(player):
             embed.set_image(url=image_url)
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
         if player.show_inventory_in_view:
-            inventory_items = [
-                ("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"),
-                ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"),
-                ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")
-            ]
+            inventory_items = [("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"), ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"), ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")]
             inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items if getattr(player, attr, 0) > 0]
             if inventory_list:
                 mid_point = len(inventory_list) // 2 + (len(inventory_list) % 2)
@@ -154,47 +164,15 @@ class MainEmbed(commands.Cog):
         if player.show_stats_in_view:
             def stat_line(name: str, value: float, high_is_bad: bool):
                 return f"`{name:<11}` {generate_progress_bar(value, high_is_bad=high_is_bad)} `{int(value):>3}%`"
-            col1_title = "🧬 Physique & Besoins"
-            col1_text = (
-                f"{stat_line('Santé', player.health, False)}\n"
-                f"{stat_line('Énergie', player.energy, False)}\n"
-                f"{stat_line('Hygiène', player.hygiene, False)}\n"
-                f"{stat_line('Fatigue', player.fatigue, True)}\n"
-                f"{stat_line('Faim', player.hunger, True)}\n"
-                f"{stat_line('Soif', player.thirst, True)}"
-            )
-            embed.add_field(name=col1_title, value=col1_text, inline=True)
-            col2_title = "🧠 Mental & Émotions"
-            col2_text = (
-                f"{stat_line('Humeur', player.happiness, False)}\n"
-                f"{stat_line('Stress', player.stress, True)}\n"
-                f"{stat_line('Volonté', player.willpower, False)}\n"
-                f"{stat_line('S. Mentale', player.sanity, False)}\n"
-                f"{stat_line('Culpabilité', player.guilt, True)}\n"
-                f"{stat_line('Ennui', player.boredom, True)}"
-            )
-            embed.add_field(name=col2_title, value=col2_text, inline=True)
-            cravings = { "Nico": player.craving_nicotine, "Alco": player.craving_alcohol, "Weed": player.craving_cannabis }
-            dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1])
-            envie_text = f"{stat_line(f'Envie', dominant_craving_val, True)}"
-            col3_title = "🚬 Addiction & Symptômes"
-            col3_text = (
-                f"{stat_line('Dépendance', player.substance_addiction_level, True)}\n"
-                f"{stat_line('Sevrage', player.withdrawal_severity, True)}\n"
-                f"{envie_text}\n"
-                f"{stat_line('Toxine', player.tox, True)}\n"
-                f"{stat_line('Douleur', player.pain, True)}\n"
-                f"{stat_line('Nausée', player.nausea, True)}"
-            )
-            embed.add_field(name=col3_title, value=col3_text, inline=True)
-        embed.set_footer(text=f"Jeu sur {guild.name}")
-        embed.timestamp = datetime.datetime.utcnow()
+            col1_title = "🧬 Physique & Besoins"; col1_text = (f"{stat_line('Santé', player.health, False)}\n{stat_line('Énergie', player.energy, False)}\n{stat_line('Hygiène', player.hygiene, False)}\n{stat_line('Fatigue', player.fatigue, True)}\n{stat_line('Faim', player.hunger, True)}\n{stat_line('Soif', player.thirst, True)}"); embed.add_field(name=col1_title, value=col1_text, inline=True)
+            col2_title = "🧠 Mental & Émotions"; col2_text = (f"{stat_line('Humeur', player.happiness, False)}\n{stat_line('Stress', player.stress, True)}\n{stat_line('Volonté', player.willpower, False)}\n{stat_line('S. Mentale', player.sanity, False)}\n{stat_line('Culpabilité', player.guilt, True)}\n{stat_line('Ennui', player.boredom, True)}"); embed.add_field(name=col2_title, value=col2_text, inline=True)
+            cravings = { "Nico": player.craving_nicotine, "Alco": player.craving_alcohol, "Weed": player.craving_cannabis }; dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1]); envie_text = f"{stat_line(f'Envie', dominant_craving_val, True)}"; col3_title = "🚬 Addiction & Symptômes"; col3_text = (f"{stat_line('Dépendance', player.substance_addiction_level, True)}\n{stat_line('Sevrage', player.withdrawal_severity, True)}\n{envie_text}\n{stat_line('Toxine', player.tox, True)}\n{stat_line('Douleur', player.pain, True)}\n{stat_line('Nausée', player.nausea, True)}"); embed.add_field(name=col3_title, value=col3_text, inline=True)
+        embed.set_footer(text=f"Jeu sur {guild.name}"); embed.timestamp = datetime.datetime.utcnow()
         return embed
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return
-
         db = SessionLocal()
         try:
             if interaction.message is None:
@@ -207,46 +185,30 @@ class MainEmbed(commands.Cog):
 
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("Erreur: Profil de joueur introuvable.", ephemeral=True)
+                if not interaction.response.is_done(): await interaction.response.send_message("Erreur: Profil de joueur introuvable.", ephemeral=True)
                 return
             
             custom_id = interaction.data["custom_id"]
-            
-            # --- ROUTEUR D'INTERACTION PRINCIPAL ---
             phone_cog = self.bot.get_cog("Phone")
-            # Le bouton "phone_open" est géré ici pour passer à la vue du téléphone
             if custom_id == "phone_open":
                 if not interaction.response.is_done(): await interaction.response.defer()
-                await interaction.edit_original_response(
-                    embed=phone_cog.generate_phone_main_embed(player, self),
-                    view=PhoneMainView(player)
-                )
+                await interaction.edit_original_response(embed=phone_cog.generate_phone_main_embed(player, self), view=PhoneMainView(player))
                 return
-            
-            # Toutes les autres interactions du téléphone sont déléguées
             if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                  await phone_cog.handle_interaction(interaction, db, player, state, self)
                  return
 
-            if not interaction.response.is_done():
-                await interaction.response.defer()
+            if not interaction.response.is_done(): await interaction.response.defer()
             
-            # --- GESTION DES ACTIONS ET MISE À JOUR DE LA VUE ---
             if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"]:
-                if custom_id == "nav_toggle_stats":
-                    player.show_stats_in_view = not player.show_stats_in_view
-                elif custom_id == "nav_toggle_inventory":
-                    player.show_inventory_in_view = not player.show_inventory_in_view
+                if custom_id == "nav_toggle_stats": player.show_stats_in_view = not player.show_stats_in_view
+                elif custom_id == "nav_toggle_inventory": player.show_inventory_in_view = not player.show_inventory_in_view
                 db.commit()
-                await interaction.edit_original_response(
-                    embed=self.generate_dashboard_embed(player, state, interaction.guild),
-                    view=DashboardView(player)
-                )
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView(player))
                 return
             
             if custom_id == "nav_actions":
-                await interaction.edit_original_response(view=ActionsView(player))
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=ActionsView(player))
                 return
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
                 views = {"action_eat_menu": EatView, "action_drink_menu": DrinkView, "action_smoke_menu": SmokeView}
@@ -264,12 +226,8 @@ class MainEmbed(commands.Cog):
                     await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
                 
                 db.commit()
-                await interaction.edit_original_response(
-                    embed=self.generate_dashboard_embed(player, state, interaction.guild),
-                    view=DashboardView(player)
-                )
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView(player))
                 return
-
         except Exception as e:
             logger.error(f"Erreur critique dans on_interaction: {e}", exc_info=True)
             if not interaction.is_expired():
@@ -277,8 +235,7 @@ class MainEmbed(commands.Cog):
                 except: pass
             db.rollback()
         finally:
-            if db.is_active:
-                db.close()
+            if db.is_active: db.close()
 
 async def setup(bot):
     await bot.add_cog(MainEmbed(bot))
