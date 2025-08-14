@@ -115,7 +115,7 @@ class CookerBrain(commands.Cog):
         player.dry_mouth = clamp(player.dry_mouth + 40.0, 0, 100)
         player.hunger = clamp(player.hunger - 10, 0, 100)
         player.last_smoked_at = datetime.datetime.utcnow()
-        player.last_action = "smoke_cig"
+        player.last_action = "neutral_smoke_cig" # CORRECTED
         player.last_action_time = datetime.datetime.utcnow()
         return "Vous allumez une cigarette. Le stress s'envole... pour l'instant.", {}
 
@@ -126,7 +126,7 @@ class CookerBrain(commands.Cog):
         player.tox = clamp(player.tox + 2.0, 0, 100)
         player.dry_mouth = clamp(player.dry_mouth + 15.0, 0, 100)
         player.last_smoked_at = datetime.datetime.utcnow()
-        player.last_action = "vapote_e_cig"
+        player.last_action = "vape_e_cig" # CORRECTED
         player.last_action_time = datetime.datetime.utcnow()
         return "Vous tirez sur votre vapoteuse. Ce n'est pas aussi satisfaisant, mais ça aide à tenir.", {}
 
