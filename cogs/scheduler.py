@@ -84,8 +84,9 @@ class Scheduler(commands.Cog):
                     message, _ = cooker_brain.perform_drink(player); action_log_message = f"💧 Déshydraté, il a bu."; action_taken = True
                 
                 # --- 4. RÉACTIONS EN CHAÎNE ---
+                time_since_last_smoke = current_time - (player.last_smoked_at or current_time)
                 state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
-                updated_state = chain_reactions(state_dict)
+                updated_state = chain_reactions(state_dict, time_since_last_smoke)
                 # --- NEW: Detailed logging in test mode ---
                 if server_state.is_test_mode:
                     print(f"[TEST][{server_state.guild_id}] Chain reaction input: {state_dict}")
@@ -108,7 +109,27 @@ class Scheduler(commands.Cog):
                 player.last_update = current_time
                 db.commit()
 
-                # --- 4. MISE À JOUR DE L'INTERFACE & LOGGING ---
+                if player.sex_drive > 60 and random.random() < 0.05: # 5% de chance par minute si la libido est haute
+                    random_message = random.choice([
+                        "Salut, dsl pour hier soir, ma grand-mère est tombée dans les escaliers. On remet ça ?",
+                        "Vu. 21:54",
+                        "Hey ! Ce soir ça va pas être possible, j'ai aquaponey.",
+                        "Désolé, je crois pas que ça va le faire entre nous. T'es un mec bien mais...",
+                        "C'est qui ?",
+                    ])
+                    # Ajoute le message à l'historique de SMS
+                    player.messages = f"{player.messages}\n---\nDe: Inconnu\n{random_message}"
+                    # Réinitialise un peu sa libido pour le calmer
+                    player.sex_drive = clamp(player.sex_drive - 30, 0, 100) 
+                    try:
+                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+                        await channel.send("📳 Le téléphone du cuisinier a vibré. Il a l'air contrarié...")
+                    except (discord.NotFound, discord.Forbidden): pass
+                
+                player.last_update = current_time
+                db.commit()
+                
+                # --- 6. MISE À JOUR DE L'INTERFACE & LOGGING ---
                 # On met à jour l'UI uniquement s'il y a un changement significatif ou toutes les 5 minutes.
                 significant_change = action_taken
                 

@@ -54,13 +54,29 @@ def chain_reactions(state_dict):
         state_dict['willpower'] = clamp(state_dict['willpower'] - 0.2, 0, 100)
         state_dict['headache'] = clamp(state_dict['headache'] + 0.1, 0, 100)
 
-    # Effets du MANQUE (Withdrawal)
     if state_dict['withdrawal_severity'] > 10:
         severity = state_dict['withdrawal_severity']
         state_dict['stress'] = clamp(state_dict['stress'] + severity * 0.03, 0, 100)
         state_dict['happiness'] = clamp(state_dict['happiness'] - severity * 0.04, 0, 100)
-        state_dict['willpower'] = clamp(state_dict['willpower'] - severity * 0.05, 0, 100) # Le manque rend difficile de résister
+        state_dict['willpower'] = clamp(state_dict['willpower'] - severity * 0.05, 0, 100)
+        # L'envie de fumer est maintenant directement liée au manque et au temps
+        state_dict['craving_nicotine'] = clamp(state_dict['withdrawal_severity'] + (time_since_last_smoke.total_seconds() / 180), 0, 100)
 
+    # NOUVEAU: Logique pour les autres envies
+    # Envie d'alcool quand on est stressé ou malheureux
+    if state_dict['stress'] > 50 or state_dict['happiness'] < 40:
+        craving_bonus = (state_dict['stress'] - 50) * 0.1 + (40 - state_dict['happiness']) * 0.1
+        state_dict['craving_alcohol'] = clamp(state_dict['craving_alcohol'] + craving_bonus, 0, 100)
+    else: # L'envie baisse lentement
+        state_dict['craving_alcohol'] = clamp(state_dict['craving_alcohol'] - 0.5, 0, 100)
+
+    # NOUVEAU: Libido / Envie de sexe
+    # Augmente avec l'ennui et le temps, diminue avec la grosse fatigue ou la douleur
+    if state_dict['boredom'] > 50:
+        state_dict['sex_drive'] = clamp(state_dict['sex_drive'] + 0.2, 0, 100)
+    if state_dict['fatigue'] > 80 or state_dict['pain'] > 70:
+        state_dict['sex_drive'] = clamp(state_dict['sex_drive'] - 1, 0, 100)
+        
     # Effets de la CULPABILITÉ (Guilt)
     if state_dict['guilt'] > 0:
         state_dict['stress'] = clamp(state_dict['stress'] + state_dict['guilt'] * 0.01, 0, 100)
