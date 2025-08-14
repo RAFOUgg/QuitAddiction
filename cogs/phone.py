@@ -83,7 +83,7 @@ class Phone(commands.Cog):
             embed.description = "Aucun nouveau message."
         return embed
 
-     @commands.Cog.listener()
+    @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return
         custom_id = interaction.data["custom_id"]
