@@ -6,7 +6,6 @@ from discord import ui
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import datetime
-import asyncio
 import traceback
 from .phone import PhoneMainView
 from utils.helpers import clamp
@@ -30,41 +29,88 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
 # --- VUES ---
 class DashboardView(ui.View):
     """La vue principale et unifiée du tableau de bord."""
-    def __init__(self, image_is_hidden: bool = False):
+    def __init__(self, show_stats: bool = False):
         super().__init__(timeout=None)
         self.add_item(ui.Button(label="🏃‍♂️ Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions"))
         self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
         self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
-
-        if image_is_hidden:
-            label, custom_id = "🖼️ Afficher l'image", "nav_toggle_image_to_shown"
-        else:
-            label, custom_id = "🖼️ Cacher l'image", "nav_toggle_image_to_hidden"
-        self.add_item(ui.Button(label=label, style=discord.ButtonStyle.grey, custom_id=custom_id, row=1))
+        self.add_item(ui.Button(label="🧠 Cerveau", style=discord.ButtonStyle.success if show_stats else discord.ButtonStyle.secondary, custom_id="nav_toggle_stats", row=1))
 
 class ActionsView(ui.View):
     """La vue pour les actions du joueur, affichée sous le dashboard principal."""
-    def __init__(self, player: PlayerProfile, image_is_hidden: bool = False):
+    def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
         # Cooldown: 10 seconds between actions
         cooldown_active = player.last_action_at and (now - player.last_action_at).total_seconds() < 10
-        self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.secondary, custom_id="action_shower", emoji="🚿", disabled=(player.hygiene > 95 or cooldown_active)))
-        self.add_item(ui.Button(label=f"Manger (x{player.food_servings})", style=discord.ButtonStyle.success, custom_id="action_eat", emoji="🍽️", disabled=(player.food_servings <= 0 or cooldown_active)))
-        self.add_item(ui.Button(label=f"Boire (x{player.water_bottles + player.beers})", style=discord.ButtonStyle.primary, custom_id="action_drink", emoji="💧", disabled=((player.water_bottles + player.beers) <= 0 or cooldown_active)))
-        self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", disabled=(cooldown_active)))
-        self.add_item(ui.Button(label=f"Fumer (x{player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="action_smoke", emoji="🚬", disabled=(player.cigarettes <= 0 or cooldown_active)))
+        self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️", disabled=cooldown_active))
+        self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧", disabled=cooldown_active))
+        self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬", disabled=cooldown_active))
+        self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", disabled=cooldown_active))
         if player.bladder > 30:
-            self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=(cooldown_active)))
-        
-        # Bouton unifié pour revenir à la vue principale du dashboard
+            self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=cooldown_active))
+        # Ajout du bouton caca si fatigue ou vessie élevée (exemple)
+        if player.fatigue > 60 or player.bladder > 60:
+            self.add_item(ui.Button(label="Caca", style=discord.ButtonStyle.secondary, custom_id="action_poop_menu", emoji="💩", row=1, disabled=cooldown_active))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2))
-        
-        if image_is_hidden:
-            label, custom_id = "🖼️ Afficher l'image", "nav_toggle_image_to_shown"
-        else:
-            label, custom_id = "🖼️ Cacher l'image", "nav_toggle_image_to_hidden"
-        self.add_item(ui.Button(label=label, style=discord.ButtonStyle.grey, custom_id=custom_id, row=2))
+
+class EatView(ui.View):
+    """Vue pour choisir quoi manger."""
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=60)
+        # Ajoute un bouton pour chaque item à manger
+        if player.food_servings > 0:
+            self.add_item(ui.Button(label=f"Manger Portion ({player.food_servings})", style=discord.ButtonStyle.success, custom_id="eat_food"))
+        if player.soup_bowls > 0:
+            self.add_item(ui.Button(label=f"Manger Soupe ({player.soup_bowls})", style=discord.ButtonStyle.success, custom_id="eat_soup"))
+        if player.salad_servings > 0:
+            self.add_item(ui.Button(label=f"Manger Salade ({player.salad_servings})", style=discord.ButtonStyle.success, custom_id="eat_salad"))
+        if player.joints > 0:
+            self.add_item(ui.Button(label=f"Manger Joint ({player.joints})", style=discord.ButtonStyle.secondary, custom_id="eat_joint"))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
+
+class DrinkView(ui.View):
+    """Vue pour choisir quoi boire."""
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=60)
+        if player.water_bottles > 0:
+            self.add_item(ui.Button(label=f"Boire Eau ({player.water_bottles})", style=discord.ButtonStyle.primary, custom_id="drink_water"))
+        if player.beers > 0:
+            self.add_item(ui.Button(label=f"Boire Bière ({player.beers})", style=discord.ButtonStyle.primary, custom_id="drink_beer"))
+        if player.whisky_bottles > 0:
+            self.add_item(ui.Button(label=f"Boire Whisky ({player.whisky_bottles})", style=discord.ButtonStyle.primary, custom_id="drink_whisky"))
+        if player.wine_bottles > 0:
+            self.add_item(ui.Button(label=f"Boire Vin ({player.wine_bottles})", style=discord.ButtonStyle.primary, custom_id="drink_wine"))
+        if player.soda_cans > 0:
+            self.add_item(ui.Button(label=f"Boire Soda ({player.soda_cans})", style=discord.ButtonStyle.primary, custom_id="drink_soda"))
+        if player.orange_juice > 0:
+            self.add_item(ui.Button(label=f"Boire Jus d'orange ({player.orange_juice})", style=discord.ButtonStyle.primary, custom_id="drink_orange_juice"))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
+
+class SmokeView(ui.View):
+    """Vue pour choisir quoi fumer."""
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=60)
+        if player.cigarettes > 0:
+            self.add_item(ui.Button(label=f"Fumer Cigarette ({player.cigarettes})", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
+        if player.joints > 0:
+            self.add_item(ui.Button(label=f"Fumer Joint ({player.joints})", style=discord.ButtonStyle.danger, custom_id="smoke_joint"))
+        if player.ecigarettes > 0:
+            self.add_item(ui.Button(label=f"Fumer E-cigarette ({player.ecigarettes})", style=discord.ButtonStyle.danger, custom_id="smoke_ecigarette"))
+        if player.vaporizer > 0:
+            self.add_item(ui.Button(label=f"Fumer Vaporisateur ({player.vaporizer})", style=discord.ButtonStyle.danger, custom_id="smoke_vaporisateur"))
+        if player.chilum > 0:
+            self.add_item(ui.Button(label=f"Fumer Chilum ({player.chilum})", style=discord.ButtonStyle.danger, custom_id="smoke_chilum"))
+        if player.bhang > 0:
+            self.add_item(ui.Button(label=f"Fumer Bhang ({player.bhang})", style=discord.ButtonStyle.danger, custom_id="smoke_bhang"))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
+
+class PoopView(ui.View):
+    """Vue pour faire caca."""
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=60)
+        self.add_item(ui.Button(label="Faire caca", style=discord.ButtonStyle.secondary, custom_id="do_poop"))
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1))
 
 class InventoryView(ui.View):
     """La vue pour l'inventaire, remplace la vue 'BackView'."""
@@ -93,7 +139,7 @@ class MainEmbed(commands.Cog):
         if player.boredom > 60: return "Je m'ennuie... il ne se passe jamais rien."
         return "Pour l'instant, ça va à peu près."
 
-    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, show_image_as_thumbnail: bool = False) -> discord.Embed:
+    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, show_stats: bool = False) -> discord.Embed:
         """Génère l'embed de dashboard unique qui affiche TOUJOURS les stats."""
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
@@ -122,10 +168,7 @@ class MainEmbed(commands.Cog):
         image_url = asset_cog.get_url(image_name) if asset_cog else None
 
         if image_url:
-            if show_image_as_thumbnail:
-                embed.set_thumbnail(url=image_url)
-            else:
-                embed.set_image(url=image_url)
+            embed.set_image(url=image_url)
 
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
@@ -226,10 +269,6 @@ class MainEmbed(commands.Cog):
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return
         custom_id = interaction.data["custom_id"]
-        # Exclure les interactions gérées par d'autres cogs
-        if not (custom_id.startswith("nav_") or custom_id.startswith("action_")): return
-
-        await interaction.response.defer()
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
@@ -245,74 +284,53 @@ class MainEmbed(commands.Cog):
 
             # --- Nouvelle Logique de Navigation ---
             if custom_id == "nav_main_menu":
-                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=image_is_currently_hidden)
-                view = DashboardView(image_is_hidden=image_is_currently_hidden)
+                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=False)
+                view = DashboardView(show_stats=False)
+                await interaction.edit_original_response(embed=embed, view=view)
+
+            elif custom_id == "nav_toggle_stats":
+                # Toggle stats
+                show_stats = False
+                if interaction.message and interaction.message.embeds:
+                    # On suppose que si le bouton est vert, stats sont affichées
+                    for row in interaction.message.components:
+                        for component in row.children:
+                            if getattr(component, 'custom_id', None) == 'nav_toggle_stats' and component.style == discord.ButtonStyle.success:
+                                show_stats = True
+                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=not show_stats)
+                view = DashboardView(show_stats=not show_stats)
                 await interaction.edit_original_response(embed=embed, view=view)
 
             elif custom_id == "nav_actions":
-                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=image_is_currently_hidden)
-                view = ActionsView(player, image_is_hidden=image_is_currently_hidden)
-                await interaction.edit_original_response(embed=embed, view=view)
-
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=ActionsView(player))
             elif custom_id == "nav_inventory":
-                embed = self.generate_inventory_embed(player, interaction.guild)
-                view = InventoryView()
-                await interaction.edit_original_response(embed=embed, view=view)
-            
+                await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=InventoryView())
             elif custom_id == "nav_phone":
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog:
-                    embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=True) # Always hide for phone
+                    embed = self.generate_dashboard_embed(player, state, interaction.guild)
                     embed.description = "Vous ouvrez votre téléphone."
                     await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
-                else: 
+                else:
                     await interaction.followup.send("Erreur: Le module téléphone n'est pas chargé.", ephemeral=True)
-
-            elif custom_id.startswith("nav_toggle_image"):
-                on_actions_view = False
-                if interaction.message and interaction.message.components:
-                    for row in interaction.message.components:
-                        for component in row.children:
-                            if getattr(component, 'custom_id', None) == 'action_shower':
-                                on_actions_view = True
-                                break
-                        if on_actions_view: break
-                
-                if custom_id == "nav_toggle_image_to_hidden":
-                    embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=True)
-                    view = ActionsView(player, image_is_hidden=True) if on_actions_view else DashboardView(image_is_hidden=True)
-                    await interaction.edit_original_response(embed=embed, view=view)
-
-                elif custom_id == "nav_toggle_image_to_shown":
-                    embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=False)
-                    view = ActionsView(player, image_is_hidden=False) if on_actions_view else DashboardView(image_is_hidden=False)
-                    await interaction.edit_original_response(embed=embed, view=view)
-
-            elif custom_id.startswith("action_"):
+            # --- Menus d'action dynamiques ---
+            elif custom_id == "action_eat_menu":
+                await interaction.edit_original_response(embed=discord.Embed(title="🍽️ Que voulez-vous manger ?"), view=EatView(player))
+            elif custom_id == "action_drink_menu":
+                await interaction.edit_original_response(embed=discord.Embed(title="💧 Que voulez-vous boire ?"), view=DrinkView(player))
+            elif custom_id == "action_smoke_menu":
+                await interaction.edit_original_response(embed=discord.Embed(title="🚬 Que voulez-vous fumer ?"), view=SmokeView(player))
+            elif custom_id == "action_poop_menu":
+                await interaction.edit_original_response(embed=discord.Embed(title="💩 Besoin pressant..."), view=PoopView(player))
+            # --- Actions concrètes (à compléter dans CookerBrain) ---
+            elif custom_id.startswith("eat_") or custom_id.startswith("drink_") or custom_id.startswith("smoke_") or custom_id == "do_poop":
+                # Appelle la méthode correspondante de CookerBrain selon l'action
                 cooker_brain = self.bot.get_cog("CookerBrain")
-                if player.last_action_at and (datetime.datetime.utcnow() - player.last_action_at).total_seconds() < 10:
-                    return await interaction.followup.send("Vous agissez trop vite ! Attendez un peu.", ephemeral=True)
-
-                action_map = { 
-                    "action_eat": cooker_brain.perform_eat, "action_drink": cooker_brain.perform_drink,
-                    "action_sleep": cooker_brain.perform_sleep, "action_smoke": cooker_brain.perform_smoke,
-                    "action_urinate": cooker_brain.perform_urinate,
-                    "action_shower": cooker_brain.perform_shower
-                }
-                message, changes = action_map[custom_id](player)
-                
-                if not changes: return await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
-
-                player.last_action_at = datetime.datetime.utcnow()
-                db.commit(); db.refresh(player)
-                
-                feedback_str = " ".join([f"**{stat}:** `{val}`" for stat, val in changes.items()])
-                await interaction.followup.send(f"✅ {message}\n{feedback_str}", ephemeral=True)
-                
-                final_embed = self.generate_dashboard_embed(player, state, interaction.guild, show_image_as_thumbnail=image_is_currently_hidden)
-                final_view = ActionsView(player, image_is_hidden=image_is_currently_hidden)
-                await interaction.edit_original_response(embed=final_embed, view=final_view)
-
+                # ...mapping à compléter selon les méthodes de CookerBrain...
+                # Ex: message, changes = cooker_brain.use_soup(player) etc.
+                # ...existing code...
+                pass
+            # ...autres actions...
         except Exception as e:
             traceback.print_exc()
             if not interaction.response.is_done():

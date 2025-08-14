@@ -30,6 +30,7 @@ class UberEatsView(ui.View):
         self.add_item(ui.Button(label="Salade (8$)", emoji="🥗", style=discord.ButtonStyle.success, custom_id="ubereats_buy_salad", disabled=(player.wallet < 8)))
         self.add_item(ui.Button(label="Bol de Soupe (5$)", emoji="🍲", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soup", disabled=(player.wallet < 5)))
         self.add_item(ui.Button(label="Jus d'Orange (3$)", emoji="🧃", style=discord.ButtonStyle.success, custom_id="ubereats_buy_orange_juice", disabled=(player.wallet < 3)))
+        self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.primary, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
         # Le bouton retour ramène au menu principal du téléphone
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=1))
 
@@ -172,6 +173,9 @@ class Phone(commands.Cog):
                 elif custom_id == "ubereats_buy_orange_juice" and player.wallet >= 3:
                     cost = 3; message = "Vous avez commandé un jus d'orange."
                     player.orange_juice += 1
+                elif custom_id == "ubereats_buy_water" and player.wallet >= 1:
+                    cost = 1; message = "Vous avez commandé une bouteille d'eau."
+                    player.water_bottles += 1
 
                 if cost > 0:
                     player.wallet -= cost
