@@ -18,9 +18,10 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     value = clamp(value, 0, max_value)
     percent = value / max_value
     filled_blocks = int(length * percent)
-    bar_filled = '🟥' if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3) else '🟧' if (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6) else '🟩'
+    # Couleurs plus distinctes
+    bar_filled = '🟥' if (high_is_bad and percent > 0.75) or (not high_is_bad and percent < 0.25) else '🟧' if (high_is_bad and percent > 0.5) or (not high_is_bad and percent < 0.5) else '🟩'
     bar_empty = '⬛'
-    return f"`{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}`"
+    return f"{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}"
 
 # --- VUES (inchangées) ---
 # ... (Les classes de View restent les mêmes) ...
@@ -93,7 +94,6 @@ class SmokeView(ui.View):
         if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
-
 # --- COG ---
 
 class MainEmbed(commands.Cog):
@@ -155,29 +155,31 @@ class MainEmbed(commands.Cog):
                  embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
 
-        # --- NOUVELLE VUE "CERVEAU" AVEC ALIGNEMENT CORRIGÉ ---
+        # --- VUE "CERVEAU" FINALE - ALIGNEMENT PARFAIT ---
         if player.show_stats_in_view:
-            # Helper function to create a stat line
+            # Helper function to create a clean stat line.
             def stat_line(name: str, value: float, high_is_bad: bool):
-                return f"**{name}** `{int(value)}/100`\n{generate_progress_bar(value, high_is_bad=high_is_bad)}"
+                # Le formatage `{name:<10}` ajoute des espaces pour aligner les barres.
+                # Ajustez la valeur (10) si nécessaire pour vos noms de stats.
+                return f"`{name:<10}` {generate_progress_bar(value, high_is_bad=high_is_bad)} `{int(value)}%`"
 
             # Colonne 1: État physique et besoins
             col1_title = "🧬 État Physique"
             col1_text = (
                 f"{stat_line('Santé', player.health, False)}\n"
                 f"{stat_line('Énergie', player.energy, False)}\n"
-                f"{stat_line('Faim', player.hunger, True)}\n"
-                f"{stat_line('Soif', player.thirst, True)}"
+                f"{stat_line('Hygiène', player.hygiene, False)}\n"
+                f"{stat_line('Fatigue', player.fatigue, True)}"
             )
             embed.add_field(name=col1_title, value=col1_text, inline=True)
 
             # Colonne 2: État mental et volonté
-            col2_title = "🧠 Mental & Volonté"
+            col2_title = "🧠 Mental"
             col2_text = (
                 f"{stat_line('Humeur', player.happiness, False)}\n"
                 f"{stat_line('Stress', player.stress, True)}\n"
                 f"{stat_line('Volonté', player.willpower, False)}\n"
-                f"{stat_line('Hygiène', player.hygiene, False)}"
+                f"{stat_line('S. Mentale', player.sanity, False)}"
             )
             embed.add_field(name=col2_title, value=col2_text, inline=True)
 
@@ -187,24 +189,22 @@ class MainEmbed(commands.Cog):
             }
             dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1])
             
-            # Afficher l'envie seulement si elle est significative
-            envie_text = f"**Envie ({dominant_craving_name})** `{int(dominant_craving_val)}/100`\n{generate_progress_bar(dominant_craving_val, True)}" if dominant_craving_val > 10 else f"**Envie** `Nulle`\n{generate_progress_bar(0, True)}"
+            envie_text = f"{stat_line('Envie', dominant_craving_val, True)}" if dominant_craving_val > 10 else f"{stat_line('Envie', 0, True)}"
 
-            col3_title = "🚬 Addiction & Symptômes"
+            col3_title = "🚬 Addiction"
             col3_text = (
-                f"**Dépendance** `{int(player.substance_addiction_level)}%`\n{generate_progress_bar(player.substance_addiction_level, True)}\n"
-                f"**Sevrage** `{int(player.withdrawal_severity)}%`\n{generate_progress_bar(player.withdrawal_severity, True)}\n"
+                f"{stat_line('Dépendance', player.substance_addiction_level, True)}\n"
+                f"{stat_line('Sevrage', player.withdrawal_severity, True)}\n"
                 f"{envie_text}\n"
-                f"**Toxine** `{int(player.tox)}%`\n{generate_progress_bar(player.tox, True)}"
+                f"{stat_line('Toxine', player.tox, True)}"
             )
             embed.add_field(name=col3_title, value=col3_text, inline=True)
-
 
         embed.set_footer(text=f"Jeu sur {guild.name}")
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 
-    # Le listener on_interaction reste identique à la version précédente.
+    # Le listener on_interaction reste identique.
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data:
