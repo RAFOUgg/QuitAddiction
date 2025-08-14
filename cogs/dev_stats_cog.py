@@ -7,14 +7,16 @@ import asyncio
 import aiohttp
 import traceback
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+import calendar
 import os
 import dotenv
+from collections import defaultdict
 
 # --- Imports ---
 from utils.embed_builder import create_styled_embed
 from utils.logger import get_logger
-from utils.helpers import format_time_delta # Ajout de l'import utilitaire
+from utils.helpers import format_time_delta
 
 # --- Setup ---
 dotenv.load_dotenv()
@@ -28,15 +30,57 @@ class DevStatsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    def generate_contribution_graph(self, commits: list) -> str:
+        """Génère un graphique de contribution textuel pour le mois en cours."""
+        today = date.today()
+        # Mappe les jours à des emojis de couleur pour l'intensité
+        # 0 commits, 1-2, 3-5, 6-9, 10+
+        contribution_emojis = ["<:g_d:1186717540974411887>", "<:g_l:1186717537023348836>", "<:g_m:1186717534473175111>", "<:g_h:1186717531956551731>", "<:g_vh:1186717529125023805>"]
+        
+        # Compte les commits par jour pour le mois en cours
+        commits_per_day = defaultdict(int)
+        for commit in commits:
+            commit_date = datetime.fromisoformat(commit['commit']['author']['date'].replace('Z', '+00:00')).date()
+            if commit_date.year == today.year and commit_date.month == today.month:
+                commits_per_day[commit_date.day] = commits_per_day.get(commit_date.day, 0) + 1
+        
+        # Crée la grille du calendrier
+        cal = calendar.monthcalendar(today.year, today.month)
+        graph = ""
+
+        # En-têtes des jours de la semaine
+        days_header = " ".join(["Lu", "Ma", "Me", "Je", "Ve", "Sa", "Di"])
+        graph += f"`{days_header}`\n"
+
+        for week in cal:
+            week_str = ""
+            for day_num in week:
+                if day_num == 0:
+                    week_str += "  " # Espace vide pour les jours hors du mois
+                else:
+                    count = commits_per_day.get(day_num, 0)
+                    if count == 0: level = 0
+                    elif count <= 2: level = 1
+                    elif count <= 5: level = 2
+                    elif count <= 9: level = 3
+                    else: level = 4
+                    week_str += contribution_emojis[level]
+            graph += week_str + "\n"
+            
+        return graph.strip()
+
+
     async def get_commit_stats(self) -> dict:
         if not all([GITHUB_TOKEN, GITHUB_REPO_OWNER, GITHUB_REPO_NAME]):
             return {"error": "Missing GitHub configuration in .env file."}
         headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+        # On prend les commits des 90 derniers jours pour avoir assez de données pour le graphique
+        since_date = (datetime.utcnow() - timedelta(days=90)).isoformat()
         api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/commits"
         all_commits = []
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, headers=headers, params={"per_page": 100}) as response:
+                async with session.get(api_url, headers=headers, params={"per_page": 100, "since": since_date}) as response:
                     if response.status != 200:
                         logger.error(f"GitHub API Error: {response.status} - {await response.text()}")
                         return {"error": f"GitHub API returned status {response.status}."}
@@ -60,6 +104,7 @@ class DevStatsCog(commands.Cog):
         )
 
         return {
+            "raw_commits": all_commits, # On passe les commits bruts pour le graphique
             "total_commits": len(all_commits),
             "estimated_duration": total_duration,
             "first_commit_date": datetime.fromisoformat(all_commits[-1]['commit']['author']['date'].replace('Z', '+00:00')),
@@ -74,12 +119,9 @@ class DevStatsCog(commands.Cog):
                 capture_output=True, text=True, check=True, encoding='utf-8'
             )
             file_list = files_process.stdout.strip().split('\n')
-
             if not file_list or not file_list[0]:
                 return {"total_lines": 0, "total_chars": 0, "total_files": 0}
-
             total_lines, total_chars = 0, 0
-            
             for filepath in file_list:
                 if not os.path.exists(filepath): continue
                 try:
@@ -89,7 +131,6 @@ class DevStatsCog(commands.Cog):
                         total_chars += sum(len(line) for line in lines)
                 except Exception as e:
                     logger.warning(f"Could not read file {filepath}: {e}")
-
             return {"total_lines": total_lines, "total_chars": total_chars, "total_files": len(file_list)}
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             logger.error(f"Git command failed. Is '.git' folder in the container? Error: {e}", exc_info=True)
@@ -99,6 +140,7 @@ class DevStatsCog(commands.Cog):
             return {"error": "An unexpected error occurred while calculating local stats."}
 
     @app_commands.command(name="project_stats", description="[STAFF] Displays project development statistics.")
+    @app_commands.guild_only() # Recommandé pour les commandes utilisant des emojis custom
     async def project_stats(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
@@ -113,39 +155,27 @@ class DevStatsCog(commands.Cog):
                 await interaction.followup.send(f"❌ " + "\n".join(errors), ephemeral=True)
                 return
 
-            # --- CORRECTION : LOGIQUE DE L'EMBED COMPLÉTÉE ---
             embed = create_styled_embed(
                 title=f"📊 Project Stats - {GITHUB_REPO_NAME}",
-                description="A snapshot of development activity.",
+                description=f"A snapshot of development activity for `{calendar.month_name[date.today().month]}`.",
                 color=discord.Color.dark_green()
             )
 
-            # Section des stats de code
+            # NOUVEAU : Génération et ajout du graphique de contribution
+            contribution_graph = self.generate_contribution_graph(commit_data['raw_commits'])
+            embed.add_field(name="🗓️ Contribution Calendar", value=contribution_graph, inline=False)
+
             loc_value = (
                 f"**Total Lines:** `{loc_data['total_lines']:,}`\n"
-                f"**Total Characters:** `{loc_data['total_chars']:,}`\n"
                 f"**Python Files:** `{loc_data['total_files']}`"
             )
-            embed.add_field(name="<:python:1234567890> Codebase Stats", value=loc_value, inline=True) # Remplacez l'ID par un emoji valide
+            embed.add_field(name="<:python:1186326476140511313> Codebase", value=loc_value, inline=True)
 
-            # Section des stats de commit
             commit_value = (
-                f"**Total Commits:** `{commit_data['total_commits']}`\n"
-                f"**Estimated Dev Time:** `{format_time_delta(commit_data['estimated_duration'])}`\n"
+                f"**Commits (90d):** `{commit_data['total_commits']}`\n"
                 f"**Last Activity:** <t:{int(commit_data['last_commit_date'].timestamp())}:R>"
             )
-            embed.add_field(name="<:github:1234567890> Commit Activity", value=commit_value, inline=True) # Remplacez l'ID par un emoji valide
-
-            # Ajout d'une section sur les dates
-            project_lifespan = datetime.now().astimezone() - commit_data['first_commit_date']
-            embed.add_field(
-                name="🗓️ Project Timeline",
-                value=(
-                    f"**First Commit:** <t:{int(commit_data['first_commit_date'].timestamp())}:D>\n"
-                    f"**Project Age:** `{format_time_delta(project_lifespan)}`"
-                ),
-                inline=False
-            )
+            embed.add_field(name="<:github:1186326473212874833> Activity", value=commit_value, inline=True)
             
             embed.set_footer(text=f"Stats as of {datetime.now().strftime('%Y-%m-%d %H:%M')}")
             
