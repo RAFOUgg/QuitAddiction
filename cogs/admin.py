@@ -97,6 +97,65 @@ class PaginatedViewManager(ui.View):
         if not page_options:
             page_options = [discord.SelectOption(label="No items on this page", value="no_items", default=True)]
 
+        # Note: This is a generic ItemSelect which needs to be defined or replaced.
+        # Assuming you'll replace `ItemSelect` with a concrete implementation like `RoleSelect` or a generic handler.
+        # For now, let's create a generic select that will need a handler.
+        # This part of the code (`ItemSelect`) is not fully defined in the provided file, so I will assume a generic select for now.
+        # Let's assume `ItemSelect` is intended to be a general version of `RoleSelect`
+        # and create a generic version.
+        
+        class ItemSelect(ui.Select):
+             # A generic select for the paginator
+            def __init__(self, guild_id: str, select_type: str, id_mapping: dict, cog: 'AdminCog'):
+                self.guild_id = guild_id
+                self.select_type = select_type
+                self.id_mapping = id_mapping
+                self.cog = cog
+                super().__init__(placeholder="Select an item...", row=0)
+
+            async def callback(self, interaction: discord.Interaction):
+                await interaction.response.defer()
+                selected_hash = self.values[0]
+                selected_id = self.id_mapping.get(selected_hash)
+                
+                if not selected_id:
+                    await interaction.followup.send("Error: Item not found.", ephemeral=True)
+                    return
+                
+                db = SessionLocal()
+                try:
+                    state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                    if not state:
+                        await interaction.followup.send("Error: Server config not found.", ephemeral=True)
+                        return
+                    
+                    db_field_map = {
+                        'admin_role': 'admin_role_id',
+                        'notification_role': 'notification_role_id',
+                        'game_channel': 'game_channel_id'
+                    }
+                    field_to_update = db_field_map.get(self.select_type)
+                    if not field_to_update:
+                        await interaction.followup.send(f"Error: Unknown select type '{self.select_type}'.", ephemeral=True)
+                        return
+
+                    setattr(state, field_to_update, selected_id)
+                    db.commit()
+                    db.refresh(state)
+
+                    await interaction.followup.send("✅ Setting updated!", ephemeral=True)
+
+                    # Return to the correct config menu
+                    new_embed = self.cog.generate_role_and_channel_config_embed(state)
+                    new_view = self.cog.generate_general_config_view(self.guild_id, interaction.guild)
+                    await interaction.edit_original_response(embed=new_embed, view=new_view)
+                except Exception as e:
+                    db.rollback()
+                    logger.error(f"Error updating paginated selection: {e}", exc_info=True)
+                finally:
+                    db.close()
+
+
         self.select_menu = ItemSelect(self.guild_id, self.select_type, self.id_mapping, self.cog)
         self.select_menu.options = page_options
         self.select_menu.placeholder = f"Select... (Page {self.current_page + 1}/{self.total_pages})"
@@ -290,6 +349,9 @@ class AdminCog(commands.Cog):
                 discord.SelectOption(label="Rôle pour Message Ami", value="notify_friend_message_role_id"),
                 discord.SelectOption(label="Rôle pour Promotion Boutique", value="notify_shop_promo_role_id"),
             ]
+            # --- CORRECTION 1: Ajout de self.options_map ---
+            # Cette variable était manquante et provoquait une erreur dans le callback.
+            self.options_map = {opt.value: opt.label for opt in options}
             super().__init__(placeholder="Choisir le type de notification à configurer...", options=options)
 
         async def callback(self, interaction: discord.Interaction):
@@ -301,21 +363,28 @@ class AdminCog(commands.Cog):
                 options, id_mapping = self.cog.create_options_and_mapping(all_roles, "role", interaction.guild)
                 view = ui.View()
                 select_menu = RoleSelect(self.guild_id, setting_key, id_mapping, self.cog)
-                select_menu.options = options[:25] # Limite à 25 pour un seul menu
+                
+                # S'il y a trop d'options, nous devrons utiliser la pagination.
+                # Pour l'instant, limitons à 25 pour un seul menu déroulant.
+                select_menu.options = options[:25] 
                 view.add_item(select_menu)
                 view.add_item(self.cog.BackButton("Retour", self.guild_id, discord.ButtonStyle.secondary, 1, self.cog))
 
-                await interaction.response.edit_message(content=f"Sélectionnez le rôle pour : **{self.options_map[setting_key]}**", view=view)
+                # --- CORRECTION 1 (suite): Utilisation de la variable corrigée ---
+                # `self.options_map` est maintenant défini et peut être utilisé ici sans erreur.
+                await interaction.response.edit_message(content=f"Sélectionnez le rôle pour : **{self.options_map[setting_key]}**", embed=None, view=view)
             
             except Exception as e:
-                logger.error(f"Erreur dans NotificationRoleTypeSelect: {e}")
+                logger.error(f"Erreur dans NotificationRoleTypeSelect: {e}", exc_info=True)
             finally:
                 db.close()
+
     def generate_notifications_config_view(self, guild_id: str) -> ui.View:
         view = ui.View(timeout=180)
         view.add_item(self.NotificationRoleTypeSelect(guild_id, self))
         view.add_item(self.BackButton("Retour au menu principal", guild_id, discord.ButtonStyle.red, 1, self))
         return view
+        
     class ProjectStatsButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
             super().__init__(label=label, style=style, row=row, emoji="📈")
@@ -564,8 +633,12 @@ class AdminCog(commands.Cog):
             await interaction.response.defer()
             db = SessionLocal()
             try:
+                state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
+                if not state:
+                    await interaction.followup.send("❌ **Error:** Server configuration not found.", ephemeral=True)
+                    return
+
                 if "Start Game" in self.label:
-                    state = db.query(ServerState).filter_by(guild_id=str(self.guild_id)).first()
                     if not state or not state.game_channel_id:
                         await interaction.followup.send("❌ **Error:** Please configure a game channel via `⚙️ Roles & Channels` first.", ephemeral=True)
                         return
@@ -607,10 +680,12 @@ class AdminCog(commands.Cog):
                     )
                     await interaction.followup.send(f"✅ The game has started! The interface has been posted in {game_channel.mention}.", ephemeral=True)
 
+                # --- CORRECTION 2: Logique du bouton "Notifications" ---
+                # On redirige vers l'écran de configuration des rôles, pas celui des toggles.
                 elif "Notifications" in self.label:
                     await interaction.edit_original_response(
-                        embed=self.cog.generate_notifications_embed(self.guild_id),
-                        view=self.cog.generate_notifications_view(self.guild_id)
+                        embed=self.cog.generate_notifications_config_embed(state),
+                        view=self.cog.generate_notifications_config_view(self.guild_id)
                     )
                 
                 elif "View Stats" in self.label:
