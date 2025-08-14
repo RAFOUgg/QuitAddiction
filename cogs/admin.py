@@ -636,6 +636,7 @@ class AdminCog(commands.Cog):
             embed = discord.Embed(title="🔔 Notification Settings", color=discord.Color.green())
             notif_role_mention = f"<@&{state.notification_role_id}>" if state.notification_role_id else "Not set"
             embed.add_field(name="📍 General Notification Role", value=notif_role_mention, inline=False)
+            
             embed.add_field(name="🚨 Specific Alert Roles", value=(
                 f"📉 Low Vitals: {f'<@&{state.notify_vital_low_role_id}>' if state.notify_vital_low_role_id else 'Not set'}\n"
                 f"🚨 Critical: {f'<@&{state.notify_critical_role_id}>' if state.notify_critical_role_id else 'Not set'}\n"
@@ -656,7 +657,7 @@ class AdminCog(commands.Cog):
                 view.add_item(self.BackButton("Back", guild_id, discord.ButtonStyle.secondary, row=0, cog=self)); return view
             view.add_item(self.NotificationToggle("🔴 Low Vitals", "notify_on_low_vital_stat", guild_id, discord.ButtonStyle.danger if state.notify_on_low_vital_stat else discord.ButtonStyle.secondary, self, 0))
             view.add_item(self.NotificationToggle("🔴 Critical Event", "notify_on_critical_event", guild_id, discord.ButtonStyle.danger if state.notify_on_critical_event else discord.ButtonStyle.secondary, self, 1))
-            view.add_item(self.NotificationToggle("🚬 Cravings", "notify_on_envie_fumer", guild_id, discord.ButtonStyle.success if state.notify_on_envie_fumer else discord.ButtonStyle.secondary, self, 1))
+            view.add_item(self.NotificationToggle("🚬 Cravings", "notify_on_craving", guild_id, discord.ButtonStyle.success if state.notify_on_craving else discord.ButtonStyle.secondary, self, 1))
             view.add_item(self.NotificationToggle("💬 Friend/Quiz", "notify_on_friend_message", guild_id, discord.ButtonStyle.primary if state.notify_on_friend_message else discord.ButtonStyle.secondary, self, 2))
             view.add_item(self.NotificationToggle("💛 Shop Promo", "notify_on_shop_promo", guild_id, discord.ButtonStyle.primary if state.notify_on_shop_promo else discord.ButtonStyle.secondary, self, 2))
             view.add_item(self.BackButton("Back", guild_id, discord.ButtonStyle.secondary, row=4, cog=self))

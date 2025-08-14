@@ -252,36 +252,29 @@ class MainEmbed(commands.Cog):
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
-        if not interaction.data or "custom_id" not in interaction.data: return
-        
+        if not interaction.data or "custom_id" not in interaction.data:
+            return
+
         custom_id = interaction.data["custom_id"]
         db = SessionLocal()
         try:
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-
-            if state and state.game_message_id and interaction.message.id != state.game_message_id:
-                if not custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
-                    return
-                
+            is_phone_interaction = custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_"))
+            if not is_phone_interaction:
+                if not state or not state.game_message_id or interaction.message.id != state.game_message_id:
+                    return               
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player:
                 # Si l'interaction n'a pas déjà reçu de réponse (defer/send_message)
                 if not interaction.response.is_done():
                     await interaction.response.send_message("Erreur: Votre profil de joueur est introuvable. Veuillez contacter un admin.", ephemeral=True)
                 return
-            
-            if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
-                player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-                if not player:
-                    try: await interaction.response.send_message("Erreur: Profil du joueur introuvable.", ephemeral=True)
-                    except discord.errors.InteractionResponded: pass
-                    return
+            if is_phone_interaction:
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state, self)
                 return
-
-            await interaction.response.defer()
-
+            if not interaction.response.is_done():
+                await interaction.response.defer()
             if custom_id == "nav_toggle_stats":
                 player.show_stats_in_view = not player.show_stats_in_view
                 db.commit()
@@ -340,7 +333,8 @@ class MainEmbed(commands.Cog):
                     embed=self.generate_dashboard_embed(player, state, interaction.guild),
                     view=ActionsView(player)
                 )
-
+        except discord.errors.InteractionResponded:
+            pass
         except Exception as e:
             print(f"Erreur critique dans le listener on_interaction: {e}")
             traceback.print_exc()
