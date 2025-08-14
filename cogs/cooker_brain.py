@@ -8,6 +8,36 @@ class CookerBrain(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+
+    def perform_drink_wine(self, player: PlayerProfile) -> (str, dict):
+        if player.wine_bottles <= 0: return "Vous n'avez pas de vin.", {}
+        player.wine_bottles -= 1
+        player.thirst = clamp(player.thirst - 15, 0, 100)
+        player.stress = clamp(player.stress - 40.0, 0, 100) # Très efficace contre le stress
+        player.happiness = clamp(player.happiness + 20, 0, 100)
+        player.tox = clamp(player.tox + 12.0, 0, 100) # ...mais très toxique
+        player.dizziness = clamp(player.dizziness + 25.0, 0, 100) # Rend vaseux
+        player.guilt = clamp(player.guilt + 10.0, 0, 100)
+        player.last_drank_at = datetime.datetime.utcnow()
+        player.last_action = "neutral_drink_wine"
+        player.last_action_time = datetime.datetime.utcnow()
+        return "Vous buvez une bouteille de vin bon marché. Le stress s'efface dans une douce torpeur.", {}
+
+    def perform_smoke_joint(self, player: PlayerProfile) -> (str, dict):
+        if player.joints <= 0: return "Vous n'avez pas de joint.", {}
+        player.joints -= 1
+        player.stress = clamp(player.stress - 60.0, 0, 100) # Effet anti-stress radical
+        player.happiness = clamp(player.happiness + 30, 0, 100)
+        player.sanity = clamp(player.sanity - 5.0, 0, 100) # Mais affecte la santé mentale
+        player.hunger = clamp(player.hunger + 30, 0, 100) # Défonce !
+        player.tox = clamp(player.tox + 5.0, 0, 100)
+        player.job_performance = clamp(player.job_performance - 20, 0, 100) # Incompatible avec le travail
+        player.guilt = clamp(player.guilt + 20.0, 0, 100)
+        player.last_smoked_at = datetime.datetime.utcnow()
+        player.last_action = "neutral_smoke_joint"
+        player.last_action_time = datetime.datetime.utcnow()
+        return "Vous allumez un joint. Le monde semble plus lent, plus doux... et la faim vous tenaille.", {}
+    
     def perform_sleep(self, player: PlayerProfile) -> (str, dict):
         # La qualité du sommeil dépend de la douleur et du stress, impactant tous les gains
         sleep_quality = 1.0 - (player.pain / 150.0) - (player.stress / 200.0)

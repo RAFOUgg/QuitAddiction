@@ -76,23 +76,31 @@ class EatView(ui.View):
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
 class DrinkView(ui.View):
+    """Vue pour choisir quoi boire."""
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=60)
         if player.water_bottles > 0:
             self.add_item(ui.Button(label=f"Eau ({player.water_bottles})", emoji="💧", style=discord.ButtonStyle.primary, custom_id="drink_water"))
         if player.soda_cans > 0:
             self.add_item(ui.Button(label=f"Soda ({player.soda_cans})", emoji="🥤", style=discord.ButtonStyle.blurple, custom_id="drink_soda"))
+        if getattr(player, 'wine_bottles', 0) > 0:
+            self.add_item(ui.Button(label=f"Vin ({player.wine_bottles})", emoji="🍷", style=discord.ButtonStyle.danger, custom_id="drink_wine"))
+
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
 class SmokeView(ui.View):
+    """Vue pour choisir quoi fumer."""
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=60)
         if player.cigarettes > 0:
             self.add_item(ui.Button(label=f"Cigarette ({player.cigarettes})", emoji="🚬", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
         if player.e_cigarettes > 0:
             self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
+        if getattr(player, 'joints', 0) > 0:
+            self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
+
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
-        
+
 class InventoryView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -110,13 +118,13 @@ class MainEmbed(commands.Cog):
         asset_cog = self.bot.get_cog("AssetManager")
         if not asset_cog: return None
 
+        image_name = "neutral"
         # Priority 1: Action récente (dure 10s)
         if player.last_action and player.last_action_time and (now - player.last_action_time).total_seconds() < 10:
             return asset_cog.get_url(player.last_action)
-
-        image_name = "neutral"
-        # Priority 2: Besoins critiques
-        if player.bowels > 85: image_name = "neutral_pooping" # <- Ajouté
+        # Priority 2: Conséquence physique immédiate
+        if player.bladder >= 99: image_name = "peed" # <- NOUVEL ÉTAT VISUEL
+        elif player.bowels > 85: image_name = "neutral_pooping"
         elif player.bladder > 85: image_name = "need_pee"
         elif player.hunger > 85: image_name = "hungry"
         # Priority 3: États mentaux et physiques sévères
@@ -305,10 +313,12 @@ class MainEmbed(commands.Cog):
             cooker_brain = self.bot.get_cog("CookerBrain")
             message = None
             action_map = {
+                "drink_wine": cooker_brain.perform_drink_wine, # NOUVELLE ACTION
+                "smoke_joint": cooker_brain.perform_smoke_joint, # NOUVELLE ACTION
                 "action_sleep": cooker_brain.perform_sleep,
                 "action_shower": cooker_brain.perform_shower,
                 "action_urinate": cooker_brain.perform_urinate,
-                "action_defecate": cooker_brain.perform_defecate, # NOUVELLE ACTION MAPPÉE
+                "action_defecate": cooker_brain.perform_defecate,
                 "drink_water": cooker_brain.perform_drink_water,
                 "drink_soda": cooker_brain.use_soda,
                 "eat_sandwich": cooker_brain.perform_eat_sandwich,

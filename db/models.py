@@ -107,7 +107,9 @@ class PlayerProfile(Base):
     beers: int = Column(Integer, default=0)
     tacos: int = Column(Integer, default=0)
     salad_servings: int = Column(Integer, default=0)
-
+    wine_bottles: int = Column(Integer, default=0)
+    joints: int = Column(Integer, default=0)
+    
     # --- Notifications Config ---
     notifications_config: str = Column(Text, default="")
     notification_history: str = Column(Text, default="")

@@ -9,6 +9,7 @@ def chain_reactions(state_dict: dict, time_since_last_smoke) -> (dict, list):
     """
     logs = []
 
+    
     # --- 0. DECAY & REGENERATION NATURELS ---
     # La culpabilité s'estompe avec le temps
     state_dict['guilt'] = clamp(state_dict['guilt'] - 0.2, 0, 100) 
@@ -56,6 +57,12 @@ def chain_reactions(state_dict: dict, time_since_last_smoke) -> (dict, list):
     if state_dict['hunger'] > 80: state_dict['stress'] += 0.5
     if state_dict['thirst'] > 70: state_dict['headache'] += 0.8
     if state_dict['bladder'] > 85: state_dict['stress'] += 0.6; state_dict['pain'] += 0.2
+    if state_dict.get('bladder', 0) >= 100:
+        state_dict['bladder'] = 0 # L'accident vide la vessie
+        state_dict['hygiene'] = clamp(state_dict.get('hygiene', 100) - 50, 0, 100)
+        state_dict['happiness'] = clamp(state_dict.get('happiness', 50) - 30, 0, 100) # C'est humiliant
+        state_dict['stress'] = clamp(state_dict.get('stress', 0) + 15, 0, 100)
+        logs.append(" humiliant... Vous n'avez pas pu vous retenir à temps.")
     if state_dict['bowels'] > 80:
         state_dict['stress'] = clamp(state_dict['stress'] + 0.4, 0, 100)
         state_dict['pain'] = clamp(state_dict['pain'] + 0.5, 0, 100) # C'est plus douloureux
