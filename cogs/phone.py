@@ -10,6 +10,7 @@ class PhoneMainView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
         self.add_item(ui.Button(label="💬 SMS", style=discord.ButtonStyle.green, custom_id="phone_sms"))
+        self.add_item(ui.Button(label="🔔 Notifications", style=discord.ButtonStyle.primary, custom_id="phone_notifications"))
         self.add_item(ui.Button(label="🍔 Uber Eats", style=discord.ButtonStyle.success, custom_id="phone_ubereats"))
         self.add_item(ui.Button(label="🛍️ Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop", disabled=(not player.has_unlocked_smokeshop)))
         self.add_item(ui.Button(label="⬅️ Fermer le téléphone", style=discord.ButtonStyle.grey, custom_id="nav_main_menu"))
@@ -39,6 +40,11 @@ class ShopView(ui.View):
         # Ajoutez ici les autres articles
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=2))
 
+class NotificationsView(ui.View):
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=180)
+        self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone"))
+
 class Phone(commands.Cog):
     """Fournit la logique pour les applications du téléphone."""
     def __init__(self, bot):
@@ -65,6 +71,17 @@ class Phone(commands.Cog):
             embed.description = "Aucun nouveau message."
         return embed
 
+    def generate_notifications_embed(self, player: PlayerProfile, state: ServerState):
+        embed = discord.Embed(title="🔔 Notifications", color=discord.Color.orange())
+        notif_role = f"<@&{state.notification_role_id}>" if state and state.notification_role_id else ""
+        notif_history = player.notification_history.strip().split("\n") if player.notification_history else []
+        if notif_history:
+            notif_text = "\n".join(f"{notif_role} {msg}" for msg in notif_history[-5:])
+        else:
+            notif_text = "Aucune notification récente."
+        embed.description = notif_text
+        return embed
+
     async def handle_interaction(self, interaction: discord.Interaction, db: Session, player: PlayerProfile, state: ServerState):
         """Gère toutes les interactions liées au téléphone."""
         custom_id = interaction.data["custom_id"]
@@ -76,6 +93,11 @@ class Phone(commands.Cog):
             await interaction.edit_original_response(embed=self.generate_sms_embed(player), view=SMSView(player))
         elif custom_id == "phone_ubereats":
             await interaction.edit_original_response(embed=self.generate_ubereats_embed(player), view=UberEatsView(player))
+        elif custom_id == "phone_notifications":
+            await interaction.edit_original_response(
+                embed=self.generate_notifications_embed(player, state),
+                view=NotificationsView(player)
+            )
 
         # Achats
         elif custom_id.startswith("shop_buy_") or custom_id.startswith("ubereats_buy_"):

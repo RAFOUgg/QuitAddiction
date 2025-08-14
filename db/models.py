@@ -90,25 +90,29 @@ class PlayerProfile(Base):
     is_sick: bool = Column(Boolean, default=False)  # Est actuellement malade
 
     # === SECTION 7: AUTRES & MÉTA-DONNÉES ===
-    wallet: int = Column(Integer, default=20)
+    wallet: int = Column(Integer, default=20)  # 20€ par défaut
     
     # --- Inventaire ---
-    cigarettes: int = Column(Integer, default=5)
+    food_servings: int = Column(Integer, default=1)  # 1 sandwich
+    water_bottles: int = Column(Integer, default=5)  # 5 bouteilles d'eau
+    soda_cans: int = Column(Integer, default=1)    # 1 soda
+    cigarettes: int = Column(Integer, default=5)    # 5 cigarettes
     beers: int = Column(Integer, default=0)
-    water_bottles: int = Column(Integer, default=2)
-    food_servings: int = Column(Integer, default=1)
     joints: int = Column(Integer, default=0)
     # --- NEW: Inventory items ---
     soup_bowls: int = Column(Integer, default=0)
     whisky_bottles: int = Column(Integer, default=0)
     wine_bottles: int = Column(Integer, default=0)
-    soda_cans: int = Column(Integer, default=0)
     salad_servings: int = Column(Integer, default=0)
     orange_juice: int = Column(Integer, default=0)
     vaporizer: int = Column(Integer, default=0)
     ecigarettes: int = Column(Integer, default=0)
     chilum: int = Column(Integer, default=0)
     bhang: int = Column(Integer, default=0)
+
+    # --- Notifications Config ---
+    notifications_config: str = Column(Text, default="")  # JSON string stockant la config des notifs
+    notification_history: str = Column(Text, default="")  # Historique des notifications
 
     # --- Cooldowns & Timestamps ---
     last_update: datetime.datetime = Column(DateTime, default=datetime.datetime.utcnow)

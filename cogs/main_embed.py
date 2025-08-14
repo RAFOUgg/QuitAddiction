@@ -22,12 +22,17 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
 # --- VUES ---
 class DashboardView(ui.View):
     """La vue principale et unifiée du tableau de bord."""
-    def __init__(self, show_stats: bool = False):
+    def __init__(self, show_stats: bool = False, image_is_hidden: bool = False):
         super().__init__(timeout=None)
         self.add_item(ui.Button(label="🏃‍♂️ Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions"))
         self.add_item(ui.Button(label="👖 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_inventory"))
         self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="nav_phone"))
         self.add_item(ui.Button(label="🧠 Cerveau", style=discord.ButtonStyle.success if show_stats else discord.ButtonStyle.secondary, custom_id="nav_toggle_stats", row=1))
+        # Image toggle
+        if image_is_hidden:
+            self.add_item(ui.Button(label="🖼️ Afficher l'image", style=discord.ButtonStyle.grey, custom_id="nav_toggle_image_to_shown", row=1))
+        else:
+            self.add_item(ui.Button(label="🖼️ Cacher l'image", style=discord.ButtonStyle.grey, custom_id="nav_toggle_image_to_hidden", row=1))
 
 class ActionsView(ui.View):
     """La vue pour les actions du joueur, affichée sous le dashboard principal."""
@@ -140,7 +145,7 @@ class MainEmbed(commands.Cog):
                 return text
         return "Pour l'instant, ça va à peu près."
 
-    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
+    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, show_stats: bool = False, image_is_hidden: bool = False) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
         asset_cog = self.bot.get_cog("AssetManager")
@@ -168,77 +173,69 @@ class MainEmbed(commands.Cog):
         image_url = asset_cog.get_url(image_name) if asset_cog else None
 
         if image_url:
-            embed.set_image(url=image_url)
+            if image_is_hidden:
+                embed.set_thumbnail(url=image_url)
+            else:
+                embed.set_image(url=image_url)
 
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
-        if state and state.is_test_mode and state.game_start_time:
-            admin_cog = self.bot.get_cog("AdminCog")
-            if admin_cog:
-                now = datetime.datetime.utcnow()
-                elapsed_time = now - state.game_start_time
-                elapsed_seconds = elapsed_time.total_seconds()
-                minutes, seconds = divmod(int(elapsed_seconds), 60)
-                elapsed_str = f"{minutes:02d}:{seconds:02d}"
+        # Affichage de la notification active (stockée dans player.notification_history ou state)
+        notif_role = None
+        notif_msg = None
+        if state and state.notification_role_id:
+            notif_role = f"<@&{state.notification_role_id}>"
+        # Récupère la dernière notification (exemple simple)
+        if player.notification_history:
+            notif_msg = player.notification_history.strip().split("\n")[-1]
+        if notif_role or notif_msg:
+            embed.add_field(
+                name="🔔 Notification",
+                value=f"{notif_role or ''} {notif_msg or ''}".strip(),
+                inline=False
+            )
 
-                test_total_seconds = admin_cog.TEST_DURATION_MINUTES * 60
-                progress_percent = (elapsed_seconds / test_total_seconds) * 100
-                progress_bar = generate_progress_bar(progress_percent, 100, length=20)
-                logs = player.recent_logs if player.recent_logs else "No autonomous actions yet."
+        # Affiche les stats uniquement si show_stats est True
+        if show_stats:
+            # --- Section Stats (TOUJOURS affichée) ---
+            # NOUVEAU: Besoins Vitaux
+            # Besoins Vitaux
+            vital_needs = (
+                f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
+                f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
+                f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`"
+            )
+            embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=True)
 
-                # --- Ajout du repère de vitesse ---
-                normal_days = 31  # Partie normale "medium"
-                normal_seconds = normal_days * 24 * 60 * 60
-                speedup = int(normal_seconds / test_total_seconds)
-                speedup_str = f"x{speedup} plus rapide qu'une partie normale de {normal_days} jours"
+            # Désirs & Envies
+            cravings = (
+                f"🚬 **Tabac:** {generate_progress_bar(player.craving_nicotine, high_is_bad=True)} `{player.craving_nicotine:.0f}%`\n"
+                f"🍺 **Alcool:** {generate_progress_bar(player.craving_alcohol, high_is_bad=True)} `{player.craving_alcohol:.0f}%`\n"
+                f"❤️ **Sexe:** {generate_progress_bar(player.sex_drive, high_is_bad=True)} `{player.sex_drive:.0f}%`"
+            )
+            embed.add_field(name="🔥 Désirs & Envies", value=cravings, inline=True)
 
-                debug_info = (
-                    f"**Temps Écoulé:** `{elapsed_str}` / `{admin_cog.TEST_DURATION_MINUTES}:00`\n"
-                    f"**Progression:** {progress_bar}\n"
-                    f"**Vitesse de simulation:** `{speedup_str}`\n"
-                    f"**Logs Autonomes:**\n```\n{logs}\n```"
-                )
-                embed.add_field(name="📊 Test-Mode Monitoring", value=debug_info, inline=False)
+            # Santé Physique
+            phys_health = (
+                f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`\n"
+                f"**Énergie:** {generate_progress_bar(player.energy)} `{player.energy:.0f}%`\n"
+                f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n"
+            )
+            embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=False)
 
-        # --- Section Stats (TOUJOURS affichée) ---
-        # NOUVEAU: Besoins Vitaux
-        # Besoins Vitaux
-        vital_needs = (
-            f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
-            f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
-            f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`"
-        )
-        embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=True)
+            mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
+            embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
 
-        # Désirs & Envies
-        cravings = (
-            f"🚬 **Tabac:** {generate_progress_bar(player.craving_nicotine, high_is_bad=True)} `{player.craving_nicotine:.0f}%`\n"
-            f"🍺 **Alcool:** {generate_progress_bar(player.craving_alcohol, high_is_bad=True)} `{player.craving_alcohol:.0f}%`\n"
-            f"❤️ **Sexe:** {generate_progress_bar(player.sex_drive, high_is_bad=True)} `{player.sex_drive:.0f}%`"
-        )
-        embed.add_field(name="🔥 Désirs & Envies", value=cravings, inline=True)
+            embed.add_field(name="\u200b", value="\u200b", inline=False) # Spacer
 
-        # Santé Physique
-        phys_health = (
-            f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`\n"
-            f"**Énergie:** {generate_progress_bar(player.energy)} `{player.energy:.0f}%`\n"
-            f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n"
-        )
-        embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=False)
-
-        mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
-        embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
-
-        embed.add_field(name="\u200b", value="\u200b", inline=False) # Spacer
-
-        symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`")
-        embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
-        
-        addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)}`{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
-        embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
-        
-        if player.is_sick:
-            embed.add_field(name="État Actuel", value="**Malade 🤒**", inline=False)
+            symptoms = (f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`\n" f"**Nausée:** {generate_progress_bar(player.nausea, high_is_bad=True)} `{player.nausea:.0f}%`\n" f"**Vertiges:** {generate_progress_bar(player.dizziness, high_is_bad=True)} `{player.dizziness:.0f}%`\n" f"**Gorge Irritée:** {generate_progress_bar(player.sore_throat, high_is_bad=True)} `{player.sore_throat:.0f}%`")
+            embed.add_field(name="🤕 Symptômes", value=symptoms, inline=True)
+            
+            addiction = (f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)}`{player.substance_addiction_level:.1f}%`\n" f"**Manque:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n" f"**Défonce:** {generate_progress_bar(player.intoxication_level, high_is_bad=True)} `{player.intoxication_level:.1f}%`")
+            embed.add_field(name="🚬 Addiction", value=addiction, inline=True)
+            
+            if player.is_sick:
+                embed.add_field(name="État Actuel", value="**Malade 🤒**", inline=False)
         embed.set_footer(text=f"Jeu sur le serveur {guild.name} • Dernière mise à jour :")
         embed.timestamp = datetime.datetime.utcnow()
         return embed
@@ -309,7 +306,10 @@ class MainEmbed(commands.Cog):
 
             # --- NAVIGATION PRINCIPALE ---
             if custom_id == "nav_main_menu":
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView())
+                await interaction.edit_original_response(
+                    embed=self.generate_dashboard_embed(player, state, interaction.guild, show_stats=False, image_is_hidden=False),
+                    view=DashboardView(show_stats=False, image_is_hidden=False)
+                )
             elif custom_id == "nav_actions":
                 await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=ActionsView(player))
             elif custom_id == "nav_inventory":

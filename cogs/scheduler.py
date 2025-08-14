@@ -68,23 +68,13 @@ class Scheduler(commands.Cog):
                         setattr(player, key, value)
                 
                 # --- 3. ÉVÉNEMENTS ALÉATOIRES ---
-                # Easter Egg pour la vie sentimentale
-                if player.sex_drive > 70 and random.random() < 0.05: # 5% de chance/min si libido haute
-                    random_message = random.choice([
-                        "Salut, dsl pour hier soir, ma grand-mère est tombée dans les escaliers. On remet ça ?",
-                        "Vu. 21:54",
-                        "Hey ! Ce soir ça va pas être possible, j'ai aquaponey.",
-                        "Désolé, je crois pas que ça va le faire entre nous. T'es un mec bien mais...",
-                        "C'est qui ?"
-                    ])
-                    if not player.messages: player.messages = ""
-                    player.messages += f"\n---\nDe: Inconnu\n{random_message}"
-                    player.sex_drive = clamp(player.sex_drive - 40, 0, 100) 
-                    try:
-                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
-                        await channel.send("📳 Le téléphone du cuisinier a vibré. Il a l'air contrarié...")
-                    except (discord.NotFound, discord.Forbidden):
-                        pass
+                # Exemple : notification d'événement critique
+                if player.health < 20:
+                    notif = "⚠️ Santé critique !"
+                    if not player.notification_history:
+                        player.notification_history = ""
+                    player.notification_history += f"\n{notif}"
+                    # (ne plus envoyer de message dans le canal)
 
                 # --- 4. MISE À JOUR ET COMMIT ---
                 player.last_update = current_time
