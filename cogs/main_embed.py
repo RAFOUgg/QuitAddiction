@@ -127,20 +127,27 @@ class MainEmbed(commands.Cog):
         self.bot.add_view(InventoryView())
 
     def get_character_thoughts(self, player: PlayerProfile) -> str:
-        """Détermine la pensée la plus urgente du personnage."""
-        if player.health < 30: return "Je... je ne me sens pas bien du tout. J'ai mal partout."
-        if player.withdrawal_severity > 60: return "Ça tremble... il m'en faut une, et vite. Je n'arrive plus à réfléchir."
-        if player.thirst > 80: return "J'ai la gorge complètement sèche, je pourrais boire n'importe quoi."
-        if player.hunger > 75: return "Mon estomac gargouille si fort, il faut que je mange."
-        if player.fatigue > 80: return "Mes paupières sont lourdes, je pourrais m'endormir debout."
-        if player.stress > 70: return "J'ai les nerfs à vif, tout m'angoisse."
-        if player.bladder > 90: return "J'ai une envie pressante, je ne vais plus tenir longtemps !"
-        if player.withdrawal_severity > 20: return "Je commence à sentir le manque... Une cigarette me ferait du bien."
-        if player.boredom > 60: return "Je m'ennuie... il ne se passe jamais rien."
+        thoughts = {
+            95: (player.thirst > 85, "J'ai la gorge complètement sèche, je pourrais boire n'importe quoi."),
+            90: (player.hunger > 80, "Mon estomac gargouille si fort, il faut que je mange."),
+            85: (player.withdrawal_severity > 60, "Ça tremble... il m'en faut une, vite. Je peux plus réfléchir."),
+            80: (player.fatigue > 85, "Mes paupières sont lourdes, je pourrais m'endormir debout."),
+            75: (player.bladder > 90, "J'ai une envie TRÈS pressante, je vais plus tenir !"),
+            70: (player.stress > 70, "J'ai les nerfs à vif, tout m'angoisse."),
+            60: (player.sex_drive > 80, "Je me sens un peu seul... une présence me ferait du bien."),
+            50: (player.craving_nicotine > 40, "Une clope me calmerait, là."),
+            40: (player.health < 40, "Je... je ne me sens pas bien. J'ai mal partout."),
+            30: (player.boredom > 60, "Je m'ennuie... il ne se passe jamais rien."),
+            20: (player.craving_alcohol > 50, "Un verre me détendrait bien..."),
+        }
+        # Retourne la pensée la plus prioritaire (clé la plus haute) qui est vraie
+        for priority in sorted(thoughts.keys(), reverse=True):
+            condition, text = thoughts[priority]
+            if condition:
+                return text
         return "Pour l'instant, ça va à peu près."
 
-    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild, show_stats: bool = False) -> discord.Embed:
-        """Génère l'embed de dashboard unique qui affiche TOUJOURS les stats."""
+    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
         asset_cog = self.bot.get_cog("AssetManager")
@@ -202,15 +209,29 @@ class MainEmbed(commands.Cog):
 
         # --- Section Stats (TOUJOURS affichée) ---
         # NOUVEAU: Besoins Vitaux
+        # Besoins Vitaux
         vital_needs = (
             f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
             f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
             f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`"
         )
-        embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=False)
+        embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=True)
 
-        phys_health = (f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n" f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n" f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n" f"**Toxines:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.0f}%`")
-        embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=True)
+        # Désirs & Envies
+        cravings = (
+            f"🚬 **Tabac:** {generate_progress_bar(player.craving_nicotine, high_is_bad=True)} `{player.craving_nicotine:.0f}%`\n"
+            f"🍺 **Alcool:** {generate_progress_bar(player.craving_alcohol, high_is_bad=True)} `{player.craving_alcohol:.0f}%`\n"
+            f"❤️ **Sexe:** {generate_progress_bar(player.sex_drive, high_is_bad=True)} `{player.sex_drive:.0f}%`"
+        )
+        embed.add_field(name="🔥 Désirs & Envies", value=cravings, inline=True)
+
+        # Santé Physique
+        phys_health = (
+            f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`\n"
+            f"**Énergie:** {generate_progress_bar(player.energy)} `{player.energy:.0f}%`\n"
+            f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`\n"
+        )
+        embed.add_field(name="❤️ Santé Physique", value=phys_health, inline=False)
 
         mental_health = (f"**Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n" f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n" f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n" f"**Ennui:** {generate_progress_bar(player.boredom, high_is_bad=True)} `{player.boredom:.0f}%`")
         embed.add_field(name="🧠 État Mental", value=mental_health, inline=True)
@@ -267,79 +288,56 @@ class MainEmbed(commands.Cog):
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
-        if not interaction.data or "custom_id" not in interaction.data: return
+        if not interaction.data or "custom_id" not in interaction.data:
+            return
+
+        # On répond immédiatement pour éviter les timeouts et les "Unknown Interaction".
+        # Cette étape est cruciale et résout le bug principal.
+        try:
+            await interaction.response.defer()
+        except (discord.errors.InteractionResponded, discord.errors.NotFound):
+            # Soit on a déjà répondu, soit l'interaction est trop vieille. Dans les deux cas, on ignore.
+            return
+            
         custom_id = interaction.data["custom_id"]
+        
+        # Ouvre une seule session de DB pour toute la gestion de l'interaction
         db = SessionLocal()
         try:
             player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
             if not player or not state:
-                return await interaction.followup.send("Erreur: Profil ou état du serveur introuvable.", ephemeral=True)
+                await interaction.followup.send("Erreur: Profil ou état du serveur introuvable.", ephemeral=True)
+                return
 
-            # Determine current image state from the message that triggered the interaction
-            image_is_currently_hidden = False
-            if interaction.message and interaction.message.embeds:
-                # The image is hidden if the .image attribute is empty.
-                image_is_currently_hidden = not interaction.message.embeds[0].image
+            # --- AIGUILLAGE ---
+            # 1. L'interaction concerne le téléphone ?
+            phone_cog = self.bot.get_cog("Phone")
+            if phone_cog and custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
+                await phone_cog.handle_interaction(interaction, db, player, state)
+                return # L'interaction a été gérée par le cog du téléphone
 
-            # --- Nouvelle Logique de Navigation ---
+            # 2. L'interaction concerne le dashboard principal / les actions
+            cooker_brain = self.bot.get_cog("CookerBrain")
+            
+            # --- Logique de navigation ---
             if custom_id == "nav_main_menu":
-                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=False)
-                view = DashboardView(show_stats=False)
-                try:
-                    await interaction.edit_original_response(embed=embed, view=view)
-                except discord.NotFound:
-                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-                return
-
-            elif custom_id == "nav_toggle_stats":
-                # Toggle stats
-                show_stats = False
-                if interaction.message and interaction.message.embeds:
-                    # On suppose que si le bouton est vert, stats sont affichées
-                    for row in interaction.message.components:
-                        for component in row.children:
-                            if getattr(component, 'custom_id', None) == 'nav_toggle_stats' and component.style == discord.ButtonStyle.success:
-                                show_stats = True
-                embed = self.generate_dashboard_embed(player, state, interaction.guild, show_stats=not show_stats)
-                view = DashboardView(show_stats=not show_stats)
-                try:
-                    await interaction.edit_original_response(embed=embed, view=view)
-                except discord.NotFound:
-                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-                return
+                embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                view = DashboardView()
+                await interaction.edit_original_response(embed=embed, view=view)
 
             elif custom_id == "nav_actions":
                 embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                view = ActionsView(player)
-                try:
-                    await interaction.edit_original_response(embed=embed, view=view)
-                except discord.NotFound:
-                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-                return
+                await interaction.edit_original_response(embed=embed, view=ActionsView(player))
 
             elif custom_id == "nav_inventory":
                 embed = self.generate_inventory_embed(player, interaction.guild)
-                view = InventoryView()
-                try:
-                    await interaction.edit_original_response(embed=embed, view=view)
-                except discord.NotFound:
-                    await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-                return
-
+                await interaction.edit_original_response(embed=embed, view=InventoryView())
+            
             elif custom_id == "nav_phone":
-                phone_cog = self.bot.get_cog("Phone")
-                if phone_cog:
-                    embed = self.generate_dashboard_embed(player, state, interaction.guild)
-                    embed.description = "Vous ouvrez votre téléphone."
-                    view = PhoneMainView(player)
-                    try:
-                        await interaction.edit_original_response(embed=embed, view=view)
-                    except discord.NotFound:
-                        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-                else:
-                    await interaction.followup.send("Erreur: Le module téléphone n'est pas chargé.", ephemeral=True)
-                return
+                embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                embed.description = "Vous ouvrez votre téléphone."
+                await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
 
             # --- Menus d'action dynamiques ---
             elif custom_id == "action_eat_menu":
@@ -350,7 +348,6 @@ class MainEmbed(commands.Cog):
                 await interaction.edit_original_response(embed=discord.Embed(title="🚬 Que voulez-vous fumer ?"), view=SmokeView(player))
             elif custom_id == "action_poop_menu":
                 await interaction.edit_original_response(embed=discord.Embed(title="💩 Besoin pressant..."), view=PoopView(player))
-            # --- Actions concrètes (à compléter dans CookerBrain) ---
             elif custom_id.startswith("eat_") or custom_id.startswith("drink_") or custom_id.startswith("smoke_") or custom_id == "do_poop":
                 # Appelle la méthode correspondante de CookerBrain selon l'action
                 cooker_brain = self.bot.get_cog("CookerBrain")
@@ -359,13 +356,25 @@ class MainEmbed(commands.Cog):
                 # ...existing code...
                 pass
             # ...autres actions...
+            # --- Actions concrètes (à compléter dans CookerBrain) ---
+            elif custom_id == "action_sleep":
+                 message, changes = cooker_brain.perform_sleep(player)
+                 db.commit()
+                 # retour au menu principal après action
+                 await interaction.followup.send(message, ephemeral=True)
+                 embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                 await interaction.edit_original_response(embed=embed, view=ActionsView(player))
+            else:
+                 await interaction.followup.send(f"Action '{custom_id}' non reconnue.", ephemeral=True)
+            
         except Exception as e:
+            print(f"Erreur critique dans le listener on_interaction: {e}")
             traceback.print_exc()
-            if not interaction.response.is_done():
-                await interaction.followup.send("Une erreur est survenue.", ephemeral=True)
+            if not interaction.is_expired():
+                await interaction.followup.send("Une erreur majeure est survenue.", ephemeral=True)
             db.rollback()
         finally:
-            db.close()
+            db.close() # S'assure que la connexion est toujours fermée
 
 async def setup(bot):
     await bot.add_cog(MainEmbed(bot))

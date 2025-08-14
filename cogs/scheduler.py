@@ -27,11 +27,13 @@ class Scheduler(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def tick(self):
-        main_embed_cog = self.bot.get_cog("MainEmbed")
-        cooker_brain = self.bot.get_cog("CookerBrain")
-        if not main_embed_cog or not cooker_brain:
-            print("Scheduler tick skipped: MainEmbed or CookerBrain cog not ready.")
-            return
+        current_time = datetime.datetime.utcnow()
+        db = SessionLocal()
+        try:
+            active_games = db.query(ServerState).filter(ServerState.game_started == True).all()
+            for server_state in active_games:
+                player = db.query(PlayerProfile).filter_by(guild_id=server_state.guild_id).first()
+                if not player: continue
 
         current_time = datetime.datetime.utcnow()
         db = SessionLocal()
@@ -84,10 +86,15 @@ class Scheduler(commands.Cog):
                     message, _ = cooker_brain.perform_drink(player); action_log_message = f"💧 Déshydraté, il a bu."; action_taken = True
                 
                 # --- 4. RÉACTIONS EN CHAÎNE ---
+
                 time_since_last_smoke = current_time - (player.last_smoked_at or current_time)
                 state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
                 updated_state = chain_reactions(state_dict, time_since_last_smoke)
+                for key, value in updated_state.items():
+                    if hasattr(player, key): setattr(player, key, value)
+                
                 # --- NEW: Detailed logging in test mode ---
+                
                 if server_state.is_test_mode:
                     print(f"[TEST][{server_state.guild_id}] Chain reaction input: {state_dict}")
                     print(f"[TEST][{server_state.guild_id}] Chain reaction output: {updated_state}")
@@ -95,8 +102,8 @@ class Scheduler(commands.Cog):
                     if hasattr(player, key): setattr(player, key, value)
                 
                 # --- 5. ÉVÉNEMENTS ALÉATOIRES (ex: tomber malade) ---
+
                 if not player.is_sick:
-                    # Chance de base très faible, augmentée massivement par un système immunitaire bas
                     sickness_chance = (100 - player.immune_system) / 5000.0 
                     if random.random() < sickness_chance:
                         player.is_sick = True
@@ -109,18 +116,14 @@ class Scheduler(commands.Cog):
                 player.last_update = current_time
                 db.commit()
 
-                if player.sex_drive > 60 and random.random() < 0.05: # 5% de chance par minute si la libido est haute
+                if player.sex_drive > 70 and random.random() < 0.05: # 5% de chance/min si la libido est haute
                     random_message = random.choice([
-                        "Salut, dsl pour hier soir, ma grand-mère est tombée dans les escaliers. On remet ça ?",
-                        "Vu. 21:54",
-                        "Hey ! Ce soir ça va pas être possible, j'ai aquaponey.",
-                        "Désolé, je crois pas que ça va le faire entre nous. T'es un mec bien mais...",
-                        "C'est qui ?",
+                        "Salut, dsl pour hier soir, ma grand-mère est tombée dans les escaliers. On remet ça ?", "Vu. 21:54", "Hey ! Ce soir ça va pas être possible, j'ai aquaponey.",
+                        "Désolé, je crois pas que ça va le faire entre nous. T'es un mec bien mais...", "C'est qui ?"
                     ])
-                    # Ajoute le message à l'historique de SMS
-                    player.messages = f"{player.messages}\n---\nDe: Inconnu\n{random_message}"
-                    # Réinitialise un peu sa libido pour le calmer
-                    player.sex_drive = clamp(player.sex_drive - 30, 0, 100) 
+                    if not player.messages: player.messages = ""
+                    player.messages += f"\n---\nDe: Inconnu\n{random_message}"
+                    player.sex_drive = clamp(player.sex_drive - 40, 0, 100) 
                     try:
                         channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
                         await channel.send("📳 Le téléphone du cuisinier a vibré. Il a l'air contrarié...")
@@ -128,51 +131,31 @@ class Scheduler(commands.Cog):
                 
                 player.last_update = current_time
                 db.commit()
-                
-                # --- 6. MISE À JOUR DE L'INTERFACE & LOGGING ---
-                # On met à jour l'UI uniquement s'il y a un changement significatif ou toutes les 5 minutes.
-                significant_change = action_taken
-                
-                # Le logging autonome est géré ici
-                if significant_change and action_log_message:
-                    # Envoyer un message discret dans le canal
-                    try:
-                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
-                        await channel.send(f"**Pendant que vous aviez le dos tourné...**\n> {action_log_message}")
-                    except (discord.NotFound, discord.Forbidden): pass
-                
-                # On rafraîchit TOUJOURS le dashboard principal pour que les stats progressent visuellement.
                 try:
                     guild = self.bot.get_guild(int(server_state.guild_id))
                     channel = self.bot.get_channel(int(server_state.game_channel_id))
                     if guild and channel and server_state.game_message_id:
                         game_message = await channel.fetch_message(int(server_state.game_message_id))
-                        # IMPORTANT: On met à jour l'embed seulement si l'embed actuel est le dashboard
-                        # pour ne pas interrompre l'utilisateur s'il est dans la boutique par ex.
-                        if game_message.embeds and game_message.embeds[0].title == "👨‍🍳 Le Quotidien du Cuisinier":
-                           new_embed = main_embed_cog.generate_dashboard_embed(player, server_state, guild)
-                           # Ne pas changer la vue, juste le contenu de l'embed
-                           await game_message.edit(embed=new_embed)
+                        if game_message.embeds and "Le Quotidien du Cuisinier" in game_message.embeds[0].title:
+                           main_embed_cog = self.bot.get_cog("MainEmbed")
+                           if main_embed_cog:
+                               new_embed = main_embed_cog.generate_dashboard_embed(player, server_state, guild)
+                               await game_message.edit(embed=new_embed)
                 except (discord.NotFound, discord.Forbidden):
-                    print(f"Scheduler: Message/channel {server_state.game_message_id} introuvable pour la guilde {server_state.guild_id}.")
+                    pass # Le message a été supprimé, pas grave
                 except Exception as e:
                     print(f"Erreur lors du rafraîchissement de l'UI par le scheduler: {e}")
                     traceback.print_exc()
-
-                if server_state.is_test_mode:
-                    print(f"[TEST][{server_state.guild_id}] Player stats after tick: {[ (k, getattr(player, k)) for k in ['health','energy','hunger','thirst','bladder','fatigue','sanity','stress','happiness','boredom','pain','nausea','dizziness','headache','craving','urge_to_pee','stomachache'] ]}")
-
         except Exception as e:
             print(f"Erreur critique dans Scheduler.tick: {e}")
             traceback.print_exc()
             db.rollback()
         finally:
             db.close()
-
+            
     @tick.before_loop
     async def before_tick(self):
         await self.bot.wait_until_ready()
-        print("Scheduler prêt pour le tick.")
 
 async def setup(bot):
     await bot.add_cog(Scheduler(bot))
