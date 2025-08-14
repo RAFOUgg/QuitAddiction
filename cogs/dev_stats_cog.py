@@ -14,6 +14,7 @@ import dotenv
 # --- Imports ---
 from utils.embed_builder import create_styled_embed
 from utils.logger import get_logger
+from utils.helpers import format_time_delta # Ajout de l'import utilitaire
 
 # --- Setup ---
 dotenv.load_dotenv()
@@ -68,7 +69,6 @@ class DevStatsCog(commands.Cog):
     def get_loc_stats(self) -> dict:
         """Calculates local lines of code statistics using only git and Python."""
         try:
-            # Get the list of python files tracked by git
             files_process = subprocess.run(
                 ['git', 'ls-files', '*.py'], 
                 capture_output=True, text=True, check=True, encoding='utf-8'
@@ -113,8 +113,42 @@ class DevStatsCog(commands.Cog):
                 await interaction.followup.send(f"❌ " + "\n".join(errors), ephemeral=True)
                 return
 
-            embed = create_styled_embed(title=f"📊 Project Stats - {GITHUB_REPO_NAME}", description="A snapshot of development activity.", color=discord.Color.dark_green())
-            # ... (Rest of embed logic)
+            # --- CORRECTION : LOGIQUE DE L'EMBED COMPLÉTÉE ---
+            embed = create_styled_embed(
+                title=f"📊 Project Stats - {GITHUB_REPO_NAME}",
+                description="A snapshot of development activity.",
+                color=discord.Color.dark_green()
+            )
+
+            # Section des stats de code
+            loc_value = (
+                f"**Total Lines:** `{loc_data['total_lines']:,}`\n"
+                f"**Total Characters:** `{loc_data['total_chars']:,}`\n"
+                f"**Python Files:** `{loc_data['total_files']}`"
+            )
+            embed.add_field(name="<:python:1234567890> Codebase Stats", value=loc_value, inline=True) # Remplacez l'ID par un emoji valide
+
+            # Section des stats de commit
+            commit_value = (
+                f"**Total Commits:** `{commit_data['total_commits']}`\n"
+                f"**Estimated Dev Time:** `{format_time_delta(commit_data['estimated_duration'])}`\n"
+                f"**Last Activity:** <t:{int(commit_data['last_commit_date'].timestamp())}:R>"
+            )
+            embed.add_field(name="<:github:1234567890> Commit Activity", value=commit_value, inline=True) # Remplacez l'ID par un emoji valide
+
+            # Ajout d'une section sur les dates
+            project_lifespan = datetime.now().astimezone() - commit_data['first_commit_date']
+            embed.add_field(
+                name="🗓️ Project Timeline",
+                value=(
+                    f"**First Commit:** <t:{int(commit_data['first_commit_date'].timestamp())}:D>\n"
+                    f"**Project Age:** `{format_time_delta(project_lifespan)}`"
+                ),
+                inline=False
+            )
+            
+            embed.set_footer(text=f"Stats as of {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
             await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
             logger.error(f"Critical error in /project_stats: {e}", exc_info=True)

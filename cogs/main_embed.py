@@ -23,7 +23,7 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     return f"`{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}`"
 
 # --- VUES (inchangées) ---
-
+# ... (Les classes de View restent les mêmes) ...
 class DashboardView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
@@ -93,6 +93,7 @@ class SmokeView(ui.View):
         if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
+
 # --- COG ---
 
 class MainEmbed(commands.Cog):
@@ -154,57 +155,56 @@ class MainEmbed(commands.Cog):
                  embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
 
-        # --- NOUVELLE VUE "CERVEAU" COMPACTE ET AMÉLIORÉE ---
+        # --- NOUVELLE VUE "CERVEAU" AVEC ALIGNEMENT CORRIGÉ ---
         if player.show_stats_in_view:
-            # Colonne 1: État physique et besoins immédiats
-            col1_title = "🧬 État Général"
+            # Helper function to create a stat line
+            def stat_line(name: str, value: float, high_is_bad: bool):
+                return f"**{name}** `{int(value)}/100`\n{generate_progress_bar(value, high_is_bad=high_is_bad)}"
+
+            # Colonne 1: État physique et besoins
+            col1_title = "🧬 État Physique"
             col1_text = (
-                f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n"
-                f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n"
-                f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
-                f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
-                f"**Hygiène:** {generate_progress_bar(player.hygiene, high_is_bad=False)} `{player.hygiene:.0f}%`"
+                f"{stat_line('Santé', player.health, False)}\n"
+                f"{stat_line('Énergie', player.energy, False)}\n"
+                f"{stat_line('Faim', player.hunger, True)}\n"
+                f"{stat_line('Soif', player.thirst, True)}"
             )
             embed.add_field(name=col1_title, value=col1_text, inline=True)
 
-            # Colonne 2: État mental et force intérieure
+            # Colonne 2: État mental et volonté
             col2_title = "🧠 Mental & Volonté"
             col2_text = (
-                f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
-                f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
-                f"**Volonté:** {generate_progress_bar(player.willpower, high_is_bad=False)} `{player.willpower:.0f}%`\n"
-                f"**S. Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`\n"
-                f"**Culpabilité:** {generate_progress_bar(player.guilt, high_is_bad=True)} `{player.guilt:.0f}%`"
+                f"{stat_line('Humeur', player.happiness, False)}\n"
+                f"{stat_line('Stress', player.stress, True)}\n"
+                f"{stat_line('Volonté', player.willpower, False)}\n"
+                f"{stat_line('Hygiène', player.hygiene, False)}"
             )
             embed.add_field(name=col2_title, value=col2_text, inline=True)
 
-            # Colonne 3: Addiction et ses conséquences physiques
-            # Déterminer l'envie la plus forte
+            # Colonne 3: Addiction et symptômes
             cravings = {
-                "Nicotine": player.craving_nicotine,
-                "Alcool": player.craving_alcohol,
-                "Cannabis": player.craving_cannabis
+                "Nicotine": player.craving_nicotine, "Alcool": player.craving_alcohol, "Cannabis": player.craving_cannabis
             }
             dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1])
-            craving_display = "Nulle"
-            if dominant_craving_val > 10: # Seuil pour afficher l'envie
-                craving_display = f"{dominant_craving_name}"
+            
+            # Afficher l'envie seulement si elle est significative
+            envie_text = f"**Envie ({dominant_craving_name})** `{int(dominant_craving_val)}/100`\n{generate_progress_bar(dominant_craving_val, True)}" if dominant_craving_val > 10 else f"**Envie** `Nulle`\n{generate_progress_bar(0, True)}"
 
             col3_title = "🚬 Addiction & Symptômes"
             col3_text = (
-                f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n"
-                f"**Sevrage:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n"
-                f"**Toxine:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.1f}%`\n"
-                f"**Envie:** {generate_progress_bar(dominant_craving_val, high_is_bad=True)} `{craving_display}`\n"
-                f"**Douleur:** {generate_progress_bar(player.pain, high_is_bad=True)} `{player.pain:.0f}%`"
+                f"**Dépendance** `{int(player.substance_addiction_level)}%`\n{generate_progress_bar(player.substance_addiction_level, True)}\n"
+                f"**Sevrage** `{int(player.withdrawal_severity)}%`\n{generate_progress_bar(player.withdrawal_severity, True)}\n"
+                f"{envie_text}\n"
+                f"**Toxine** `{int(player.tox)}%`\n{generate_progress_bar(player.tox, True)}"
             )
             embed.add_field(name=col3_title, value=col3_text, inline=True)
+
 
         embed.set_footer(text=f"Jeu sur {guild.name}")
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 
-    # Le listener on_interaction reste identique à la version précédente, qui était déjà corrigée.
+    # Le listener on_interaction reste identique à la version précédente.
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data:
