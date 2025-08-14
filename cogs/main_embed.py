@@ -18,7 +18,6 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     value = clamp(value, 0, max_value)
     percent = value / max_value
     filled_blocks = int(length * percent)
-    # Couleurs plus distinctes
     bar_filled = '🟥' if (high_is_bad and percent > 0.75) or (not high_is_bad and percent < 0.25) else '🟧' if (high_is_bad and percent > 0.5) or (not high_is_bad and percent < 0.5) else '🟩'
     bar_empty = '⬛'
     return f"{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}"
@@ -155,50 +154,42 @@ class MainEmbed(commands.Cog):
                  embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
 
-        # --- VUE "CERVEAU" FINALE - ALIGNEMENT PARFAIT ---
+        # --- VUE "CERVEAU" AVEC NOUVELLE MISE EN PAGE SUR 2 LIGNES ---
         if player.show_stats_in_view:
-            # Helper function to create a clean stat line.
             def stat_line(name: str, value: float, high_is_bad: bool):
-                # Le formatage `{name:<10}` ajoute des espaces pour aligner les barres.
-                # Ajustez la valeur (10) si nécessaire pour vos noms de stats.
-                return f"`{name:<10}` {generate_progress_bar(value, high_is_bad=high_is_bad)} `{int(value)}%`"
+                return f"**{name} :** {int(value)}%\n{generate_progress_bar(value, high_is_bad=high_is_bad)}"
 
-            # Colonne 1: État physique et besoins
             col1_title = "🧬 État Physique"
             col1_text = (
-                f"{stat_line('Santé', player.health, False)}\n"
-                f"{stat_line('Énergie', player.energy, False)}\n"
-                f"{stat_line('Hygiène', player.hygiene, False)}\n"
+                f"{stat_line('Santé', player.health, False)}\n\n"
+                f"{stat_line('Énergie', player.energy, False)}\n\n"
+                f"{stat_line('Hygiène', player.hygiene, False)}\n\n"
                 f"{stat_line('Fatigue', player.fatigue, True)}"
             )
             embed.add_field(name=col1_title, value=col1_text, inline=True)
 
-            # Colonne 2: État mental et volonté
             col2_title = "🧠 Mental"
             col2_text = (
-                f"{stat_line('Humeur', player.happiness, False)}\n"
-                f"{stat_line('Stress', player.stress, True)}\n"
-                f"{stat_line('Volonté', player.willpower, False)}\n"
+                f"{stat_line('Humeur', player.happiness, False)}\n\n"
+                f"{stat_line('Stress', player.stress, True)}\n\n"
+                f"{stat_line('Volonté', player.willpower, False)}\n\n"
                 f"{stat_line('S. Mentale', player.sanity, False)}"
             )
             embed.add_field(name=col2_title, value=col2_text, inline=True)
-
-            # Colonne 3: Addiction et symptômes
-            cravings = {
-                "Nicotine": player.craving_nicotine, "Alcool": player.craving_alcohol, "Cannabis": player.craving_cannabis
-            }
-            dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1])
             
-            envie_text = f"{stat_line('Envie', dominant_craving_val, True)}" if dominant_craving_val > 10 else f"{stat_line('Envie', 0, True)}"
+            cravings = { "Nicotine": player.craving_nicotine, "Alcool": player.craving_alcohol, "Cannabis": player.craving_cannabis }
+            dominant_craving_name, dominant_craving_val = max(cravings.items(), key=lambda item: item[1])
+            envie_text = f"**Envie :** {int(dominant_craving_val)}%\n{generate_progress_bar(dominant_craving_val, True)}" if dominant_craving_val > 10 else f"**Envie :** 0%\n{generate_progress_bar(0, True)}"
 
             col3_title = "🚬 Addiction"
             col3_text = (
-                f"{stat_line('Dépendance', player.substance_addiction_level, True)}\n"
-                f"{stat_line('Sevrage', player.withdrawal_severity, True)}\n"
-                f"{envie_text}\n"
+                f"{stat_line('Dépendance', player.substance_addiction_level, True)}\n\n"
+                f"{stat_line('Sevrage', player.withdrawal_severity, True)}\n\n"
+                f"{envie_text}\n\n"
                 f"{stat_line('Toxine', player.tox, True)}"
             )
             embed.add_field(name=col3_title, value=col3_text, inline=True)
+
 
         embed.set_footer(text=f"Jeu sur {guild.name}")
         embed.timestamp = datetime.datetime.utcnow()

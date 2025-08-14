@@ -33,7 +33,8 @@ class DevStatsCog(commands.Cog):
     def generate_contribution_graph(self, commits: list) -> str:
         """Génère un graphique de contribution textuel pour le mois en cours."""
         today = date.today()
-        # CORRECTION: Utiliser les ID complets des emojis pour un affichage correct
+        # NOTE : Assurez-vous que le bot est sur le serveur où ces emojis sont hébergés.
+        # Le format <a:nom:id> pour les emojis animés ou <:nom:id> pour les statiques est crucial.
         contribution_emojis = [
             "<:g_d:1186717540974411887>", "<:g_l:1186717537023348836>", 
             "<:g_m:1186717534473175111>", "<:g_h:1186717531956551731>", 
@@ -47,13 +48,15 @@ class DevStatsCog(commands.Cog):
                 commits_per_day[commit_date.day] += 1
         
         cal = calendar.monthcalendar(today.year, today.month)
-        graph = f"`{'Mo Tu We Th Fr Sa Su'}`\n" # En-têtes en anglais, plus courts
+        # CORRECTION : Utilisation d'un caractère spécial (espace insécable) pour les jours vides
+        # et s'assurer que les emojis sont traités comme une seule unité.
+        graph = f"`{'Mo Tu We Th Fr Sa Su'}`\n" 
 
         for week in cal:
-            week_str = ""
+            week_parts = []
             for day_num in week:
                 if day_num == 0:
-                    week_str += "   " # Utiliser des espaces insécables ou des emojis vides si besoin
+                    week_parts.append("\u2003") # Espace de largeur M
                 else:
                     count = commits_per_day.get(day_num, 0)
                     if count == 0: level = 0
@@ -61,11 +64,12 @@ class DevStatsCog(commands.Cog):
                     elif count <= 5: level = 2
                     elif count <= 9: level = 3
                     else: level = 4
-                    week_str += contribution_emojis[level] + "" # Pas d'espace après l'emoji
-            graph += week_str.strip() + "\n"
+                    week_parts.append(contribution_emojis[level])
+            graph += " ".join(week_parts) + "\n"
             
         return graph.strip()
 
+    # ... (le reste du fichier dev_stats_cog.py reste identique à la version précédente) ...
     async def get_commit_stats(self) -> dict:
         if not all([GITHUB_TOKEN, GITHUB_REPO_OWNER, GITHUB_REPO_NAME]):
             return {"error": "Missing GitHub configuration in .env file."}
@@ -78,14 +82,11 @@ class DevStatsCog(commands.Cog):
         
         try:
             async with aiohttp.ClientSession() as session:
-                # Requête pour le nombre total de commits (légère)
                 async with session.get(api_url, headers=headers, params={"per_page": 1}) as response:
                     if response.status == 200 and 'Link' in response.headers:
                         link_header = response.headers['Link']
-                        # Extrait le numéro de la dernière page, qui correspond au nombre total de commits
                         total_commits_count = int(link_header.split('>; rel="last"')[0].split('page=')[-1])
                 
-                # Requête pour les commits des 90 derniers jours pour les calculs de temps et le graphique
                 since_date = (datetime.utcnow() - timedelta(days=90)).isoformat()
                 async with session.get(api_url, headers=headers, params={"per_page": 100, "since": since_date}) as response:
                     if response.status != 200:
@@ -120,7 +121,6 @@ class DevStatsCog(commands.Cog):
         }
 
     def get_loc_stats(self) -> dict:
-        """Calculates local lines of code statistics using only git and Python."""
         try:
             files_process = subprocess.run(
                 ['git', 'ls-files', '*.py'], 
@@ -178,7 +178,6 @@ class DevStatsCog(commands.Cog):
             )
             embed.add_field(name="<:python:1186326476140511313> Codebase", value=loc_value, inline=True)
 
-            # CORRECTION: Réintégration de la durée estimée et affichage du total des commits
             commit_value = (
                 f"**Total Commits:** `{commit_data['total_commits_all_time']}`\n"
                 f"**Dev Time (90d):** `{format_time_delta(commit_data['estimated_duration_90_days'])}`\n"
