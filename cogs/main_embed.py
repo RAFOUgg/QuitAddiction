@@ -46,14 +46,33 @@ class ActionsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
-        cooldown_active = player.last_action_at and (now - player.last_action_at).total_seconds() < 10
-        self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️", disabled=cooldown_active))
-        self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧", disabled=cooldown_active))
-        self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬", disabled=cooldown_active))
-        self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️", disabled=cooldown_active))
-        if player.hygiene < 40: self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.blurple, custom_id="action_shower", emoji="🚿", row=1, disabled=cooldown_active))
-        if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1, disabled=cooldown_active))
-        if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩", row=1, disabled=cooldown_active))
+        
+        # NOUVEAU: Vérifie si le joueur est actuellement en cooldown
+        is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
+        
+        # Le bouton Retour est toujours actif
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
+
+        if is_on_cooldown:
+            remaining_seconds = int((player.action_cooldown_end_time - now).total_seconds())
+            # Ajoute un seul bouton désactivé pour indiquer que le joueur est occupé
+            self.add_item(ui.Button(
+                label=f"Occupé pour {remaining_seconds}s...",
+                style=discord.ButtonStyle.secondary,
+                disabled=True,
+                row=0,
+                emoji="⏳"
+            ))
+        else:
+            # Si pas de cooldown, affiche les boutons d'action normaux
+            self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️"))
+            self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
+            # ... (autres boutons d'action) ...
+            self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬"))
+            self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️"))
+            if player.hygiene < 40: self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.blurple, custom_id="action_shower", emoji="🚿", row=1))
+            if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1))
+            if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩", row=1))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
 
 class EatView(ui.View):
@@ -178,7 +197,12 @@ class MainEmbed(commands.Cog):
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
 
             # --- ROUTEUR D'INTERACTION PRINCIPAL ---
-
+            now = datetime.datetime.utcnow()
+            if player.action_cooldown_end_time and now < player.action_cooldown_end_time:
+                remaining = int((player.action_cooldown_end_time - now).total_seconds())
+                await interaction.response.send_message(f"⏳ Vous êtes occupé pour encore {remaining} secondes.", ephemeral=True)
+                return # Bloque l'action
+            
             # 1. Gérer les interactions du téléphone (délégué au cog Phone)
             is_phone_interaction = custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_"))
             if is_phone_interaction:
@@ -223,10 +247,16 @@ class MainEmbed(commands.Cog):
                     "smoke_ecigarette": cooker_brain.use_ecigarette,
                 }
                 if custom_id in action_map:
-                    message, _ = action_map[custom_id](player)
-                    player.last_action_at = datetime.datetime.utcnow()
-                    await interaction.followup.send(f"✅ {message}", ephemeral=True)
-                    # Après une action, on retourne au menu des actions
+                    message, _, duration = action_map[custom_id](player)
+                    if duration > 0:
+                        # Applique le nouveau cooldown
+                        player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
+                        await interaction.followup.send(f"✅ {message} (Cela prendra {duration}s).", ephemeral=True)
+                    else:
+                        # Si duration est 0, c'est une action qui a échoué (ex: pas d'objet)
+                        await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
+
+                    # Après l'action, on retourne au menu des actions qui affichera le cooldown
                     db.commit()
                     await interaction.edit_original_response(
                         embed=self.generate_dashboard_embed(player, state, interaction.guild),
