@@ -9,12 +9,14 @@ import datetime
 import traceback
 from .phone import PhoneMainView, Phone
 from utils.helpers import clamp
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 10, high_is_bad: bool = False) -> str:
     if not isinstance(value, (int, float)): value = 0.0
     value = clamp(value, 0, max_value)
     percent = value / max_value
-    filled_blocks = int(length * percent)
     bar_filled = '🟥' if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3) else '🟧' if (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6) else '🟩'
     bar_empty = '⬛'
     return f"`{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}`"
@@ -41,7 +43,6 @@ class DashboardView(ui.View):
         stats_style = discord.ButtonStyle.success if player.show_stats_in_view else discord.ButtonStyle.secondary
         self.add_item(ui.Button(label=stats_label, style=stats_style, custom_id="nav_toggle_stats", row=1, emoji="🧠"))
 
-# ... (Les autres vues comme ActionsView, EatView etc. restent identiques)
 class ActionsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
@@ -67,13 +68,11 @@ class ActionsView(ui.View):
             # Si pas de cooldown, affiche les boutons d'action normaux
             self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️"))
             self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
-            # ... (autres boutons d'action) ...
             self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬"))
             self.add_item(ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️"))
             if player.hygiene < 40: self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.blurple, custom_id="action_shower", emoji="🚿", row=1))
             if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1))
             if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩", row=1))
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
 
 class EatView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -143,38 +142,65 @@ class MainEmbed(commands.Cog):
 
         embed.description = f"**Pensées du Cuisinier :**\n*\"{self.get_character_thoughts(player)}\"*"
 
-        # --- NOUVELLE LOGIQUE D'AFFICHAGE CONDITIONNEL ---
+        # --- LOGIQUE D'AFFICHAGE CONDITIONNEL CORRIGÉE ---
 
-        # 1. AFFICHER L'INVENTAIRE
+        # 1. AFFICHER L'INVENTAIRE (UNIQUEMENT LES OBJETS POSSÉDÉS)
         if player.show_inventory_in_view:
             inventory_items = [
                 ("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"),
                 ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"),
                 ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")
             ]
-            inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items]
+            # CORRIGÉ : On filtre pour n'afficher que les items avec une quantité > 0
+            inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items if getattr(player, attr, 0) > 0]
             
-            # Diviser en deux colonnes pour la lisibilité
-            mid_point = len(inventory_list) // 2 + (len(inventory_list) % 2)
-            col1 = "\n".join(inventory_list[:mid_point])
-            col2 = "\n".join(inventory_list[mid_point:])
-            
-            embed.add_field(name="🎒 Inventaire", value=col1 or "*Vide*", inline=True)
-            if col2:
-                embed.add_field(name="\u200b", value=col2, inline=True)
+            if inventory_list:
+                mid_point = len(inventory_list) // 2 + (len(inventory_list) % 2)
+                col1 = "\n".join(inventory_list[:mid_point])
+                col2 = "\n".join(inventory_list[mid_point:])
+                embed.add_field(name="🎒 Inventaire", value=col1, inline=True)
+                if col2:
+                    embed.add_field(name="\u200b", value=col2, inline=True)
+            else:
+                 embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
+
             embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
 
-        # 2. AFFICHER LES STATS (CERVEAU)
+        # 2. AFFICHER LES STATS DÉTAILLÉES (CERVEAU)
         if player.show_stats_in_view:
-            vital_needs = (f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
-                           f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
-                           f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`")
+            phys_state = (
+                f"**Santé:** {generate_progress_bar(player.health, high_is_bad=False)} `{player.health:.0f}%`\n"
+                f"**Énergie:** {generate_progress_bar(player.energy, high_is_bad=False)} `{player.energy:.0f}%`\n"
+                f"**Hygiène:** {generate_progress_bar(player.hygiene, high_is_bad=False)} `{player.hygiene:.0f}%`\n"
+                f"**Fatigue:** {generate_progress_bar(player.fatigue, high_is_bad=True)} `{player.fatigue:.0f}%`"
+            )
+            embed.add_field(name="🧬 État Physique", value=phys_state, inline=True)
+
+            vital_needs = (
+                f"**Faim:** {generate_progress_bar(player.hunger, high_is_bad=True)} `{player.hunger:.0f}%`\n"
+                f"**Soif:** {generate_progress_bar(player.thirst, high_is_bad=True)} `{player.thirst:.0f}%`\n"
+                f"**Vessie:** {generate_progress_bar(player.bladder, high_is_bad=True)} `{player.bladder:.0f}%`\n"
+                f"**Intestins:** {generate_progress_bar(player.bowels, high_is_bad=True)} `{player.bowels:.0f}%`"
+            )
             embed.add_field(name="⚠️ Besoins Vitaux", value=vital_needs, inline=True)
+
+            embed.add_field(name="\u200b", value="\u200b", inline=False) # Espaceur pour la clarté
+
+            mental_state = (
+                f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
+                f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
+                f"**Volonté:** {generate_progress_bar(player.willpower, high_is_bad=False)} `{player.willpower:.0f}%`\n"
+                f"**S. Mentale:** {generate_progress_bar(player.sanity, high_is_bad=False)} `{player.sanity:.0f}%`"
+            )
+            embed.add_field(name="🧠 État Mental", value=mental_state, inline=True)
             
-            mental_health = (f"**Stress:** {generate_progress_bar(player.stress, high_is_bad=True)} `{player.stress:.0f}%`\n"
-                             f"**Humeur:** {generate_progress_bar(player.happiness, high_is_bad=False)} `{player.happiness:.0f}%`\n"
-                             f"**Santé:** {generate_progress_bar(player.health)} `{player.health:.0f}%`")
-            embed.add_field(name="🧠 État Psycho-Physique", value=mental_health, inline=True)
+            addiction_state = (
+                f"**Dépendance:** {generate_progress_bar(player.substance_addiction_level, high_is_bad=True)} `{player.substance_addiction_level:.1f}%`\n"
+                f"**Sevrage:** {generate_progress_bar(player.withdrawal_severity, high_is_bad=True)} `{player.withdrawal_severity:.1f}%`\n"
+                f"**Tolérance:** {generate_progress_bar(player.substance_tolerance, high_is_bad=True)} `{player.substance_tolerance:.1f}%`\n"
+                f"**Toxine:** {generate_progress_bar(player.tox, high_is_bad=True)} `{player.tox:.1f}%`"
+            )
+            embed.add_field(name="🚬 Addiction", value=addiction_state, inline=True)
 
         embed.set_footer(text=f"Jeu sur {guild.name}")
         embed.timestamp = datetime.datetime.utcnow()
@@ -199,11 +225,12 @@ class MainEmbed(commands.Cog):
             # --- ROUTEUR D'INTERACTION PRINCIPAL ---
             now = datetime.datetime.utcnow()
             if player.action_cooldown_end_time and now < player.action_cooldown_end_time:
-                remaining = int((player.action_cooldown_end_time - now).total_seconds())
-                await interaction.response.send_message(f"⏳ Vous êtes occupé pour encore {remaining} secondes.", ephemeral=True)
+                # Si l'interaction a déjà eu une réponse (ex: defer), on ne peut pas en envoyer une nouvelle
+                if not interaction.response.is_done():
+                    remaining = int((player.action_cooldown_end_time - now).total_seconds())
+                    await interaction.response.send_message(f"⏳ Vous êtes occupé pour encore {remaining} secondes.", ephemeral=True)
                 return # Bloque l'action
             
-            # 1. Gérer les interactions du téléphone (délégué au cog Phone)
             is_phone_interaction = custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_"))
             if is_phone_interaction:
                 phone_cog = self.bot.get_cog("Phone")
@@ -211,32 +238,26 @@ class MainEmbed(commands.Cog):
                     await phone_cog.handle_interaction(interaction, db, player, state, self)
                 return
             
-            # Defer toutes les autres interactions du tableau de bord
             if not interaction.response.is_done():
                 await interaction.response.defer()
 
-            # 2. Gérer les toggles d'affichage
             if custom_id == "nav_toggle_stats":
                 player.show_stats_in_view = not player.show_stats_in_view
             elif custom_id == "nav_toggle_inventory":
                 player.show_inventory_in_view = not player.show_inventory_in_view
             
-            # 3. Gérer la navigation
             elif custom_id == "nav_main_menu":
-                # Ce bouton est maintenant le bouton "Retour" universel
-                pass # Ne fait rien d'autre que de rafraîchir la vue principale à la fin
+                pass
             elif custom_id == "nav_actions":
                 await interaction.edit_original_response(view=ActionsView(player))
-                return # Arrête l'exécution pour ne pas rafraîchir avec la vue principale
+                return
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
                 views = {"action_eat_menu": EatView, "action_drink_menu": DrinkView, "action_smoke_menu": SmokeView}
                 await interaction.edit_original_response(view=views[custom_id](player))
                 return
 
-            # 4. Gérer les actions du jeu
             else:
                 cooker_brain = self.bot.get_cog("CookerBrain")
-                message = None
                 action_map = {
                     "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint,
                     "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower,
@@ -249,22 +270,16 @@ class MainEmbed(commands.Cog):
                 if custom_id in action_map:
                     message, _, duration = action_map[custom_id](player)
                     if duration > 0:
-                        # Applique le nouveau cooldown
                         player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
-                        await interaction.followup.send(f"✅ {message} (Cela prendra {duration}s).", ephemeral=True)
+                        await interaction.followup.send(f"✅ {message}", ephemeral=True)
                     else:
-                        # Si duration est 0, c'est une action qui a échoué (ex: pas d'objet)
                         await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
-
-                    # Après l'action, on retourne au menu des actions qui affichera le cooldown
+                    
                     db.commit()
-                    await interaction.edit_original_response(
-                        embed=self.generate_dashboard_embed(player, state, interaction.guild),
-                        view=ActionsView(player)
-                    )
+                    # Après une action, on retourne au menu des actions pour voir le cooldown
+                    await interaction.edit_original_response(view=ActionsView(player))
                     return
             
-            # --- RAFRAÎCHISSEMENT FINAL ---
             db.commit()
             new_embed = self.generate_dashboard_embed(player, state, interaction.guild)
             new_view = DashboardView(player)
@@ -272,6 +287,11 @@ class MainEmbed(commands.Cog):
 
         except Exception as e:
             logger.error(f"Erreur critique dans on_interaction: {e}", exc_info=True)
+            if not interaction.is_expired():
+                try:
+                    await interaction.followup.send("Une erreur est survenue.", ephemeral=True)
+                except discord.errors.InteractionResponded:
+                    pass # Déjà répondu, on ne peut rien faire de plus
             db.rollback()
         finally:
             db.close()
