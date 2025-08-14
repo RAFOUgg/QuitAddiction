@@ -365,7 +365,7 @@ class AdminCog(commands.Cog):
         view.add_item(self.SetupGameModeButton("Mode & Duration", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
         view.add_item(self.ConfigButton(start_stop_label, start_stop_emoji, guild_id, start_stop_style, row=0, cog=self))
         view.add_item(self.GeneralConfigButton("Roles & Channels", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
-        view.add_item(self.NotificationsConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
+        view.add_item(self.ConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
         view.add_item(self.ConfigButton("View Stats", "📊", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
         view.add_item(self.ProjectStatsButton("Project Stats", guild_id, discord.ButtonStyle.secondary, row=1, cog=self))
         return view
