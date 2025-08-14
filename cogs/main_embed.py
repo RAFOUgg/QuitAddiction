@@ -286,13 +286,11 @@ class MainEmbed(commands.Cog):
         return embed
 
 
-    @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data:
             return
 
         try:
-            # Répondre immédiatement est la clé pour éviter le crash
             await interaction.response.defer()
         except (discord.errors.InteractionResponded, discord.errors.NotFound):
             return
@@ -309,50 +307,62 @@ class MainEmbed(commands.Cog):
 
             # --- AIGUILLAGE ---
             phone_cog = self.bot.get_cog("Phone")
-            # Les custom_id du téléphone sont uniques et préfixés
             if phone_cog and custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
                 await phone_cog.handle_interaction(interaction, db, player, state)
                 return
 
             cooker_brain = self.bot.get_cog("CookerBrain")
-            message, changes, view_to_refresh = None, {}, None
+            message, changes = None, {}
 
             # --- NAVIGATION PRINCIPALE ---
             if custom_id == "nav_main_menu":
                 await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView())
             elif custom_id == "nav_actions":
-                await interaction.edit_original_response(view=ActionsView(player))
+                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=ActionsView(player))
             elif custom_id == "nav_inventory":
                 await interaction.edit_original_response(embed=self.generate_inventory_embed(player, interaction.guild), view=InventoryView())
             elif custom_id == "nav_phone":
-                await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=PhoneMainView(player))
-            
+                embed = self.generate_dashboard_embed(player, state, interaction.guild)
+                embed.description = "Vous ouvrez votre téléphone."
+                await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
+
             # --- MENUS D'ACTIONS SECONDAIRES ---
             elif custom_id == "action_eat_menu":
-                await interaction.edit_original_response(embed=discord.Embed(title="🍽️ Que voulez-vous manger ?"), view=EatView(player))
+                await interaction.edit_original_response(embed=discord.Embed(title="🍽️ Que manger ?"), view=EatView(player))
             elif custom_id == "action_drink_menu":
-                await interaction.edit_original_response(embed=discord.Embed(title="💧 Que voulez-vous boire ?"), view=DrinkView(player))
+                await interaction.edit_original_response(embed=discord.Embed(title="💧 Que boire ?"), view=DrinkView(player))
             elif custom_id == "action_smoke_menu":
-                await interaction.edit_original_response(embed=discord.Embed(title="🚬 Que voulez-vous fumer ?"), view=SmokeView(player))
-            elif custom_id == "action_poop_menu":
-                await interaction.edit_original_response(embed=discord.Embed(title="💩 Besoin pressant..."), view=PoopView(player))
+                await interaction.edit_original_response(embed=discord.Embed(title="🚬 Que fumer ?"), view=SmokeView(player))
 
-            # --- Actions concrètes ---
+            # --- ACTIONS CONCRÈTES ---
             elif custom_id == "action_sleep":
                 message, changes = cooker_brain.perform_sleep(player)
             elif custom_id == "action_urinate":
                 message, changes = cooker_brain.perform_urinate(player)
-            elif custom_id == "smoke_cigarette":
-                message, changes = cooker_brain.perform_smoke(player)
+            # Actions depuis les sous-menus
             elif custom_id == "eat_food":
                  message, changes = cooker_brain.perform_eat(player)
+            elif custom_id == "eat_soup":
+                 message, changes = cooker_brain.use_soup(player)
+            elif custom_id == "drink_water":
+                # La méthode `perform_drink` gère déjà l'eau en priorité
+                message, changes = cooker_brain.perform_drink(player)
+            elif custom_id == "drink_beer":
+                message, changes = cooker_brain.use_beer(player)
+            elif custom_id == "smoke_cigarette":
+                message, changes = cooker_brain.perform_smoke(player)
 
             # Si une action concrète a été effectuée
             if message:
+                player.last_action_at = datetime.datetime.utcnow()
                 db.commit()
                 await interaction.followup.send(f"✅ {message}", ephemeral=True)
-                # Remettre à jour la vue des actions pour actualiser les cooldowns
-                await interaction.edit_original_response(view=ActionsView(player))
+                
+                # Après une action, on retourne toujours à la vue des actions pour voir les cooldowns
+                await interaction.edit_original_response(
+                    embed=self.generate_dashboard_embed(player, state, interaction.guild), 
+                    view=ActionsView(player)
+                )
 
         except Exception as e:
             print(f"Erreur critique dans le listener on_interaction: {e}")
