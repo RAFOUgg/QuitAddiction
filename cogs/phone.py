@@ -89,6 +89,11 @@ class Phone(commands.Cog):
 
     async def handle_interaction(self, interaction: discord.Interaction, db: Session, player: PlayerProfile, state: ServerState):
         """Gère toutes les interactions liées au téléphone."""
+        try:
+            await interaction.response.defer()
+        except discord.errors.InteractionResponded:
+            pass # Already deferred, likely by the main listener.
+
         custom_id = interaction.data["custom_id"]
         
         # Navigation
@@ -108,10 +113,6 @@ class Phone(commands.Cog):
 
         # Achats
         elif custom_id.startswith("shop_buy_") or custom_id.startswith("ubereats_buy_"):
-            message = "Transaction échouée ou article non implémenté."
-            cost, shop_type = 0, ""
-
-            # Articles
             items = {
                 "shop_buy_cigarettes": {"cost": 5, "action": lambda p: setattr(p, 'cigarettes', p.cigarettes + 10), "msg": "Vous avez acheté 10 cigarettes.", "type": "shop"},
                 "shop_buy_beer": {"cost": 3, "action": lambda p: setattr(p, 'beers', p.beers + 1), "msg": "Vous avez acheté une bière.", "type": "shop"},

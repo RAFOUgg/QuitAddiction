@@ -219,18 +219,25 @@ class MainEmbed(commands.Cog):
         custom_id = interaction.data["custom_id"]
         db = SessionLocal()
         try:
-            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
-            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
-            if not player or not state:
-                await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
-                return
-
-            await interaction.response.defer()
-
-            if custom_id.startswith("phone_"):
+            if custom_id.startswith(("phone_", "shop_buy_", "ubereats_buy_")):
+                player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
+                state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
+                if not player or not state:
+                    try: await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
+                    except discord.errors.InteractionResponded: pass
+                    return
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog: await phone_cog.handle_interaction(interaction, db, player, state)
                 return
+
+            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild.id)).first()
+            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
+            if not player or not state:
+                try: await interaction.response.send_message("Erreur: Profil ou état introuvable.", ephemeral=True)
+                except discord.errors.InteractionResponded: pass
+                return
+
+            await interaction.response.defer()
 
             if custom_id == "nav_toggle_stats":
                 player.show_stats_in_view = not player.show_stats_in_view
