@@ -278,7 +278,7 @@ class MainEmbed(commands.Cog):
         embed.timestamp = datetime.datetime.utcnow()
         return embed
 
-
+    @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data:
             return

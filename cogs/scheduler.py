@@ -16,7 +16,6 @@ class Scheduler(commands.Cog):
 
     async def cog_load(self):
         # S'assure que le tick ne démarre qu'une fois le bot complètement prêt.
-        await self.bot.wait_until_ready()
         if not self.tick.is_running():
             self.tick.start()
             print("Scheduler tick started.")
