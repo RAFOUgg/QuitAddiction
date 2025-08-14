@@ -66,7 +66,6 @@ class MainEmbed(commands.Cog):
         # Enregistre les vues persistantes au démarrage du bot
         self.bot.add_view(DashboardView())
         self.bot.add_view(InventoryView())
-        self.bot.add_view(PhoneMainView())
 
     def get_character_thoughts(self, player: PlayerProfile) -> str:
         """Détermine la pensée la plus urgente du personnage."""
@@ -202,16 +201,14 @@ class MainEmbed(commands.Cog):
                 await interaction.edit_original_response(embed=embed, view=view)
             
             elif custom_id == "nav_phone":
-                # Le téléphone prend le contrôle de l'affichage
-                # (géré par le cog Phone via `nav_phone` custom_id)
                 phone_cog = self.bot.get_cog("Phone")
                 if phone_cog:
-                    # Génère une version de l'embed pour l'écran du téléphone
                     embed = self.generate_dashboard_embed(player, state, interaction.guild)
                     embed.description = "Vous ouvrez votre téléphone."
-                    await interaction.edit_original_response(embed=embed, view=PhoneMainView())
-                else: # Fallback
-                     await interaction.followup.send("Erreur: Le module téléphone n'est pas chargé.", ephemeral=True)
+
+                    await interaction.edit_original_response(embed=embed, view=PhoneMainView(player))
+                else: 
+                    await interaction.followup.send("Erreur: Le module téléphone n'est pas chargé.", ephemeral=True)
 
             elif custom_id.startswith("action_"):
                 # --- Logique de gestion des actions (largement inchangée) ---

@@ -3,7 +3,8 @@
 from db.database import Base
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, BigInteger, UniqueConstraint, Text
 import datetime
-
+from sqlalchemy.orm import declarative_base
+Base = declarative_base()
 class ServerState(Base):
     __tablename__ = "server_state"
     id = Column(Integer, primary_key=True)
@@ -96,6 +97,8 @@ class PlayerProfile(Base):
 
     # --- Flags Narratifs ---
     has_unlocked_joints = Column(Boolean, default=False)
+    has_unlocked_smokeshop = Column(Boolean, default=False)
+    messages = Column(Text, default="")
 
     # --- Logging pour le mode test ---
     recent_logs = Column(Text, default="")
