@@ -38,7 +38,7 @@ class ServerState(Base):
     # Notification Toggles
     notify_on_low_vital_stat: bool = Column(Boolean, default=True)
     notify_on_critical_event: bool = Column(Boolean, default=True)
-    notify_on_envie_fumer: bool = Column(Boolean, default=True)
+    notify_on_craving: bool = Column(Boolean, default=True) # Renommé pour la cohérence
     notify_on_friend_message: bool = Column(Boolean, default=True)
     notify_on_shop_promo: bool = Column(Boolean, default=True)
 
@@ -109,7 +109,7 @@ class PlayerProfile(Base):
     salad_servings: int = Column(Integer, default=0)
     wine_bottles: int = Column(Integer, default=0)
     joints: int = Column(Integer, default=0)
-    
+
     # --- Notifications Config ---
     notifications_config: str = Column(Text, default="")
     notification_history: str = Column(Text, default="")

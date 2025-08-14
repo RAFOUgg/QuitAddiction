@@ -17,7 +17,7 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     filled_blocks = int(length * percent)
     bar_filled = '🟥' if (high_is_bad and percent > 0.7) or (not high_is_bad and percent < 0.3) else '🟧' if (high_is_bad and percent > 0.4) or (not high_is_bad and percent < 0.6) else '🟩'
     bar_empty = '⬛'
-    return f"`{bar_filled * filled_length}{bar_empty * (length - filled_length)}`"
+    return f"`{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}`"
 
 # --- VUES ---
 

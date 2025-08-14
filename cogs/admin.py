@@ -32,14 +32,13 @@ GITHUB_REPO_NAME = os.getenv("GITHUB_REPO_NAME")
 
 # --- NOUVELLE VUE DE PAGINATION (APPROCHE CORRECTE) ---
 
-class ItemSelect(ui.Select):
-    """ Un menu déroulant simple pour sélectionner un item (rôle/salon). """
-    def __init__(self, guild_id: str, select_type: Literal['admin_role', 'notification_role', 'game_channel'], id_mapping: dict, cog: 'AdminCog'):
+class RoleSelect(ui.Select):
+    def __init__(self, guild_id: str, setting_key: str, id_mapping: dict, cog: 'AdminCog'):
         self.guild_id = guild_id
-        self.select_type = select_type
+        self.setting_key = setting_key # Ex: "admin_role_id", "notify_craving_role_id"
         self.id_mapping = id_mapping
         self.cog = cog
-        super().__init__(placeholder=f"Select the item...", row=0)
+        super().__init__(placeholder="Sélectionnez un rôle...", row=0)
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -47,38 +46,28 @@ class ItemSelect(ui.Select):
         selected_id = self.id_mapping.get(selected_hash)
 
         if not selected_id:
-            await interaction.followup.send("Error: Could not find the selected item ID.", ephemeral=True)
+            await interaction.followup.send("Erreur: Rôle introuvable.", ephemeral=True)
             return
 
         db = SessionLocal()
         try:
             state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
             if not state:
-                await interaction.followup.send("Error: Server configuration not found.", ephemeral=True)
+                await interaction.followup.send("Erreur: Configuration du serveur introuvable.", ephemeral=True)
                 return
 
-            if self.select_type == "admin_role":
-                state.admin_role_id = selected_id
-                type_label = "Admin role"
-            elif self.select_type == "notification_role":
-                state.notification_role_id = selected_id
-                type_label = "Notification role"
-            else: # game_channel
-                state.game_channel_id = selected_id
-                type_label = "Game channel"
-
+            setattr(state, self.setting_key, selected_id)
             db.commit()
-            await interaction.followup.send(f"✅ {type_label} has been updated!", ephemeral=True)
+            
+            await interaction.followup.send(f"✅ Rôle mis à jour !", ephemeral=True)
             
             db.refresh(state)
-            new_embed = self.cog.generate_role_and_channel_config_embed(state)
-            new_view = self.cog.generate_general_config_view(self.guild_id, interaction.guild)
+            new_embed = self.cog.generate_notifications_config_embed(state)
+            new_view = self.cog.generate_notifications_config_view(self.guild_id)
             await interaction.edit_original_response(embed=new_embed, view=new_view)
-
         except Exception as e:
             db.rollback()
-            logger.error(f"Error updating {self.select_type}: {e}", exc_info=True)
-            await interaction.followup.send(f"A database error occurred: {e}", ephemeral=True)
+            logger.error(f"Erreur de mise à jour du rôle: {e}", exc_info=True)
         finally:
             db.close()
 
@@ -254,6 +243,79 @@ class AdminCog(commands.Cog):
             db.close()
 
     # --- Classes de Boutons et Menus ---
+    class NotificationsConfigButton(ui.Button):
+        def __init__(self, guild_id: str, cog: 'AdminCog'):
+            super().__init__(label="Notifications", emoji="🔔", style=discord.ButtonStyle.primary, row=1)
+            self.guild_id = guild_id
+            self.cog = cog
+            
+        async def callback(self, interaction: discord.Interaction):
+            db = SessionLocal()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                await interaction.response.edit_message(
+                    embed=self.cog.generate_notifications_config_embed(state),
+                    view=self.cog.generate_notifications_config_view(self.guild_id)
+                )
+            finally:
+                db.close()
+
+    def generate_notifications_config_embed(self, state: ServerState) -> discord.Embed:
+        embed = discord.Embed(title="🔔 Configuration des Rôles de Notification", description="Configurez quel rôle sera notifié pour chaque type d'événement.", color=discord.Color.gold())
+        
+        roles = {
+            "Général": state.notification_role_id,
+            "Vitals Faibles": state.notify_vital_low_role_id,
+            "Événement Critique": state.notify_critical_role_id,
+            "Manque / Envies": state.notify_craving_role_id,
+            "Message Ami": state.notify_friend_message_role_id,
+            "Promotion Boutique": state.notify_shop_promo_role_id
+        }
+        
+        value = "\n".join([f"**{name}:** {f'<@&{role_id}>' if role_id else 'Non défini'}" for name, role_id in roles.items()])
+        embed.add_field(name="Rôles Actuels", value=value)
+        embed.set_footer(text="Utilisez les menus déroulants pour changer un rôle.")
+        return embed
+
+    # Le menu déroulant pour choisir quel rôle configurer
+    class NotificationRoleTypeSelect(ui.Select):
+        def __init__(self, guild_id: str, cog: 'AdminCog'):
+            self.guild_id = guild_id
+            self.cog = cog
+            options = [
+                discord.SelectOption(label="Rôle de notification général", value="notification_role_id"),
+                discord.SelectOption(label="Rôle pour Vitals Faibles", value="notify_vital_low_role_id"),
+                discord.SelectOption(label="Rôle pour Événement Critique", value="notify_critical_role_id"),
+                discord.SelectOption(label="Rôle pour Manque / Envies", value="notify_craving_role_id"),
+                discord.SelectOption(label="Rôle pour Message Ami", value="notify_friend_message_role_id"),
+                discord.SelectOption(label="Rôle pour Promotion Boutique", value="notify_shop_promo_role_id"),
+            ]
+            super().__init__(placeholder="Choisir le type de notification à configurer...", options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            setting_key = self.values[0]
+            db = SessionLocal()
+            try:
+                state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                all_roles = interaction.guild.roles
+                options, id_mapping = self.cog.create_options_and_mapping(all_roles, "role", interaction.guild)
+                view = ui.View()
+                select_menu = RoleSelect(self.guild_id, setting_key, id_mapping, self.cog)
+                select_menu.options = options[:25] # Limite à 25 pour un seul menu
+                view.add_item(select_menu)
+                view.add_item(self.cog.BackButton("Retour", self.guild_id, discord.ButtonStyle.secondary, 1, self.cog))
+
+                await interaction.response.edit_message(content=f"Sélectionnez le rôle pour : **{self.options_map[setting_key]}**", view=view)
+            
+            except Exception as e:
+                logger.error(f"Erreur dans NotificationRoleTypeSelect: {e}")
+            finally:
+                db.close()
+    def generate_notifications_config_view(self, guild_id: str) -> ui.View:
+        view = ui.View(timeout=180)
+        view.add_item(self.NotificationRoleTypeSelect(guild_id, self))
+        view.add_item(self.BackButton("Retour au menu principal", guild_id, discord.ButtonStyle.red, 1, self))
+        return view
     class ProjectStatsButton(ui.Button):
         def __init__(self, label: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
             super().__init__(label=label, style=style, row=row, emoji="📈")
@@ -303,7 +365,7 @@ class AdminCog(commands.Cog):
         view.add_item(self.SetupGameModeButton("Mode & Duration", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
         view.add_item(self.ConfigButton(start_stop_label, start_stop_emoji, guild_id, start_stop_style, row=0, cog=self))
         view.add_item(self.GeneralConfigButton("Roles & Channels", guild_id, discord.ButtonStyle.primary, row=0, cog=self, disabled=is_game_running))
-        view.add_item(self.ConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
+        view.add_item(self.NotificationsConfigButton("Notifications", "🔔", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
         view.add_item(self.ConfigButton("View Stats", "📊", guild_id, discord.ButtonStyle.primary, row=1, cog=self))
         view.add_item(self.ProjectStatsButton("Project Stats", guild_id, discord.ButtonStyle.secondary, row=1, cog=self))
         return view
@@ -666,13 +728,16 @@ class AdminCog(commands.Cog):
 
     class NotificationToggle(ui.Button):
         def __init__(self, label: str, toggle_key: str, guild_id: str, style: discord.ButtonStyle, cog: 'AdminCog', row: int):
-            super().__init__(label=label, style=style, row=row); self.toggle_key = toggle_key; self.guild_id = guild_id; self.cog = cog
+            super().__init__(label=label, style=style, row=row)
+            self.toggle_key = toggle_key
+            self.guild_id = guild_id
+            self.cog = cog
         async def callback(self, interaction: discord.Interaction):
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
                 if not state: 
-                    await interaction.response.send_message("Error: Server state not found.", ephemeral=True); return
+                    await interaction.response.send_message("Erreur: Server state not found.", ephemeral=True); return
                 if state.game_started: 
                     await interaction.response.send_message("Cannot change notification settings while a game is in progress.", ephemeral=True); return
                 
@@ -682,7 +747,6 @@ class AdminCog(commands.Cog):
                 db.refresh(state)
 
                 await interaction.response.edit_message(embed=self.cog.generate_notifications_embed(self.guild_id), view=self.cog.generate_notifications_view(self.guild_id))
-                await interaction.followup.send(f"Notifications for '{self.label}' set to {'Enabled' if new_value else 'Disabled'}.", ephemeral=True)
             finally:
                 db.close()
 
