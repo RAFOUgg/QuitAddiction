@@ -24,11 +24,12 @@ class UberEatsView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
         self.add_item(ui.Button(label="Tacos (6$)", emoji="🌮", style=discord.ButtonStyle.success, custom_id="ubereats_buy_tacos", disabled=(player.wallet < 6)))
+        self.add_item(ui.Button(label="Soda (2$)", emoji="🥤", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soda", disabled=(player.wallet < 2)))
         self.add_item(ui.Button(label="Pizza (12$)", emoji="🍕", style=discord.ButtonStyle.success, custom_id="ubereats_buy_pizza", disabled=(player.wallet < 12)))
         self.add_item(ui.Button(label="Salade (8$)", emoji="🥗", style=discord.ButtonStyle.success, custom_id="ubereats_buy_salad", disabled=(player.wallet < 8)))
         self.add_item(ui.Button(label="Bol de Soupe (5$)", emoji="🍲", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soup", disabled=(player.wallet < 5)))
         self.add_item(ui.Button(label="Jus d'Orange (3$)", emoji="🧃", style=discord.ButtonStyle.success, custom_id="ubereats_buy_orange_juice", disabled=(player.wallet < 3)))
-        self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.primary, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
+        self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.success, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
         self.add_item(ui.Button(label="⬅️ Retour", style=discord.ButtonStyle.grey, custom_id="nav_phone", row=1))
 
 class ShopView(ui.View):
@@ -114,7 +115,10 @@ class Phone(commands.Cog):
             # Uber Eats
             elif custom_id == "ubereats_buy_soup" and player.wallet >= 5:
                 cost = 5; player.soup_bowls += 1; message = "Vous avez commandé une soupe."; shop_type = "ubereats"
-            
+            elif custom_id == "ubereats_buy_tacos" and player.wallet >= 6:
+                cost = 6; player.tacos += 1; message = "Vous avez commandé un tacos."; shop_type = "ubereats"
+            elif custom_id == "ubereats_buy_soda" and player.wallet >= 2:
+                cost = 2; player.soda_cans += 1; message = "Vous avez commandé un soda."; shop_type = "ubereats"
             if cost > 0:
                 player.wallet -= cost
                 if shop_type == "ubereats": player.food_servings +=1 # Bonus de nourriture générique
