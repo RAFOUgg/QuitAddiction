@@ -31,6 +31,7 @@ class DashboardView(ui.View):
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         self.add_item(ui.Button(label="Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions", emoji="🏃‍♂️", disabled=is_on_cooldown))
         self.add_item(ui.Button(label="Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_open", emoji="📱", disabled=is_on_cooldown))
+        self.add_item(ui.Button(label="Travail", style=discord.ButtonStyle.secondary, custom_id="nav_work", emoji="🏢"))
         inv_label = "Cacher Inventaire" if player.show_inventory_in_view else "Afficher Inventaire"
         inv_style = discord.ButtonStyle.success if player.show_inventory_in_view else discord.ButtonStyle.secondary
         self.add_item(ui.Button(label=inv_label, style=inv_style, custom_id="nav_toggle_inventory", emoji="🎒", row=1))
@@ -48,7 +49,6 @@ class ActionsView(ui.View):
             remaining_seconds = int((player.action_cooldown_end_time - now).total_seconds())
             self.add_item(ui.Button(label=f"Occupé pour {remaining_seconds}s...", style=discord.ButtonStyle.secondary, disabled=True, row=0, emoji="⏳"))
         elif player.is_working:
-            # Actions au travail
             self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
             if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽"))
             if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩"))
@@ -61,14 +61,13 @@ class ActionsView(ui.View):
             if is_lunch_break(server_state) or not is_work_time(server_state):
                 self.add_item(ui.Button(label="Rentrer à la maison", style=discord.ButtonStyle.success, custom_id="action_go_home", emoji="🏠"))
         else:
-            # Actions à la maison
             if is_work_time(server_state):
                 self.add_item(ui.Button(label="Aller au travail", style=discord.ButtonStyle.success, custom_id="action_go_to_work", emoji="🏢"))
             
             self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️"))
             self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
             self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬"))
-            night_time = is_night(server_state);
+            night_time = is_night(server_state)
             if night_time:
                 self.add_item(ui.Button(label="Dormir (Nuit)", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️"))
             else:
@@ -77,6 +76,11 @@ class ActionsView(ui.View):
             if player.hygiene < 40: self.add_item(ui.Button(label="Prendre une douche", style=discord.ButtonStyle.blurple, custom_id="action_shower", emoji="🚿", row=1))
             if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1))
             if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩", row=1))
+
+class WorkView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", emoji="⬅️"))
 
 class EatView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -188,6 +192,13 @@ class MainEmbed(commands.Cog):
         embed.set_footer(text=f"Jeu sur {guild.name}"); embed.timestamp = datetime.datetime.utcnow()
         return embed
 
+    def generate_work_embed(self, player: PlayerProfile) -> discord.Embed:
+        embed = discord.Embed(title="🏢 Informations sur le travail", color=0x71368a)
+        embed.add_field(name="Horaires", value="9:00 - 11:30 / 13:00 - 17:30", inline=False)
+        embed.add_field(name="Performance", value=f"`{int(player.job_performance)}%`\n{generate_progress_bar(player.job_performance, high_is_bad=False)}", inline=True)
+        embed.add_field(name="Jours d'absence", value=player.missed_work_days, inline=True)
+        return embed
+
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if not interaction.data or "custom_id" not in interaction.data: return
@@ -212,12 +223,16 @@ class MainEmbed(commands.Cog):
             if not interaction.response.is_done(): await interaction.response.defer()
 
             view = None
+            embed = None
             if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"]:
                 if custom_id == "nav_toggle_stats": player.show_stats_in_view = not player.show_stats_in_view
                 elif custom_id == "nav_toggle_inventory": player.show_inventory_in_view = not player.show_inventory_in_view
                 view = DashboardView(player)
             elif custom_id == "nav_actions":
                 view = ActionsView(player, state)
+            elif custom_id == "nav_work":
+                view = WorkView()
+                embed = self.generate_work_embed(player)
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
                 views = {"action_eat_menu": EatView, "action_drink_menu": DrinkView, "action_smoke_menu": SmokeView}
                 view = views[custom_id](player)
@@ -249,7 +264,9 @@ class MainEmbed(commands.Cog):
                 view = DashboardView(player)
 
             db.commit()
-            await interaction.edit_original_response(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=view)
+            if embed is None:
+                embed = self.generate_dashboard_embed(player, state, interaction.guild)
+            await interaction.edit_original_response(embed=embed, view=view)
 
         except Exception as e:
             logger.error(f"Erreur critique dans on_interaction: {e}", exc_info=True)
