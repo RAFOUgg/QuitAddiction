@@ -113,6 +113,7 @@ class PlayerProfile(Base):
     last_worked_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     first_day_reward_given: bool = Column(Boolean, default=False, nullable=False)
     lateness_minutes: int = Column(Integer, default=0, nullable=False)
+    has_completed_first_work_day: bool = Column(Boolean, default=False, nullable=False)
     
     # --- Inventaire ---
     food_servings: int = Column(Integer, default=1)

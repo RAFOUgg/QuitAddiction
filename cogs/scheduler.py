@@ -75,10 +75,13 @@ class Scheduler(commands.Cog):
                     if player.missed_work_days >= 2:
                         player.job_performance = 0
 
-                if game_time.hour == 17 and game_time.minute == 31:
+                if game_time.hour == 17 and game_time.minute >= 30:
+                    if player.last_worked_at and player.last_worked_at.date() == datetime.datetime.utcnow().date():
+                        if not player.has_completed_first_work_day:
+                            player.has_completed_first_work_day = True
                     update_job_performance(player)
 
-                if player.last_worked_at and not player.first_day_reward_given:
+                if player.has_completed_first_work_day and not player.first_day_reward_given:
                     player.joints += 1
                     player.has_unlocked_smokeshop = True
                     player.first_day_reward_given = True
