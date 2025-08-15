@@ -224,8 +224,14 @@ class MainEmbed(commands.Cog):
 
         # États de travail
         if player.is_working:
+            # Priorité aux besoins physiologiques urgents pendant le travail
+            if player.bowels > 70 or player.bladder > 70:
+                return asset_cog.get_url("job_pooping") or asset_cog.get_url("working")
+            if player.hunger > 60 or player.thirst > 70 or player.stomachache > 50:
+                return asset_cog.get_url("job_hungry") or asset_cog.get_url("working")
+
+            # Ensuite gestion des pauses cigarette
             if player.is_on_break:
-                # Différencie selon la dernière pause fumée
                 if player.last_action in ("neutral_smoke_cig", "work_break_cig", "job_pause_cig"):
                     return asset_cog.get_url("job_pause_cig") or asset_cog.get_url("working")
                 elif player.last_action in ("neutral_smoke_joint", "work_break_joint", "job_pause_joint"):
@@ -244,20 +250,16 @@ class MainEmbed(commands.Cog):
             return asset_cog.get_url("peed") or asset_cog.get_url("neutral")
         if player.happiness < 10 and player.stress > 80:
             return asset_cog.get_url("sob") or asset_cog.get_url("neutral")
-        if player.bowels > 85:
-            return asset_cog.get_url("pooping") or asset_cog.get_url("neutral")
-        if player.bladder > 85:
-            return asset_cog.get_url("need_pee") or asset_cog.get_url("neutral")
-        if player.hunger > 85:
-            return asset_cog.get_url("hungry") or asset_cog.get_url("neutral")
+        if player.bowels > 85 or player.bladder > 85:
+            return asset_cog.get_url("need_pee") or asset_cog.get_url("pooping") or asset_cog.get_url("neutral")
+        if player.hunger > 85 or player.stomachache > 70:
+            return asset_cog.get_url("hand_stomach") or asset_cog.get_url("hungry") or asset_cog.get_url("neutral")
         if player.fatigue > 90:
             return asset_cog.get_url("sleep") or asset_cog.get_url("neutral")
         if player.withdrawal_severity > 60:
             return asset_cog.get_url("neutral_hold_e_cig") or asset_cog.get_url("smoke_ecigarette") or asset_cog.get_url("neutral")
         if player.headache > 70:
             return asset_cog.get_url("scratch_eye") or asset_cog.get_url("neutral")
-        if player.stomachache > 70:
-            return asset_cog.get_url("hand_stomach") or asset_cog.get_url("neutral")
         if player.sanity < 40:
             return asset_cog.get_url("confused") or asset_cog.get_url("neutral")
         if player.stress > 70 or player.health < 40:

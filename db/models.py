@@ -115,17 +115,55 @@ class PlayerProfile(Base):
     lateness_minutes: int = Column(Integer, default=0, nullable=False)
     has_completed_first_work_day: bool = Column(Boolean, default=False, nullable=False)
     
-    # --- Inventaire ---
-    food_servings: int = Column(Integer, default=1)
-    water_bottles: int = Column(Integer, default=5)
-    soda_cans: int = Column(Integer, default=1)
-    cigarettes: int = Column(Integer, default=5)
-    e_cigarettes: int = Column(Integer, default=0)
-    beers: int = Column(Integer, default=0)
-    tacos: int = Column(Integer, default=0)
-    salad_servings: int = Column(Integer, default=0)
-    wine_bottles: int = Column(Integer, default=0)
-    joints: int = Column(Integer, default=0)
+    # --- INVENTAIRE BASE ---
+    food_servings = Column(Integer, default=1)
+    water_bottles = Column(Integer, default=5)
+    soda_cans = Column(Integer, default=1)
+    cigarettes = Column(Integer, default=5)
+    e_cigarettes = Column(Integer, default=0)
+    beers = Column(Integer, default=0)
+    tacos = Column(Integer, default=0)
+    salad_servings = Column(Integer, default=0)
+    wine_bottles = Column(Integer, default=0)
+    joints = Column(Integer, default=0)
+
+    # --- INVENTAIRE SMOKE SHOP ---
+    weed_grams = Column(Integer, default=0)
+    hash_grams = Column(Integer, default=0)
+    cbd_grams = Column(Integer, default=0)
+    tobacco_grams = Column(Integer, default=0)
+    rolling_papers = Column(Integer, default=0)
+    toncs = Column(Integer, default=0)
+    has_grinder = Column(Boolean, default=False)
+    has_bong = Column(Boolean, default=False)
+    has_chillum = Column(Boolean, default=False)
+    has_vaporizer = Column(Boolean, default=False)
+
+    # --- HISTORIQUE DES CRAFTS ---
+    joints_crafted = Column(Integer, default=0)
+    bong_uses = Column(Integer, default=0)
+    chillum_uses = Column(Integer, default=0)
+    vaporizer_uses = Column(Integer, default=0)
+
+    # --- Notifications Config ---
+
+    # --- INVENTAIRE SMOKE SHOP ---
+    weed_grams: int = Column(Integer, default=0)
+    hash_grams: int = Column(Integer, default=0)
+    cbd_grams: int = Column(Integer, default=0)
+    tobacco_grams: int = Column(Integer, default=0)
+    rolling_papers: int = Column(Integer, default=0)
+    toncs: int = Column(Integer, default=0)
+    has_grinder: bool = Column(Boolean, default=False)
+    has_bong: bool = Column(Boolean, default=False)
+    has_chillum: bool = Column(Boolean, default=False)
+    has_vaporizer: bool = Column(Boolean, default=False)
+
+    # --- HISTORIQUE DES CRAFTS ---
+    joints_crafted: int = Column(Integer, default=0)
+    bong_uses: int = Column(Integer, default=0)
+    chillum_uses: int = Column(Integer, default=0)
+    vaporizer_uses: int = Column(Integer, default=0)
 
     # --- Notifications Config ---
     notifications_config: str = Column(Text, default="")
@@ -150,6 +188,10 @@ class PlayerProfile(Base):
     # --- Flags Narratifs ---
     has_unlocked_smokeshop: bool = Column(Boolean, default=False)
     messages: str = Column(Text, default="")
+    
+    # --- Téléphone ---
+    phone_uses_today: int = Column(Integer, default=0)
+    last_phone_reset_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
 
     __table_args__ = (UniqueConstraint('guild_id', name='uq_guild_player'),)
 

@@ -5,7 +5,9 @@ from discord import ui
 from sqlalchemy.orm import Session
 from db.models import PlayerProfile, ServerState
 import json
-from utils.helpers import get_player_notif_settings 
+import datetime
+from utils.helpers import get_player_notif_settings, clamp
+from .smoke_shop import SmokeShopView
 
 # --- VUES ---
 class PhoneMainView(ui.View):
@@ -39,14 +41,63 @@ class UberEatsView(ui.View):
         self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.success, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
-class ShopView(ui.View):
+class NotificationsView
+
+class ShopGearView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="Cigarettes (5$)", emoji="🚬", style=discord.ButtonStyle.secondary, custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5)))
-        self.add_item(ui.Button(label="Vin (7$)", emoji="🍷", style=discord.ButtonStyle.blurple, custom_id="shop_buy_wine", disabled=(player.wallet < 7))) # Prix ajusté
-        self.add_item(ui.Button(label="Joint (10$)", emoji="🌿", style=discord.ButtonStyle.green, custom_id="shop_buy_joint", disabled=(player.wallet < 10)))
-        self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.primary, custom_id="shop_buy_water", disabled=(player.wallet < 1)))
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
+        self.add_item(ui.Button(label="Bong (30$)", emoji="🌀", style=discord.ButtonStyle.blurple, 
+                              custom_id="shop_buy_bong", disabled=(player.wallet < 30 or player.has_bong)))
+        self.add_item(ui.Button(label="Chillum (20$)", emoji="🔮", style=discord.ButtonStyle.blurple, 
+                              custom_id="shop_buy_chillum", disabled=(player.wallet < 20 or player.has_chillum)))
+        self.add_item(ui.Button(label="Vaporisateur (50$)", emoji="💨", style=discord.ButtonStyle.blurple, 
+                              custom_id="shop_buy_vaporizer", disabled=(player.wallet < 50 or player.has_vaporizer)))
+        self.add_item(ui.Button(label="Grinder (15$)", emoji="⚙️", style=discord.ButtonStyle.blurple, 
+                              custom_id="shop_buy_grinder", disabled=(player.wallet < 15 or player.has_grinder)))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="shop_main", row=2, emoji="⬅️"))
+
+class ShopHerbsView(ui.View):
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=180)
+        self.add_item(ui.Button(label="Weed (10$/g)", emoji="🌿", style=discord.ButtonStyle.green, 
+                              custom_id="shop_buy_weed", disabled=(player.wallet < 10)))
+        self.add_item(ui.Button(label="Hash (15$/g)", emoji="🟫", style=discord.ButtonStyle.green, 
+                              custom_id="shop_buy_hash", disabled=(player.wallet < 15)))
+        self.add_item(ui.Button(label="CBD (8$/g)", emoji="�", style=discord.ButtonStyle.green, 
+                              custom_id="shop_buy_cbd", disabled=(player.wallet < 8)))
+        self.add_item(ui.Button(label="Tabac (5$/g)", emoji="🚬", style=discord.ButtonStyle.green, 
+                              custom_id="shop_buy_tobacco", disabled=(player.wallet < 5)))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="shop_main", row=2, emoji="⬅️"))
+
+class ShopSuppliesView(ui.View):
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=180)
+        self.add_item(ui.Button(label="Feuilles (2$)", emoji="📜", style=discord.ButtonStyle.secondary, 
+                              custom_id="shop_buy_papers", disabled=(player.wallet < 2)))
+        self.add_item(ui.Button(label="Toncs (1$)", emoji="📏", style=discord.ButtonStyle.secondary, 
+                              custom_id="shop_buy_toncs", disabled=(player.wallet < 1)))
+        self.add_item(ui.Button(label="E-cigarette (25$)", emoji="�", style=discord.ButtonStyle.secondary, 
+                              custom_id="shop_buy_ecig", disabled=(player.wallet < 25)))
+        self.add_item(ui.Button(label="Cigarettes (5$)", emoji="🚬", style=discord.ButtonStyle.secondary, 
+                              custom_id="shop_buy_cigarettes", disabled=(player.wallet < 5)))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="shop_main", row=2, emoji="⬅️"))
+
+class ShopCraftView(ui.View):
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=180)
+        # Craft joint avec weed (nécessite: weed + grinder + feuilles + toncs)
+        can_craft_joint = (player.weed_grams >= 0.5 and player.has_grinder and 
+                          player.rolling_papers >= 1 and player.toncs >= 1)
+        
+        # Craft joint avec hash (nécessite: hash + feuilles + toncs)
+        can_craft_hash_joint = (player.hash_grams >= 0.3 and 
+                              player.rolling_papers >= 1 and player.toncs >= 1)
+
+        self.add_item(ui.Button(label="Craft Joint (Weed)", emoji="🌿", style=discord.ButtonStyle.success, 
+                              custom_id="shop_craft_joint", disabled=not can_craft_joint))
+        self.add_item(ui.Button(label="Craft Joint (Hash)", emoji="🟫", style=discord.ButtonStyle.success, 
+                              custom_id="shop_craft_hash_joint", disabled=not can_craft_hash_joint))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="shop_main", row=2, emoji="⬅️"))
 
 class NotificationsView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -108,12 +159,41 @@ class Phone(commands.Cog):
         }
 
     def _add_main_image(self, embed: discord.Embed, player: PlayerProfile, main_embed_cog: commands.Cog):
-        if image_url := main_embed_cog.get_image_url(player):
-            embed.set_image(url=image_url)
+        try:
+            embed.set_thumbnail(url="attachment://on_phone.png")
+        except Exception:
+            pass  # Silently handle any image loading errors
+
+    def check_phone_usage(self, player: PlayerProfile, db: Session) -> tuple[bool, str]:
+        now = datetime.datetime.utcnow()
+        
+        # Reset le compteur si c'est un nouveau jour
+        if not player.last_phone_reset_at or (now - player.last_phone_reset_at).days >= 1:
+            player.phone_uses_today = 0
+            player.last_phone_reset_at = now
+            db.commit()
+        
+        # Incrémenter le compteur
+        player.phone_uses_today += 1
+        
+        # Appliquer les pénalités si utilisation excessive
+        warning = ""
+        if player.phone_uses_today > 5:
+            penalty_multiplier = (player.phone_uses_today - 5) * 0.05  # 5% de pénalité par utilisation au-delà de 5
+            
+            # Appliquer les pénalités
+            player.health = max(0, player.health - (2 * penalty_multiplier))
+            player.sanity = max(0, player.sanity - (3 * penalty_multiplier))
+            player.energy = max(0, player.energy - (2 * penalty_multiplier))
+            
+            warning = f"⚠️ Utilisation excessive du téléphone! (-{penalty_multiplier*100:.0f}% santé/sanité/énergie)"
+            
+        db.commit()
+        return player.phone_uses_today > 5, warning
 
     def generate_phone_main_embed(self, player: PlayerProfile, main_embed_cog: commands.Cog) -> discord.Embed:
         embed = discord.Embed(title="📱 Téléphone", description="Choisissez une application.", color=discord.Color.light_grey())
-        embed.set_footer(text=f"Batterie: 100%")
+        embed.set_footer(text=f"Utilisations aujourd'hui: {player.phone_uses_today}/5 recommandées")
         self._add_main_image(embed, player, main_embed_cog)
         return embed
 
@@ -131,7 +211,7 @@ class Phone(commands.Cog):
         embed = discord.Embed(title="💬 Messagerie", color=discord.Color.blue())
         if player.messages and player.messages.strip():
             messages = player.messages.strip().split("\n---\n")
-            formatted_messages = "\n\n".join(f"✉️\n> {msg.replace('\n', '\n> ')}" for msg in messages if msg)
+            formatted_messages = "\n\n".join(f"✉️\n> {msg}" for msg in messages if msg)
             embed.description = formatted_messages
         else:
             embed.description = "Aucun nouveau message."
@@ -154,11 +234,24 @@ class Phone(commands.Cog):
         if not interaction.response.is_done():
             await interaction.response.defer()
 
-        custom_id = interaction.data["custom_id"]
+        if not interaction.data:
+            return
+            
+        custom_id = interaction.data.get("custom_id", "")
+        
+        # Si c'est l'ouverture initiale du téléphone
+        if custom_id == "phone_open":
+            excessive, warning = self.check_phone_usage(player, db)
+            if warning:
+                await interaction.followup.send(warning, ephemeral=True)
+        
+        # Handle automatic phone usage for boredom when willpower is low
+        if player.willpower < 70 and player.boredom > 50 and not player.is_working:
+            player.on_phone = True
         
         phone_screens = {
             "phone_open": (self.generate_phone_main_embed, PhoneMainView),
-            "phone_shop": (self.generate_shop_embed, ShopView),
+            "phone_shop": (self.generate_shop_embed, SmokeShopView),
             "phone_ubereats": (self.generate_ubereats_embed, UberEatsView),
             "phone_sms": (self.generate_sms_embed, SMSView),
             "phone_notifications": (self.generate_notifications_embed, NotificationsView),
@@ -191,14 +284,10 @@ class Phone(commands.Cog):
 
         elif custom_id.startswith(("shop_buy_", "ubereats_buy_")):
             items = {
-                "shop_buy_cigarettes": {"cost": 5, "action": lambda p: setattr(p, 'cigarettes', p.cigarettes + 10), "msg": "Vous avez acheté 10 cigarettes.", "view": ShopView, "embed": self.generate_shop_embed},
-                "shop_buy_wine": {"cost": 7, "action": lambda p: setattr(p, 'wine_bottles', p.wine_bottles + 1), "msg": "Vous avez acheté une bouteille de vin.", "view": ShopView, "embed": self.generate_shop_embed},
-                "shop_buy_joint": {"cost": 10, "action": lambda p: setattr(p, 'joints', p.joints + 1), "msg": "Vous avez acheté un joint.", "view": ShopView, "embed": self.generate_shop_embed},
-                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', p.tacos + 1), "msg": "Vous avez commandé un tacos.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
-                "ubereats_buy_soda": {"cost": 2, "action": lambda p: setattr(p, 'soda_cans', p.soda_cans + 1), "msg": "Vous avez commandé un soda.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
-                "ubereats_buy_salad": {"cost": 8, "action": lambda p: setattr(p, 'salad_servings', p.salad_servings + 1), "msg": "Vous avez commandé une salade.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
-                "ubereats_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez commandé de l'eau.", "view": UberEatsView, "embed": self.generate_ubereats_embed},
-                "shop_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez acheté de l'eau.", "view": ShopView, "embed": self.generate_shop_embed},
+                "ubereats_buy_tacos": {"cost": 6, "action": lambda p: setattr(p, 'tacos', p.tacos + 1), "msg": "Vous avez commandé un tacos."},
+                "ubereats_buy_soda": {"cost": 2, "action": lambda p: setattr(p, 'soda_cans', p.soda_cans + 1), "msg": "Vous avez commandé un soda."},
+                "ubereats_buy_salad": {"cost": 8, "action": lambda p: setattr(p, 'salad_servings', p.salad_servings + 1), "msg": "Vous avez commandé une salade."},
+                "ubereats_buy_water": {"cost": 1, "action": lambda p: setattr(p, 'water_bottles', p.water_bottles + 1), "msg": "Vous avez commandé de l'eau."}
             }
             item = items.get(custom_id)
             if item and player.wallet >= item["cost"]:
@@ -206,7 +295,7 @@ class Phone(commands.Cog):
                 item["action"](player)
                 db.commit(); db.refresh(player)
                 await interaction.followup.send(f'✅ {item["msg"]}', ephemeral=True)
-                await interaction.edit_original_response(embed=item["embed"](player, main_embed_cog), view=item["view"](player))
+                await interaction.edit_original_response(embed=self.generate_phone_main_embed(player, main_embed_cog), view=PhoneMainView(player))
             else:
                 await interaction.followup.send(f"⚠️ Transaction échouée. Pas assez d'argent ?", ephemeral=True)
 
