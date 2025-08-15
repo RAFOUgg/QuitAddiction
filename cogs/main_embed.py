@@ -137,7 +137,8 @@ class MainEmbed(commands.Cog):
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         if image_url := self.get_image_url(player): embed.set_image(url=image_url)
-        embed.description = f"**Pensées du Cuisinier :**\n\" {self.get_character_thoughts(player)}\"
+        embed.description = f"""**Pensées du Cuisinier :**
+*\"{self.get_character_thoughts(player)}\"*"""
         if player.show_inventory_in_view:
             inventory_items = [("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"), ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"), ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")]
             inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items if getattr(player, attr, 0) > 0]
