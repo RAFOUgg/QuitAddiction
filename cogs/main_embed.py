@@ -192,7 +192,7 @@ class MainEmbed(commands.Cog):
             for row in stats_layout: [embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True) for name, val, bad in row]
         
         game_time = get_current_game_time(state)
-        embed.set_footer(text=f"Jeu sur {guild.name} • {game_time.strftime('%H:%M')}"); embed.timestamp = datetime.datetime.utcnow()
+        embed.set_footer(text=f"Powered by LaFoncedalle.fr • ⌚ Heure en jeu : {game_time.strftime('%H:%M')}"); embed.timestamp = datetime.datetime.utcnow()
         return embed
 
     def generate_work_embed(self, player: PlayerProfile, state: ServerState) -> discord.Embed:
