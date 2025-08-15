@@ -89,6 +89,9 @@ class CookerBrain(commands.Cog):
     def perform_smoke_joint(self, player: PlayerProfile) -> (str, dict, int):
         if player.is_on_break:
             player.job_performance = clamp(player.job_performance - 15, 0, 100)
+            player.last_action = "job_pause_joint"
+        else:
+            player.last_action = "neutral_smoke_joint"
         if player.joints <= 0: return "Vous n'avez pas de joint.", {}, 0
         player.joints -= 1
         player.stress = clamp(player.stress - 60.0, 0, 100)
@@ -240,6 +243,9 @@ class CookerBrain(commands.Cog):
     def perform_smoke_cigarette(self, player: PlayerProfile) -> (str, dict, int):
         if player.is_on_break:
             player.job_performance = clamp(player.job_performance - 5, 0, 100)
+            player.last_action = "job_pause_cig"
+        else:
+            player.last_action = "neutral_smoke_cig"
         if player.cigarettes <= 0: return "Vous n'avez plus de cigarettes !", {}, 0
         player.cigarettes -= 1
         
@@ -257,7 +263,6 @@ class CookerBrain(commands.Cog):
         player.substance_tolerance = clamp(player.substance_tolerance + 1.0, 0, 100)
         
         player.last_smoked_at = datetime.datetime.utcnow()
-        player.last_action = "neutral_smoke_cig"
         player.last_action_time = datetime.datetime.utcnow()
         player.is_on_break = False
         return "Vous allumez une cigarette. Le stress s'envole, mais à quel prix... La culpabilité vous pèse déjà.", {}, 10

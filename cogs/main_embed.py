@@ -187,34 +187,85 @@ class MainEmbed(commands.Cog):
         return auto_performed
 
     def get_image_url(self, player: PlayerProfile) -> str | None:
-        asset_cog = self.bot.get_cog("AssetManager"); now = datetime.datetime.utcnow()
-        if not asset_cog: return None
-        # Correction: Affichage précis selon l'état
-        if player.is_working:
-            if player.is_on_break:
-                return asset_cog.get_url("work_break") or asset_cog.get_url("pause") or asset_cog.get_url("jobbing")
-            else:
-                return asset_cog.get_url("working") or asset_cog.get_url("jobbing")
-        # Affiche l'image de départ au travail si la dernière action est "jobbing" ou "action_go_to_work"
-        if player.last_action in ("jobbing", "action_go_to_work"):
-            return asset_cog.get_url("leaving_for_work") or asset_cog.get_url("jobbing")
+        asset_cog = self.bot.get_cog("AssetManager")
+        now = datetime.datetime.utcnow()
+        if not asset_cog:
+            return None
+
+        # Actions immédiates (cooldown ou action récente)
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
-            return asset_cog.get_url(player.last_action)
-        image_name = "neutral"
-        if player.bladder >= 99: image_name = "peed"
-        elif player.happiness < 10 and player.stress > 80: image_name = "sob"
-        elif player.bowels > 85: image_name = "neutral_pooping"
-        elif player.bladder > 85: image_name = "need_pee"
-        elif player.hunger > 85: image_name = "hungry"
-        elif player.fatigue > 90: image_name = "neutral_sleep"
-        elif player.withdrawal_severity > 60: image_name = "neutral_hold_e_cig"
-        elif player.headache > 70: image_name = "scratch_eye"
-        elif player.stomachache > 70: image_name = "hand_stomach"
-        elif player.sanity < 40: image_name = "confused"
-        elif player.stress > 70 or player.health < 40: image_name = "sad"
-        elif player.hygiene < 20: image_name = "neutral_shower"
-        return asset_cog.get_url(image_name)
+            action_to_asset = {
+                "neutral_eat_sandwich": "eat_sandwich",
+                "neutral_eat_tacos": "eat_tacos",
+                "neutral_eat_salad": "eat_salad",
+                "neutral_drinking": "drink_water",
+                "sad_drinking": "sad_drinking",
+                "neutral_drinking_soda": "drink_soda",
+                "neutral_drink_wine": "drink_wine",
+                "neutral_smoke_cig": "smoke_cigarette",
+                "neutral_smoke_joint": "smoke_joint",
+                "vape_e_cig": "smoke_ecigarette",
+                "neutral_shower": "shower",
+                "neutral_sleep": "sleep",
+                "neutral_pooping": "pooping",
+                "jobbing": "leaving_for_work",
+                "working": "working",
+                "work_break_cig": "job_pause_cig",
+                "work_break_joint": "job_pause_joint",
+                "job_pause_cig": "job_pause_cig",
+                "job_pause_joint": "job_pause_joint",
+                "pause": "job_pause_cig",  # fallback
+                "action_go_to_work": "leaving_for_work",
+            }
+            asset_name = action_to_asset.get(player.last_action, player.last_action)
+            return asset_cog.get_url(asset_name) or asset_cog.get_url("neutral")
+
+        # États de travail
+        if player.is_working:
+            if player.is_on_break:
+                # Différencie selon la dernière pause fumée
+                if player.last_action in ("neutral_smoke_cig", "work_break_cig", "job_pause_cig"):
+                    return asset_cog.get_url("job_pause_cig") or asset_cog.get_url("working")
+                elif player.last_action in ("neutral_smoke_joint", "work_break_joint", "job_pause_joint"):
+                    return asset_cog.get_url("job_pause_joint") or asset_cog.get_url("working")
+                else:
+                    return asset_cog.get_url("job_pause_cig") or asset_cog.get_url("working")
+            else:
+                return asset_cog.get_url("working")
+
+        # Départ au travail
+        if player.last_action in ("jobbing", "action_go_to_work"):
+            return asset_cog.get_url("leaving_for_work") or asset_cog.get_url("working")
+
+        # États critiques physiologiques/mentaux
+        if player.bladder >= 99:
+            return asset_cog.get_url("peed") or asset_cog.get_url("neutral")
+        if player.happiness < 10 and player.stress > 80:
+            return asset_cog.get_url("sob") or asset_cog.get_url("neutral")
+        if player.bowels > 85:
+            return asset_cog.get_url("pooping") or asset_cog.get_url("neutral")
+        if player.bladder > 85:
+            return asset_cog.get_url("need_pee") or asset_cog.get_url("neutral")
+        if player.hunger > 85:
+            return asset_cog.get_url("hungry") or asset_cog.get_url("neutral")
+        if player.fatigue > 90:
+            return asset_cog.get_url("sleep") or asset_cog.get_url("neutral")
+        if player.withdrawal_severity > 60:
+            return asset_cog.get_url("neutral_hold_e_cig") or asset_cog.get_url("smoke_ecigarette") or asset_cog.get_url("neutral")
+        if player.headache > 70:
+            return asset_cog.get_url("scratch_eye") or asset_cog.get_url("neutral")
+        if player.stomachache > 70:
+            return asset_cog.get_url("hand_stomach") or asset_cog.get_url("neutral")
+        if player.sanity < 40:
+            return asset_cog.get_url("confused") or asset_cog.get_url("neutral")
+        if player.stress > 70 or player.health < 40:
+            return asset_cog.get_url("sad") or asset_cog.get_url("neutral")
+        if player.hygiene < 20:
+            return asset_cog.get_url("shower") or asset_cog.get_url("neutral")
+
+        # Par défaut
+        return asset_cog.get_url("neutral")
 
     @staticmethod
     def get_character_thoughts(player: PlayerProfile) -> str:
