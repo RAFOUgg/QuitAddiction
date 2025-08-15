@@ -1,15 +1,30 @@
 # utils/game_time.py
 import datetime
+import os
 from db.models import ServerState
 
+# Allow configuring a timezone offset (hours) for display. Defaults to +2 (CEST) as requested.
+TIMEZONE_OFFSET_HOURS = int(os.getenv("GAME_TIME_OFFSET_HOURS", 2))
+
+def _apply_offset(dt: datetime.datetime) -> datetime.datetime:
+    """Treat naive datetimes as UTC and apply configured offset, return naive local datetime."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # treat stored times as UTC
+        dt_utc = dt
+    else:
+        dt_utc = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return dt_utc + datetime.timedelta(hours=TIMEZONE_OFFSET_HOURS)
 def get_current_game_time(server_state: ServerState) -> datetime.time:
     """
     Calcule l'heure actuelle dans le jeu.
     En mode temps réel (real_time), renvoie l'heure réelle actuelle.
     """
     if server_state.duration_key == 'real_time':
-        # En mode temps réel, on utilise l'heure actuelle directement
-        return datetime.datetime.utcnow().time()
+        # En mode temps réel, on utilise l'heure actuelle avec offset configurable
+        now_local = datetime.datetime.utcnow() + datetime.timedelta(hours=TIMEZONE_OFFSET_HOURS)
+        return now_local.time()
     
     if not server_state.game_start_time:
         # Retourne une heure par défaut si le jeu n'a pas encore commencé
@@ -19,6 +34,7 @@ def get_current_game_time(server_state: ServerState) -> datetime.time:
     real_minutes_elapsed = (datetime.datetime.utcnow() - server_state.game_start_time).total_seconds() / 60
 
     # Nombre total de minutes dans une journée de jeu
+    # Temps réel écoulé en minutes (tous les calculs considèrent game_start_time comme UTC)
     game_minutes_in_day = 24 * 60
 
     # Calcule le nombre total de minutes de jeu écoulées
@@ -29,13 +45,20 @@ def get_current_game_time(server_state: ServerState) -> datetime.time:
     start_hour_in_minutes = server_state.game_day_start_hour * 60
 
     # Heure actuelle totale en minutes dans le jeu (avec modulo pour rester dans une journée)
-    current_total_minutes = (start_hour_in_minutes + game_minutes_elapsed) % game_minutes_in_day
+    # Appliquer l'offset horaire après calcul pour afficher l'heure locale
+    current_total_minutes = (start_hour_in_minutes + game_minutes_elapsed + TIMEZONE_OFFSET_HOURS * 60) % game_minutes_in_day
 
     # Conversion en heures et minutes
     current_hour = int(current_total_minutes // 60)
     current_minute = int(current_total_minutes % 60)
 
     return datetime.time(hour=current_hour, minute=current_minute)
+
+def localize_datetime(dt: datetime.datetime) -> datetime.datetime | None:
+    """Return a naive datetime shifted by configured timezone offset (treating input as UTC)."""
+    if not dt:
+        return None
+    return _apply_offset(dt)
 
 def is_night(server_state: ServerState, night_start: int = 22, day_start: int = 6) -> bool:
     """

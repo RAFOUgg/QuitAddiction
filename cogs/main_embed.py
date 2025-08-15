@@ -11,7 +11,7 @@ import asyncio
 from .phone import PhoneMainView, Phone
 from utils.helpers import clamp
 from utils.logger import get_logger
-from utils.game_time import is_night, is_work_time, is_lunch_break, get_current_game_time
+from utils.game_time import is_night, is_work_time, is_lunch_break, get_current_game_time, localize_datetime
 
 logger = get_logger(__name__)
 
@@ -340,60 +340,74 @@ class MainEmbed(commands.Cog):
         return "Pour l'instant, ça va à peu près."
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
-        # Get game mode and timing info
+        """Create the main dashboard embed, localizing times with GAME_TIME_OFFSET_HOURS."""
+        # Basic mode labels
         game_mode = state.game_mode.capitalize() if state.game_mode else "Normal"
         duration_key = state.duration_key or "real_time"
         duration_label = "Test Mode" if duration_key == "test" else "Temps Réel"
-        
-        # Add start time info to title
-        start_time = state.game_start_time.strftime('%H:%M') if state.game_start_time else "??:??"
+
+        # Localized start time for display (treat stored times as UTC)
+        localized_start = localize_datetime(state.game_start_time) if state.game_start_time else None
+        start_time = localized_start.strftime('%H:%M') if localized_start else "??:??"
         current_game_time = get_current_game_time(state).strftime('%H:%M')
-        
-        embed = discord.Embed(
-            title=f"👨‍🍳 Le Quotidien du Cuisinier", 
-            color=0x3498db
-        )
-        # Mode and time info in footer
+
+        embed = discord.Embed(title=f"👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         embed.set_footer(text=f"Mode: {duration_label} | Démarré à {start_time} | Heure actuelle: {current_game_time}")
-        
-        if image_url := self.get_image_url(player): 
+
+        # Image selection
+        if image_url := self.get_image_url(player):
             embed.set_image(url=image_url)
-        
+
         embed.description = f"""**Pensées du Cuisinier :**
 *"{self.get_character_thoughts(player)}"*"""
-        if player.show_inventory_in_view:
-            inventory_items = [("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"), ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"), ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")]
+
+        # Inventory view
+        if getattr(player, 'show_inventory_in_view', False):
+            inventory_items = [
+                ("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"),
+                ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"),
+                ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")
+            ]
             inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items if getattr(player, attr, 0) > 0]
             if inventory_list:
                 mid_point = len(inventory_list) // 2 + (len(inventory_list) % 2)
-                col1 = "\n".join(inventory_list[:mid_point]); col2 = "\n".join(inventory_list[mid_point:])
+                col1 = "\n".join(inventory_list[:mid_point])
+                col2 = "\n".join(inventory_list[mid_point:])
                 embed.add_field(name="🎒 Inventaire", value=col1, inline=True)
-                if col2: embed.add_field(name="\u200b", value=col2, inline=True)
-            else: embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
-            embed.add_field(name="💰 Argent", value=f"**{player.wallet}$**", inline=False)
-        if player.show_stats_in_view:
-            def stat_value_and_bar(value: float, high_is_bad: bool): return f"`{int(value)}%`\n{generate_progress_bar(value, high_is_bad=high_is_bad)}"
-            embed.add_field(name="**🧬 Physique & Besoins**", value="\u200b", inline=True)
-            embed.add_field(name="**🧠 Mental & Émotions**", value="\u200b", inline=True)
-            embed.add_field(name="**🚬 Addiction & Symptômes**", value="\u200b", inline=True)
+                if col2:
+                    embed.add_field(name="", value=col2, inline=True)
+            else:
+                embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
+            embed.add_field(name="💰 Argent", value=f"**{getattr(player, 'wallet', 0)}$**", inline=False)
+
+        # Stats view
+        if getattr(player, 'show_stats_in_view', False):
+            def stat_value_and_bar(value: float, high_is_bad: bool):
+                return f"`{int(value)}%`\n{generate_progress_bar(value, high_is_bad=high_is_bad)}"
+
+            embed.add_field(name="**🧬 Physique & Besoins**", value="", inline=True)
+            embed.add_field(name="**🧠 Mental & Émotions**", value="", inline=True)
+            embed.add_field(name="**🚬 Addiction & Symptômes**", value="", inline=True)
+
             stats_layout = [
-                [('Santé', player.health, False), ('Humeur', player.happiness, False), ('Dépendance', player.substance_addiction_level, True)],
-                [('Énergie', player.energy, False), ('Stress', player.stress, True), ('Sevrage', player.withdrawal_severity, True)],
-                [('Hygiène', player.hygiene, False), ('Volonté', player.willpower, False), ('Envie', max(player.craving_nicotine, player.craving_alcohol, player.craving_cannabis), True)],
-                [('Fatigue', player.fatigue, True), ('S. Mentale', player.sanity, False), ('Toxine', player.tox, True)],
-                [('Faim', player.hunger, True), ('Culpabilité', player.guilt, True), ('Douleur', player.pain, True)],
-                [('Soif', player.thirst, True), ('Ennui', player.boredom, True), ('Nausée', player.nausea, True)],
+                [('Santé', getattr(player, 'health', 0), False), ('Humeur', getattr(player, 'happiness', 0), False), ('Dépendance', getattr(player, 'substance_addiction_level', 0), True)],
+                [('Énergie', getattr(player, 'energy', 0), False), ('Stress', getattr(player, 'stress', 0), True), ('Sevrage', getattr(player, 'withdrawal_severity', 0), True)],
+                [('Hygiène', getattr(player, 'hygiene', 0), False), ('Volonté', getattr(player, 'willpower', 0), False), ('Envie', max(getattr(player, 'craving_nicotine', 0), getattr(player, 'craving_alcohol', 0), getattr(player, 'craving_cannabis', 0)), True)],
+                [('Fatigue', getattr(player, 'fatigue', 0), True), ('S. Mentale', getattr(player, 'sanity', 0), False), ('Toxine', getattr(player, 'tox', 0), True)],
+                [('Faim', getattr(player, 'hunger', 0), True), ('Culpabilité', getattr(player, 'guilt', 0), True), ('Douleur', getattr(player, 'pain', 0), True)],
+                [('Soif', getattr(player, 'thirst', 0), True), ('Ennui', getattr(player, 'boredom', 0), True), ('Nausée', getattr(player, 'nausea', 0), True)],
             ]
-            for row in stats_layout: [embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True) for name, val, bad in row]
-        
+
+            for row in stats_layout:
+                for name, val, bad in row:
+                    embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True)
+
+        # Timing footer and timestamp
         game_time = get_current_game_time(state)
-        # Update footer with more complete timing info
         elapsed = datetime.datetime.utcnow() - state.game_start_time if state.game_start_time else datetime.timedelta()
         elapsed_mins = int(elapsed.total_seconds() / 60)
-        embed.set_footer(
-            text=f"LaFoncedalle.fr • Mode: {game_mode} ({duration_label}) • ⏰ {start_time} +{elapsed_mins}min • ⌚ {game_time.strftime('%H:%M')}"
-        )
-        embed.timestamp = datetime.datetime.utcnow()
+        embed.set_footer(text=f"LaFoncedalle.fr • Mode: {game_mode} ({duration_label}) • ⏰ {start_time} +{elapsed_mins}min • ⌚ {game_time.strftime('%H:%M')}")
+        embed.timestamp = localize_datetime(datetime.datetime.utcnow())
         return embed
 
     def generate_work_embed(self, player: PlayerProfile, state: ServerState) -> discord.Embed:
@@ -441,7 +455,7 @@ class MainEmbed(commands.Cog):
             elif custom_id == "nav_actions":
                 view = ActionsView(player, state)
             elif custom_id == "nav_work":
-                view = WorkView()
+                view = WorkView(player, state)
                 embed = self.generate_work_embed(player, state)
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
                 views = {"action_eat_menu": EatView, "action_drink_menu": DrinkView, "action_smoke_menu": SmokeView}
@@ -470,6 +484,10 @@ class MainEmbed(commands.Cog):
                             message, _, duration = result
                     else:
                         message, _, duration = action_map[custom_id](player)
+
+                    # Record last action + timestamp so the image chooser can show the right asset
+                    player.last_action = custom_id
+                    player.last_action_time = datetime.datetime.utcnow()
 
                     if duration > 0:
                         player.action_cooldown_end_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)
