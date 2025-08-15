@@ -81,7 +81,7 @@ class CookerBrain(commands.Cog):
                 return f"Vous avez fait une sieste réparatrice (qualité: {nap_quality:.0%}).", {}, duration, "nap"
             else:
                 # Pas assez fatigué pour une sieste
-                return "Vous n'êtes pas assez fatigué pour faire une sieste maintenant.", {}, 0, "none"}
+                return "Vous n'êtes pas assez fatigué pour faire une sieste maintenant.", {}, 0, "none"
 
     def perform_shower(self, player: PlayerProfile) -> (str, dict, int):
         hygiene_gain = 70.0
