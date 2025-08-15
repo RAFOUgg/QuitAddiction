@@ -18,37 +18,106 @@ class CookerBrain(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def perform_sport(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int):
+        """
+        Permet au joueur de faire du sport pendant ses jours de repos.
+        Les avantages sont nombreux : santé physique et mentale, réduction de l'ennui.
+        """
+        current_weekday = server_state.game_start_time.weekday()
+        
+        # Vérifier si c'est un jour de sport (dimanche ou lundi)
+        if current_weekday not in [0, 6]:  # Lundi (0) ou Dimanche (6)
+            return "🏃‍♂️ Le sport est réservé pour vos jours de repos (dimanche et lundi).", {"confused": True}, 0
+            
+        # Vérifier l'énergie
+        if player.energy < 30:
+            return "😫 Vous êtes trop fatigué pour faire du sport.", {"sob": True}, 0
+            
+        # Si la volonté est > 85%, le joueur peut s'auto-motiver
+        can_self_motivate = player.willpower > 85
+            
+        # Vérifier qui initie l'action
+        if not can_self_motivate and player.last_action_by == str(player.user_id):
+            return "🏃‍♂️ Vous avez besoin de motivation ! Demandez à quelqu'un de vous accompagner.", {"confused": True}, 0
+
+        # Appliquer les effets positifs
+        player.energy = max(10, player.energy - 20)  # Fatigue mais pas trop
+        player.physical_health = min(100, player.physical_health + 15)
+        player.mental_health = min(100, player.mental_health + 10)
+        player.stress = max(0, player.stress - 15)
+        player.boredom = max(0, player.boredom - 25)
+        player.willpower = min(100, player.willpower + 5)
+
+        message = "🏃‍♂️ Excellente séance de sport ! Votre corps et votre esprit se sentent revigorés."
+        if can_self_motivate:
+            message += "\n💪 Votre forte volonté vous a permis de vous motiver seul !"
+        else:
+            message += "\n👥 L'encouragement des autres vous a aidé à vous dépasser !"
+            
+        return message, {"sporting": True}, 30  # 30 minutes de sport
+
+    def perform_use_bong(self, player: PlayerProfile) -> (str, dict, int):
+        """
+        Utilise le bong pour consommer du cannabis.
+        Impact plus fort qu'un joint mais consomme plus de produit.
+        """
+        inventory = self.check_inventory(player)
+        
+        if not inventory['has_bong']:
+            return "🌊 Vous n'avez pas de bong.", {"confused": True}, 0
+            
+        if player.weed_grams < 1.5 and player.hash_grams < 1:
+            return "🌊 Il vous faut au moins 1.5g de weed ou 1g de hash pour le bong.", {"confused": True}, 0
+            
+        # Utiliser weed en priorité, sinon hash
+        if player.weed_grams >= 1.5:
+            player.weed_grams -= 1.5
+            substance = "weed"
+        else:
+            player.hash_grams -= 1
+            substance = "hash"
+            
+        # Effets plus forts qu'un joint
+        player.intoxication = min(100, player.intoxication + 40)
+        player.stress = max(0, player.stress - 30)
+        player.mental_health = max(0, player.mental_health - 15)
+        player.willpower = max(0, player.willpower - 10)
+        player.bong_uses += 1
+        
+        return f"🌊 Vous utilisez le bong avec du {substance}. L'effet est puissant !", {"smoke_bang": True}, 15
+
     def perform_go_to_work(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int):
+        current_time = get_current_game_time(server_state)
+        current_weekday = server_state.game_start_time.weekday()  # 0 = Lundi, 6 = Dimanche
+
+        # Vérifier si c'est un jour de repos
+        if current_weekday in [0, 6]:  # Lundi (0) ou Dimanche (6)
+            return "📅 C'est votre jour de repos ! Revenez demain.", {"leaving_for_work": False}, 0
+
         if not is_work_time(server_state):
-            return "Ce n'est pas l'heure de travailler.", {}, 0
+            return "⏰ Les horaires de travail sont 9h-11h30 et 13h-17h30.", {"confused": True}, 0
+            
         if player.is_working:
-            return "Vous êtes déjà au travail.", {}, 0
+            return "👨‍🍳 Vous êtes déjà au travail !", {"confused": True}, 0
 
         current_time = get_current_game_time(server_state)
         morning_start = datetime.time(hour=9, minute=0)
         afternoon_start = datetime.time(hour=13, minute=0)
 
+        # Emploi du temps hebdomadaire
+        schedule = """📅 Emploi du temps:
+        Lundi: REPOS
+        Mardi: 9h-11h30 | 13h-17h30
+        Mercredi: 9h-11h30 | 13h-17h30
+        Jeudi: 9h-11h30 | 13h-17h30
+        Vendredi: 9h-11h30 | 13h-17h30
+        Samedi: 9h-11h30 | 13h-17h30
+        Dimanche: REPOS"""
+
         lateness = 0
         if morning_start <= current_time < datetime.time(hour=11, minute=30):
-            lateness_delta = datetime.datetime.combine(datetime.date.today(), current_time) - datetime.datetime.combine(datetime.date.today(), morning_start)
-            lateness = lateness_delta.total_seconds() / 60
+            
         elif afternoon_start <= current_time < datetime.time(hour=17, minute=30):
-            if player.last_worked_at is None or player.last_worked_at.date() < datetime.datetime.utcnow().date():
-                 return "Vous avez manqué la session du matin, vous ne pouvez pas commencer l'après-midi.", {}, 0
-            lateness_delta = datetime.datetime.combine(datetime.date.today(), current_time) - datetime.datetime.combine(datetime.date.today(), afternoon_start)
-            lateness = lateness_delta.total_seconds() / 60
-
-        if lateness > 5:
-            player.lateness_minutes += int(lateness)
-            message = f"Vous partez au travail avec {int(lateness)} minutes de retard."
-        else:
-            message = "Vous partez au travail."
-
-        player.is_working = True
-        player.last_action = "jobbing"
-        player.last_action_time = datetime.datetime.utcnow()
-        player.last_worked_at = datetime.datetime.utcnow()
-        return message, {}, 30
 
     def perform_go_home(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int):
         if not player.is_working:

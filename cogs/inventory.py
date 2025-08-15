@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 from discord import ui
 from db.models import PlayerProfile
 from db.database import SessionLocal
@@ -299,3 +300,10 @@ def generate_inventory_embed(player: PlayerProfile) -> discord.Embed:
 
     embed.set_footer(text="💡 Utilisez le menu déroulant pour crafter des items")
     return embed
+
+class InventoryCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+async def setup(bot):
+    await bot.add_cog(InventoryCog(bot))

@@ -12,6 +12,11 @@ class AssetManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.asset_urls = {}
+        self.required_images = [
+            'sporting.png',  # Pour l'activité sportive
+            'smoke_bang.png',  # Pour l'utilisation du bong
+            # ... autres images existantes
+        ]
 
     # La méthode cog_load est supprimée car elle est la source du deadlock.
     # Nous la remplaçons par une méthode d'initialisation manuelle.

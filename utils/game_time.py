@@ -55,7 +55,16 @@ def is_work_time(server_state: ServerState) -> bool:
     """
     Vérifie si c'est l'heure de travailler dans le jeu.
     (9:00 - 11:30 et 13:00 - 17:30)
+    Fermeture le dimanche et le lundi.
     """
+    # Vérifier d'abord le jour de la semaine
+    if not server_state.game_start_time:
+        return False
+    
+    current_weekday = server_state.game_start_time.weekday()
+    if current_weekday in [0, 6]:  # 0 = Lundi, 6 = Dimanche
+        return False
+        
     current_time = get_current_game_time(server_state)
     morning_start = datetime.time(hour=9, minute=0)
     morning_end = datetime.time(hour=11, minute=30)

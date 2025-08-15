@@ -95,9 +95,65 @@ class ActionsView(ui.View):
             if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽", row=1))
             if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩", row=1))
 
-class WorkView(ui.View):
+class ScheduleButton(ui.Button):
     def __init__(self):
+        super().__init__(
+            label="📅 Voir l'emploi du temps",
+            style=discord.ButtonStyle.secondary,
+            custom_id="show_schedule",
+            row=1
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        schedule = """📅 **Emploi du temps du cuisinier**
+
+🔵 **Heures de travail:**
+• Matin: 9h00 - 11h30
+• Après-midi: 13h00 - 17h30
+
+📆 **Jours travaillés:**
+• Mardi: ✅
+• Mercredi: ✅
+• Jeudi: ✅
+• Vendredi: ✅
+• Samedi: ✅
+• Dimanche: ❌ REPOS
+• Lundi: ❌ REPOS
+
+💡 Note: Les retards sont sanctionnés."""
+
+        await interaction.response.send_message(content=schedule, ephemeral=True)
+
+class WorkView(ui.View):
+    def __init__(self, player: PlayerProfile, server_state: ServerState):
         super().__init__(timeout=None)
+        current_weekday = server_state.game_start_time.weekday() if server_state.game_start_time else -1
+        
+        # Jours de repos (Dimanche et Lundi)
+        if current_weekday in [0, 6]:
+            self.add_item(ui.Button(
+                label="🏃‍♂️ Faire du sport",
+                custom_id="do_sport",
+                style=discord.ButtonStyle.success
+            ))
+        else:
+            self.add_item(ui.Button(
+                label="🏃 Aller au travail",
+                custom_id="go_to_work",
+                style=discord.ButtonStyle.primary
+            ))
+            self.add_item(ui.Button(
+                label="🏠 Rentrer",
+                custom_id="go_home",
+                style=discord.ButtonStyle.danger
+            ))
+            self.add_item(ui.Button(
+                label="☕ Pause",
+                custom_id="take_break",
+                style=discord.ButtonStyle.secondary
+            ))
+        
+        self.add_item(ScheduleButton())super().__init__(timeout=None)
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", emoji="⬅️"))
 
 class EatView(ui.View):

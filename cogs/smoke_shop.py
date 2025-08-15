@@ -26,7 +26,7 @@ class BuySelect(ui.Select):
             "papers": 2,  # 2$ le paquet
             "toncs": 1,  # 1$ l'unité
             "grinder": 25,  # 25$ une fois
-            "bong": 40,   # 40$ une fois
+            "bong": 45,   # 45$ une fois (augmenté pour refléter la nouvelle fonctionnalité)
             "chillum": 30, # 30$ une fois
             "vaporizer": 80, # 80$ une fois
         }
