@@ -12,14 +12,18 @@ class PhoneMainView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
         self.add_item(ui.Button(label="SMS", style=discord.ButtonStyle.green, custom_id="phone_sms", emoji="💬"))
-        self.add_item(ui.Button(label="Notifications", style=discord.ButtonStyle.primary, custom_id="phone_notifications", emoji="🔔"))
-        self.add_item(ui.Button(label="Paramètres", style=discord.ButtonStyle.secondary, custom_id="phone_settings", emoji="⚙️"))
         self.add_item(ui.Button(label="Uber Eats", style=discord.ButtonStyle.success, custom_id="phone_ubereats", emoji="🍔"))
-        self.add_item(ui.Button(label="Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop", disabled=(not player.has_unlocked_smokeshop), emoji="🛍️"))
-        # CORRECTION : Le bouton de retour est maintenant le bouton de navigation principal du jeu
-        self.add_item(ui.Button(label="Retour au jeu", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
-        # Add new "Browse" button
-        self.add_item(ui.Button(label="Naviguer", style=discord.ButtonStyle.primary, custom_id="phone_browse", emoji="🌐"))
+        self.add_item(ui.Button(label="Smoke-Shop", 
+                              style=discord.ButtonStyle.blurple, 
+                              custom_id="phone_shop", 
+                              disabled=(not player.has_unlocked_smokeshop), 
+                              emoji="🛍️"))
+        # Bouton de retour au jeu
+        self.add_item(ui.Button(label="Retour au jeu", 
+                              style=discord.ButtonStyle.grey, 
+                              custom_id="nav_main_menu", 
+                              row=1, 
+                              emoji="⬅️"))
 
 class SMSView(ui.View):
     def __init__(self, player: PlayerProfile):

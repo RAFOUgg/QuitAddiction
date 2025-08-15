@@ -208,6 +208,7 @@ class MainEmbed(commands.Cog):
                 "vape_e_cig": "smoke_ecigarette",
                 "neutral_shower": "shower",
                 "neutral_sleep": "sleep",
+                "action_urinate": "pooping",  # Use pooping image for urinate action
                 "neutral_pooping": "pooping",
                 "jobbing": "leaving_for_work",
                 "working": "working",
