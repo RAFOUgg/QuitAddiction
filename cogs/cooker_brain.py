@@ -276,5 +276,18 @@ class CookerBrain(commands.Cog):
         player.is_on_break = False
         return "Vous tirez sur votre vapoteuse. Moins satisfaisant, mais ça aide à tenir.", {}, 5
 
+    def perform_end_smoke_break(self, player: PlayerProfile) -> (str, dict, int):
+        """
+        Termine la pause cigarette et remet le joueur en mode travail normal.
+        """
+        if not player.is_working:
+            return "Vous n'êtes pas au travail.", {}, 0
+        if not player.is_on_break:
+            return "Vous n'êtes pas en pause.", {}, 0
+        player.is_on_break = False
+        player.last_action = "working"
+        player.last_action_time = datetime.datetime.utcnow()
+        return "Vous retournez au travail après la pause.", {}, 0
+
 async def setup(bot):
     await bot.add_cog(CookerBrain(bot))

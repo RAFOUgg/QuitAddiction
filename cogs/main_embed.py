@@ -189,15 +189,15 @@ class MainEmbed(commands.Cog):
     def get_image_url(self, player: PlayerProfile) -> str | None:
         asset_cog = self.bot.get_cog("AssetManager"); now = datetime.datetime.utcnow()
         if not asset_cog: return None
-        # --- Fix: Use correct asset keys for work/leave/break ---
+        # Correction: Affichage précis selon l'état
         if player.is_working:
             if player.is_on_break:
-                # On cigarette break
-                return asset_cog.get_url("work_break")  # Ensure this key exists in AssetManager
+                return asset_cog.get_url("work_break") or asset_cog.get_url("pause") or asset_cog.get_url("jobbing")
             else:
-                return asset_cog.get_url("working")  # Ensure this key exists in AssetManager
-        if player.last_action == "action_go_to_work":
-            return asset_cog.get_url("leaving_for_work")  # Ensure this key exists in AssetManager
+                return asset_cog.get_url("working") or asset_cog.get_url("jobbing")
+        # Affiche l'image de départ au travail si la dernière action est "jobbing" ou "action_go_to_work"
+        if player.last_action in ("jobbing", "action_go_to_work"):
+            return asset_cog.get_url("leaving_for_work") or asset_cog.get_url("jobbing")
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
             return asset_cog.get_url(player.last_action)
@@ -324,11 +324,16 @@ class MainEmbed(commands.Cog):
                     "action_go_to_work": cooker_brain.perform_go_to_work,
                     "action_go_home": cooker_brain.perform_go_home,
                     "action_take_smoke_break": cooker_brain.perform_take_smoke_break,
-                    "action_end_smoke_break": cooker_brain.perform_end_smoke_break  # You must implement this in CookerBrain!
+                    "action_end_smoke_break": cooker_brain.perform_end_smoke_break
                 }
                 if custom_id in action_map:
+                    # Correction: Gère tous les retours d'action correctement
                     if custom_id in ["action_sleep", "action_go_to_work", "action_go_home"]:
-                        message, _, duration, *_ = action_map[custom_id](player, state)
+                        result = action_map[custom_id](player, state)
+                        if isinstance(result, tuple) and len(result) >= 3:
+                            message, _, duration, *_ = result
+                        else:
+                            message, _, duration = result
                     else:
                         message, _, duration = action_map[custom_id](player)
 
@@ -339,7 +344,7 @@ class MainEmbed(commands.Cog):
                     else:
                         await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
                 
-                # --- Fix: After ending smoke break, show correct work buttons ---
+                # Correction: Affiche la bonne vue après chaque action
                 if player.is_working:
                     view = ActionsView(player, state)
                 else:
