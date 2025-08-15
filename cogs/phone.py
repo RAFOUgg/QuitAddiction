@@ -18,6 +18,8 @@ class PhoneMainView(ui.View):
         self.add_item(ui.Button(label="Smoke-Shop", style=discord.ButtonStyle.blurple, custom_id="phone_shop", disabled=(not player.has_unlocked_smokeshop), emoji="🛍️"))
         # CORRECTION : Le bouton de retour est maintenant le bouton de navigation principal du jeu
         self.add_item(ui.Button(label="Retour au jeu", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
+        # Add new "Browse" button
+        self.add_item(ui.Button(label="Naviguer", style=discord.ButtonStyle.primary, custom_id="phone_browse", emoji="🌐"))
 
 class SMSView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -58,9 +60,45 @@ class SettingsView(ui.View):
             self.add_item(ui.Button(label=button_label, style=style, custom_id=f"phone_toggle_notif:{key}"))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
+# Add new view for browsing
+class BrowseView(ui.View):
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=180)
+        # Different browsing activities
+        self.add_item(ui.Button(label="Réseaux sociaux", style=discord.ButtonStyle.primary, custom_id="browse_social", emoji="📱"))
+        self.add_item(ui.Button(label="Jeux mobiles", style=discord.ButtonStyle.success, custom_id="browse_games", emoji="🎮"))
+        self.add_item(ui.Button(label="Vidéos", style=discord.ButtonStyle.blurple, custom_id="browse_videos", emoji="🎥"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", emoji="⬅️"))
+
 class Phone(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.browse_effects = {
+            "browse_social": {
+                "duration": 15,
+                "sanity": -2.0,
+                "boredom": -30.0,
+                "energy": -5.0,
+                "fatigue": 5.0,
+                "message": "Vous scrollez sans fin sur les réseaux sociaux..."
+            },
+            "browse_games": {
+                "duration": 20,
+                "sanity": -3.0,
+                "boredom": -40.0,
+                "energy": -8.0,
+                "fatigue": 8.0,
+                "message": "Vous jouez à des jeux mobiles pendant un moment..."
+            },
+            "browse_videos": {
+                "duration": 25,
+                "sanity": -4.0,
+                "boredom": -50.0,
+                "energy": -10.0,
+                "fatigue": 10.0,
+                "message": "Vous regardez des vidéos en boucle..."
+            }
+        }
 
     def _add_main_image(self, embed: discord.Embed, player: PlayerProfile, main_embed_cog: commands.Cog):
         if image_url := main_embed_cog.get_image_url(player):
@@ -164,6 +202,43 @@ class Phone(commands.Cog):
                 await interaction.edit_original_response(embed=item["embed"](player, main_embed_cog), view=item["view"](player))
             else:
                 await interaction.followup.send(f"⚠️ Transaction échouée. Pas assez d'argent ?", ephemeral=True)
+
+        # Handle browsing activities
+        if custom_id in self.browse_effects:
+            if player.is_working and not player.is_on_break:
+                await interaction.followup.send("⚠️ Vous ne pouvez pas faire ça pendant le travail !", ephemeral=True)
+                return
+
+            effects = self.browse_effects[custom_id]
+            player.sanity = clamp(player.sanity + effects["sanity"], 0, 100)
+            player.boredom = clamp(player.boredom + effects["boredom"], 0, 100)
+            player.energy = clamp(player.energy + effects["energy"], 0, 100)
+            player.fatigue = clamp(player.fatigue + effects["fatigue"], 0, 100)
+
+            # Set cooldown
+            now = datetime.datetime.utcnow()
+            player.action_cooldown_end_time = now + datetime.timedelta(seconds=effects["duration"])
+
+            db.commit()
+            await interaction.followup.send(f"📱 {effects['message']}", ephemeral=True)
+
+            # Return to phone main view after browsing
+            embed = self.generate_phone_main_embed(player, main_embed_cog)
+            view = PhoneMainView(player)
+            await interaction.edit_original_response(embed=embed, view=view)
+            return
+
+        # Handle first day reward message
+        if player.has_completed_first_work_day and not player.first_day_reward_given:
+            friend_message = (
+                "---\n"
+                "**Alex** - 17:45\n"
+                "Hey mec ! Comme promis, je t'ai laissé un petit cadeau dans ta boîte aux lettres... 🌿\n"
+                "Histoire que tu te détendes après ta première journée ! Et si t'en veux d'autres,\n"
+                "j'ai un pote qui tient une petite boutique pas loin. Je t'ai mis l'adresse sur ton tel.\n"
+                "---"
+            )
+            player.messages = friend_message + "\n" + (player.messages or "")
 
 async def setup(bot):
     await bot.add_cog(Phone(bot))

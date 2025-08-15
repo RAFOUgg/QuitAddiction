@@ -93,10 +93,23 @@ class Scheduler(commands.Cog):
                             player.has_completed_first_work_day = True
                     update_job_performance(player)
 
+                # Check for first day completion and unlock rewards
                 if player.has_completed_first_work_day and not player.first_day_reward_given:
                     player.joints += 1
                     player.has_unlocked_smokeshop = True
                     player.first_day_reward_given = True
+                    
+                    try:
+                        # Send notification about new message if possible
+                        channel = await self.bot.fetch_channel(int(state.game_channel_id))
+                        embed = discord.Embed(
+                            title="📱 Nouveau message",
+                            description="Votre téléphone vibre... Un message d'un ami !",
+                            color=discord.Color.green()
+                        )
+                        await channel.send(content=None, embed=embed, delete_after=10)
+                    except (discord.NotFound, discord.Forbidden):
+                        pass
 
                 # --- STAT DEGRADATION & CHAIN REACTIONS ---
                 time_delta_minutes = (datetime.datetime.utcnow() - player.last_update).total_seconds() / 60
