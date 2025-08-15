@@ -490,7 +490,15 @@ class AdminCog(commands.Cog):
             super().__init__(label=label, emoji=emoji, style=style, row=row)
             self.guild_id = guild_id
             self.cog = cog
-            self.view: Optional[ui.View] = None
+            self._view = None
+
+        @property
+        def view(self) -> Optional[ui.View]:
+            return self._view
+
+        @view.setter
+        def view(self, value: Optional[ui.View]):
+            self._view = value
 
         async def callback(self, interaction: discord.Interaction):
             if not interaction.guild:
