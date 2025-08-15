@@ -512,15 +512,18 @@ class MainEmbed(commands.Cog):
                     if custom_id in ["action_sleep", "action_go_to_work", "action_go_home"]:
                         result = action_map[custom_id](player, state)
                         if isinstance(result, tuple) and len(result) >= 3:
-                            message, _, duration, *_ = result
+                            message, states, duration, *_ = result
                         else:
-                            message, _, duration = result
+                            message, states, duration = result
                     else:
-                        message, _, duration = action_map[custom_id](player)
+                        message, states, duration = action_map[custom_id](player)
 
-                    # Record last action + timestamp so the image chooser can show the right asset
+                    # Record last action + timestamp and states for image display
                     player.last_action = custom_id
                     player.last_action_time = datetime.datetime.utcnow()
+                    # Store the states for image selection
+                    if isinstance(states, dict):
+                        player.current_state = next(iter(states))  # Get the first state key
 
                     if duration > 0:
                         player.action_cooldown_end_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)

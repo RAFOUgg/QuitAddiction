@@ -22,8 +22,16 @@ def get_current_game_time(server_state: ServerState) -> datetime.time:
     En mode temps réel (real_time), renvoie l'heure réelle actuelle.
     """
     if server_state.duration_key == 'real_time':
-        # En mode temps réel, on utilise l'heure actuelle (UTC). Localization is applied at display time.
-        return datetime.datetime.utcnow().time()
+        if not server_state.game_start_time:
+            return datetime.time(hour=server_state.game_day_start_hour)
+            
+        # En mode temps réel, on calcule le temps écoulé depuis le démarrage
+        elapsed = datetime.datetime.utcnow() - server_state.game_start_time
+        start_minutes = server_state.game_day_start_hour * 60
+        total_minutes = (start_minutes + elapsed.total_seconds() / 60) % (24 * 60)
+        current_hour = int(total_minutes // 60)
+        current_minute = int(total_minutes % 60)
+        return datetime.time(hour=current_hour, minute=current_minute)
     
     if not server_state.game_start_time:
         # Retourne une heure par défaut si le jeu n'a pas encore commencé
