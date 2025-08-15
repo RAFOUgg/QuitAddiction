@@ -217,8 +217,16 @@ class MainEmbed(commands.Cog):
                 await interaction.edit_original_response(view=views[custom_id](player))
                 return
             cooker_brain = self.bot.get_cog("CookerBrain")
-            action_map = { "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint, "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower, "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate, "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda, "eat_sandwich": cooker_brain.perform_eat_sandwich, "eat_tacos": cooker_brain.use_tacos, "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette, "smoke_ecigarette": cooker_brain.use_ecigarette }
-            if custom_id in action_map:
+            action_map = { "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint, "action_shower": cooker_brain.perform_shower, "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate, "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda, "eat_sandwich": cooker_brain.perform_eat_sandwich, "eat_tacos": cooker_brain.use_tacos, "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette, "smoke_ecigarette": cooker_brain.use_ecigarette }
+
+            if custom_id == "action_sleep":
+                message, _, duration, sleep_type = cooker_brain.perform_sleep(player, state)
+                if sleep_type != "none":
+                    player.action_cooldown_end_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)
+                    await interaction.followup.send(f"✅ {message}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
+            elif custom_id in action_map:
                 message, _, duration = action_map[custom_id](player)
                 if duration > 0:
                     player.action_cooldown_end_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=duration)

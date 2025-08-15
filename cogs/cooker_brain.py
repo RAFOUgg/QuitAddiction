@@ -1,8 +1,9 @@
 # --- cogs/cooker_brain.py (REWORKED WITH NEW STATS & EFFECTS) ---
 from discord.ext import commands
-from db.models import PlayerProfile
+from db.models import PlayerProfile, ServerState
 from utils.helpers import clamp
 import datetime
+from utils.game_time import is_night, get_current_game_time
 
 class CookerBrain(commands.Cog):
     def __init__(self, bot):
@@ -38,22 +39,49 @@ class CookerBrain(commands.Cog):
         player.last_action_time = datetime.datetime.utcnow()
         return "Vous allumez un joint. Le monde semble plus lent, plus doux... et la faim vous tenaille.", {}, 25
     
-    def perform_sleep(self, player: PlayerProfile) -> (str, dict, int):
-        # La qualité du sommeil dépend de la douleur et du stress, impactant tous les gains
-        sleep_quality = 1.0 - (player.pain / 150.0) - (player.stress / 200.0)
-        energy_gain = 70.0 * sleep_quality
-        fatigue_loss = 80.0 * sleep_quality
-        stress_loss = 40.0 * sleep_quality
-        willpower_gain = 30.0 * sleep_quality # Le sommeil est crucial pour la volonté
+    def perform_sleep(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int, str):
+        game_time = get_current_game_time(server_state)
+        night_time = is_night(server_state)
 
-        player.energy = clamp(player.energy + energy_gain, 0, 100)
-        player.fatigue = clamp(player.fatigue - fatigue_loss, 0, 100)
-        player.stress = clamp(player.stress - stress_loss, 0, 100)
-        player.willpower = clamp(player.willpower + willpower_gain, 0, 100)
-        player.last_slept_at = datetime.datetime.utcnow()
-        player.last_action = "neutral_sleep"
-        player.last_action_time = datetime.datetime.utcnow()
-        return f"Vous avez dormi (qualité: {sleep_quality:.0%}). La fatigue s'estompe et votre volonté se raffermit.", {}, 180
+        if night_time:
+            # Nuit complète
+            sleep_quality = 1.0 - (player.pain / 150.0) - (player.stress / 200.0)
+            energy_gain = 85.0 * sleep_quality
+            fatigue_loss = 95.0 * sleep_quality
+            stress_loss = 50.0 * sleep_quality
+            willpower_gain = 40.0 * sleep_quality
+
+            player.energy = clamp(player.energy + energy_gain, 0, 100)
+            player.fatigue = clamp(player.fatigue - fatigue_loss, 0, 100)
+            player.stress = clamp(player.stress - stress_loss, 0, 100)
+            player.willpower = clamp(player.willpower + willpower_gain, 0, 100)
+            player.last_slept_at = datetime.datetime.utcnow()
+            player.last_action = "neutral_sleep"
+            player.last_action_time = datetime.datetime.utcnow()
+            
+            duration = 300 # 5 minutes for a full night
+            return f"Vous avez dormi profondément jusqu'au matin (qualité: {sleep_quality:.0%}). L'énergie et la volonté rechargées.", {}, duration, "night"
+
+        else: # C'est la journée
+            if player.fatigue > 60:
+                # Sieste possible
+                nap_quality = 1.0 - (player.stress / 250.0)
+                energy_gain = 30.0 * nap_quality
+                fatigue_loss = 40.0 * nap_quality
+                stress_loss = 10.0 * nap_quality
+
+                player.energy = clamp(player.energy + energy_gain, 0, 100)
+                player.fatigue = clamp(player.fatigue - fatigue_loss, 0, 100)
+                player.stress = clamp(player.stress - stress_loss, 0, 100)
+                player.last_slept_at = datetime.datetime.utcnow()
+                player.last_action = "neutral_sleep"
+                player.last_action_time = datetime.datetime.utcnow()
+                
+                duration = 90 # 1.5 minutes for a nap
+                return f"Vous avez fait une sieste réparatrice (qualité: {nap_quality:.0%}).", {}, duration, "nap"
+            else:
+                # Pas assez fatigué pour une sieste
+                return "Vous n'êtes pas assez fatigué pour faire une sieste maintenant.", {}, 0, "none"}
 
     def perform_shower(self, player: PlayerProfile) -> (str, dict, int):
         hygiene_gain = 70.0

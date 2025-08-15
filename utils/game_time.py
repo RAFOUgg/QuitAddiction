@@ -1,0 +1,48 @@
+# utils/game_time.py
+import datetime
+from db.models import ServerState
+
+def get_current_game_time(server_state: ServerState) -> datetime.time:
+    """
+    Calcule l'heure actuelle dans le jeu en se basant sur le temps réel écoulé
+    depuis le début du jeu.
+    """
+    if not server_state.game_start_time:
+        # Retourne une heure par défaut si le jeu n'a pas encore commencé
+        return datetime.time(hour=server_state.game_day_start_hour)
+
+    # Temps réel écoulé en minutes
+    real_minutes_elapsed = (datetime.datetime.utcnow() - server_state.game_start_time).total_seconds() / 60
+
+    # Nombre total de minutes dans une journée de jeu
+    game_minutes_in_day = 24 * 60
+
+    # Calcule le nombre total de minutes de jeu écoulées
+    # Le ratio est (temps réel écoulé / durée d'un jour de jeu en temps réel)
+    game_minutes_elapsed = (real_minutes_elapsed / server_state.game_minutes_per_day) * game_minutes_in_day
+
+    # Calcule l'heure de départ en minutes
+    start_hour_in_minutes = server_state.game_day_start_hour * 60
+
+    # Heure actuelle totale en minutes dans le jeu (avec modulo pour rester dans une journée)
+    current_total_minutes = (start_hour_in_minutes + game_minutes_elapsed) % game_minutes_in_day
+
+    # Conversion en heures et minutes
+    current_hour = int(current_total_minutes // 60)
+    current_minute = int(current_total_minutes % 60)
+
+    return datetime.time(hour=current_hour, minute=current_minute)
+
+def is_night(server_state: ServerState, night_start: int = 22, day_start: int = 6) -> bool:
+    """
+    Vérifie s'il fait nuit dans le jeu.
+    La nuit est définie comme la période entre night_start et day_start.
+    """
+    current_time = get_current_game_time(server_state)
+    
+    # Cas simple : si la période de nuit ne traverse pas minuit (ex: 22h à 6h)
+    if night_start > day_start:
+        return current_time.hour >= night_start or current_time.hour < day_start
+    # Cas où la période de nuit traverse minuit (ex: 1h à 6h, peu probable mais géré)
+    else:
+        return day_start > current_time.hour >= night_start
