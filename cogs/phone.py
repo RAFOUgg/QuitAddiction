@@ -1,6 +1,8 @@
 # --- cogs/phone.py (REFACTORED FOR NEW UI) ---
 import discord
 from discord.ext import commands
+import discord.ui as ui
+from discord.ext import commands
 from discord import ui
 from sqlalchemy.orm import Session
 from db.models import PlayerProfile, ServerState
@@ -41,7 +43,10 @@ class UberEatsView(ui.View):
         self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.success, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
 
-class NotificationsView
+class NotificationsView(ui.View):
+    def __init__(self, player: PlayerProfile):
+        super().__init__(timeout=180)
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", emoji="⬅️"))
 
 class ShopGearView(ui.View):
     def __init__(self, player: PlayerProfile):

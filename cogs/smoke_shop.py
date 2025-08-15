@@ -1,21 +1,23 @@
 import discord
 from discord import ui
+from discord.ext import commands
 from db.models import PlayerProfile
 from db.database import SessionLocal
 from sqlalchemy import text
 
 class SmokeShopView(ui.View):
-    def __init__(self, player: PlayerProfile):
+    def __init__(self, player: PlayerProfile, bot: commands.Bot):
         super().__init__(timeout=None)
         
         # Shop sections
-        self.add_item(BuySelect(player))
+        self.add_item(BuySelect(player, bot))
         
         # Return button
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_main", emoji="⬅️"))
 
 class BuySelect(ui.Select):
-    def __init__(self, player: PlayerProfile):
+    def __init__(self, player: PlayerProfile, bot: commands.Bot):
+        self.bot = bot
         self.prices = {
             "weed": 10,  # 10$ par gramme
             "hash": 15,  # 15$ par gramme
@@ -171,10 +173,10 @@ class BuySelect(ui.Select):
             db.commit()
             await interaction.followup.send(message, ephemeral=True)
             
-            from .phone import generate_phone_embed, PhoneMainView
-            await interaction.message.edit(
-                embed=generate_phone_embed(player),
-                view=PhoneMainView(player)
+            # Simply close the shop view
+            await interaction.edit_original_response(
+                embed=discord.Embed(title="Transaction effectuée", description=message),
+                view=None
             )
 
         except Exception as e:
@@ -182,3 +184,28 @@ class BuySelect(ui.Select):
             db.rollback()
         finally:
             db.close()
+
+class SmokeShop(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if not interaction.data:
+            return
+            
+        custom_id = interaction.data.get("custom_id", "")
+        if custom_id == "phone_shop":
+            db = SessionLocal()
+            try:
+                player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild_id)).first()
+                if not player:
+                    return
+                    
+                embed = discord.Embed(title="🛍️ Smoke-Shop", description=f"Votre Portefeuille: **{player.wallet}$**", color=discord.Color.purple())
+                await interaction.response.edit_message(embed=embed, view=SmokeShopView(player, self.bot))
+            finally:
+                db.close()
+
+async def setup(bot):
+    await bot.add_cog(SmokeShop(bot))
