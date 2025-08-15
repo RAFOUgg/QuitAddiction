@@ -153,7 +153,8 @@ class WorkView(ui.View):
                 style=discord.ButtonStyle.secondary
             ))
         
-        self.add_item(ScheduleButton())super().__init__(timeout=None)
+        super().__init__(timeout=None)
+        self.add_item(ScheduleButton())
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", emoji="⬅️"))
 
 class EatView(ui.View):
