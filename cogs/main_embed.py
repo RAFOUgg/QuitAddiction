@@ -11,7 +11,7 @@ import asyncio
 from .phone import PhoneMainView, Phone
 from utils.helpers import clamp
 from utils.logger import get_logger
-from utils.game_time import is_night, is_work_time, is_lunch_break
+from utils.game_time import is_night, is_work_time, is_lunch_break, get_current_game_time
 
 logger = get_logger(__name__)
 
@@ -120,7 +120,8 @@ class MainEmbed(commands.Cog):
             if player.action_cooldown_end_time and datetime.datetime.utcnow() > player.action_cooldown_end_time:
                 try:
                     game_message = await interaction.channel.fetch_message(state.game_message_id)
-                    await game_message.edit(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView(player))
+                    view = ActionsView(player, state) if player.is_working else DashboardView(player)
+                    await game_message.edit(embed=self.generate_dashboard_embed(player, state, interaction.guild), view=view)
                 except (discord.NotFound, discord.Forbidden): pass
         finally:
             db.close()
@@ -189,10 +190,12 @@ class MainEmbed(commands.Cog):
                 [('Soif', player.thirst, True), ('Ennui', player.boredom, True), ('Nausée', player.nausea, True)],
             ]
             for row in stats_layout: [embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True) for name, val, bad in row]
-        embed.set_footer(text=f"Jeu sur {guild.name}"); embed.timestamp = datetime.datetime.utcnow()
+        
+        game_time = get_current_game_time(state)
+        embed.set_footer(text=f"Jeu sur {guild.name} • {game_time.strftime('%H:%M')}"); embed.timestamp = datetime.datetime.utcnow()
         return embed
 
-    def generate_work_embed(self, player: PlayerProfile) -> discord.Embed:
+    def generate_work_embed(self, player: PlayerProfile, state: ServerState) -> discord.Embed:
         embed = discord.Embed(title="🏢 Informations sur le travail", color=0x71368a)
         if image_url := self.get_image_url(player):
             embed.set_image(url=image_url)
@@ -234,7 +237,7 @@ class MainEmbed(commands.Cog):
                 view = ActionsView(player, state)
             elif custom_id == "nav_work":
                 view = WorkView()
-                embed = self.generate_work_embed(player)
+                embed = self.generate_work_embed(player, state)
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
                 views = {"action_eat_menu": EatView, "action_drink_menu": DrinkView, "action_smoke_menu": SmokeView}
                 view = views[custom_id](player)
@@ -263,7 +266,11 @@ class MainEmbed(commands.Cog):
                         await interaction.followup.send(f"✅ {message}", ephemeral=True)
                     else:
                         await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
-                view = DashboardView(player)
+                
+                if player.is_working:
+                    view = ActionsView(player, state)
+                else:
+                    view = DashboardView(player)
 
             db.commit()
             if embed is None:

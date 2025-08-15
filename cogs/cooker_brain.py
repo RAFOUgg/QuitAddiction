@@ -58,7 +58,7 @@ class CookerBrain(commands.Cog):
         player.is_on_break = False
         player.last_action = "neutral"
         player.last_action_time = datetime.datetime.utcnow()
-        return "Vous rentrez à la maison.", {}, 30
+        return "Vous rentrez à la maison.", {}, 0
 
     def perform_take_smoke_break(self, player: PlayerProfile) -> (str, dict, int):
         if not player.is_working:

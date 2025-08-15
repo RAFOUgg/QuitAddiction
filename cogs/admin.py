@@ -461,6 +461,8 @@ class AdminCog(commands.Cog):
                         now = datetime.datetime.utcnow()
                         if not player: player = PlayerProfile(guild_id=self.guild_id, last_update=now); db.add(player)
                         state.game_started, state.game_start_time, state.is_test_mode = True, now, (state.duration_key == 'test')
+                        if state.duration_key == 'real_time':
+                            state.game_day_start_hour = now.hour
                         db.commit(); db.refresh(player); db.refresh(state)
                         
                         game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
