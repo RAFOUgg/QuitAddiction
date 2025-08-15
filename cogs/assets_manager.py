@@ -65,4 +65,19 @@ class AssetManager(commands.Cog):
         return self.asset_urls.get(asset_name)
 
 async def setup(bot):
-    await bot.add_cog(AssetManager(bot))
+    cog = AssetManager(bot)
+    await bot.add_cog(cog)
+
+    # Schedule initialization once the bot is fully ready to avoid deadlocks.
+    async def _init_assets_when_ready():
+        await bot.wait_until_ready()
+        try:
+            await cog.initialize_assets()
+        except Exception as e:
+            logger.error(f"Asset initialization failed: {e}")
+
+    try:
+        bot.loop.create_task(_init_assets_when_ready())
+    except Exception:
+        # If scheduling fails, ignore; initialization can be triggered manually.
+        pass

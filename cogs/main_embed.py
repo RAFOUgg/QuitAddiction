@@ -249,6 +249,14 @@ class MainEmbed(commands.Cog):
         if not asset_cog:
             return None
 
+        # If the asset cache is empty, attempt to initialize it (non-blocking)
+        if not getattr(asset_cog, 'asset_urls', None):
+            try:
+                # schedule initialization in background
+                self.bot.loop.create_task(asset_cog.initialize_assets())
+            except Exception:
+                pass
+
         # Actions immédiates (cooldown ou action récente)
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
@@ -275,6 +283,31 @@ class MainEmbed(commands.Cog):
                 "job_pause_joint": "job_pause_joint",
                 "pause": "job_pause_cig",  # fallback
                 "action_go_to_work": "leaving_for_work",
+                # Additional direct mappings for files present in assets/cooker
+                "hand_stomach": "hand_stomach",
+                "hungry": "hungry",
+                "job_hungry": "job_hungry",
+                "job_pooping": "job_pooping",
+                "leaving_for_work": "leaving_for_work",
+                "need_pee": "need_pee",
+                "neutral": "neutral",
+                "neutral_hold_e_cig": "neutral_hold_e_cig",
+                "on_phone": "on_phone",
+                "peed": "peed",
+                "pooping": "pooping",
+                "rolling": "rolling",
+                "sad": "sad",
+                "sad_drinking": "sad_drinking",
+                "scratch_eye": "scratch_eye",
+                "shower": "shower",
+                "sleep": "sleep",
+                "smoke_bang": "smoke_bang",
+                "smoke_cigarette": "smoke_cigarette",
+                "smoke_ecigarette": "smoke_ecigarette",
+                "smoke_joint": "smoke_joint",
+                "sob": "sob",
+                "sporting": "sporting",
+                "working": "working",
             }
             asset_name = action_to_asset.get(player.last_action, player.last_action)
             return asset_cog.get_url(asset_name) or asset_cog.get_url("neutral")

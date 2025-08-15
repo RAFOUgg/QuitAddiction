@@ -22,9 +22,8 @@ def get_current_game_time(server_state: ServerState) -> datetime.time:
     En mode temps réel (real_time), renvoie l'heure réelle actuelle.
     """
     if server_state.duration_key == 'real_time':
-        # En mode temps réel, on utilise l'heure actuelle avec offset configurable
-        now_local = datetime.datetime.utcnow() + datetime.timedelta(hours=TIMEZONE_OFFSET_HOURS)
-        return now_local.time()
+        # En mode temps réel, on utilise l'heure actuelle (UTC). Localization is applied at display time.
+        return datetime.datetime.utcnow().time()
     
     if not server_state.game_start_time:
         # Retourne une heure par défaut si le jeu n'a pas encore commencé
@@ -45,8 +44,7 @@ def get_current_game_time(server_state: ServerState) -> datetime.time:
     start_hour_in_minutes = server_state.game_day_start_hour * 60
 
     # Heure actuelle totale en minutes dans le jeu (avec modulo pour rester dans une journée)
-    # Appliquer l'offset horaire après calcul pour afficher l'heure locale
-    current_total_minutes = (start_hour_in_minutes + game_minutes_elapsed + TIMEZONE_OFFSET_HOURS * 60) % game_minutes_in_day
+    current_total_minutes = (start_hour_in_minutes + game_minutes_elapsed) % game_minutes_in_day
 
     # Conversion en heures et minutes
     current_hour = int(current_total_minutes // 60)
@@ -65,14 +63,20 @@ def is_night(server_state: ServerState, night_start: int = 22, day_start: int = 
     Vérifie s'il fait nuit dans le jeu.
     La nuit est définie comme la période entre night_start et day_start.
     """
-    current_time = get_current_game_time(server_state)
-    
+    # Localize the calculated game time for comparisons
+    current_time_utc = get_current_game_time(server_state)
+    if current_time_utc is None:
+        return False
+    now_dt_utc = datetime.datetime.utcnow().replace(hour=current_time_utc.hour, minute=current_time_utc.minute, second=0, microsecond=0)
+    now_local = _apply_offset(now_dt_utc)
+    current_hour = now_local.hour
+
     # Cas simple : si la période de nuit ne traverse pas minuit (ex: 22h à 6h)
     if night_start > day_start:
-        return current_time.hour >= night_start or current_time.hour < day_start
+        return current_hour >= night_start or current_hour < day_start
     # Cas où la période de nuit traverse minuit (ex: 1h à 6h, peu probable mais géré)
     else:
-        return day_start > current_time.hour >= night_start
+        return day_start > current_hour >= night_start
 
 def is_work_time(server_state: ServerState) -> bool:
     """
@@ -83,12 +87,21 @@ def is_work_time(server_state: ServerState) -> bool:
     # Vérifier d'abord le jour de la semaine
     if not server_state.game_start_time:
         return False
-    
-    current_weekday = server_state.game_start_time.weekday()
+
+    # Determine weekday from localized start time to reflect server's local day
+    localized_start = localize_datetime(server_state.game_start_time)
+    current_weekday = localized_start.weekday() if localized_start else server_state.game_start_time.weekday()
     if current_weekday in [0, 6]:  # 0 = Lundi, 6 = Dimanche
         return False
         
-    current_time = get_current_game_time(server_state)
+    # Localize the current game time for comparisons
+    current_time_utc = get_current_game_time(server_state)
+    if current_time_utc is None:
+        return False
+    now_dt_utc = datetime.datetime.utcnow().replace(hour=current_time_utc.hour, minute=current_time_utc.minute, second=0, microsecond=0)
+    now_local = _apply_offset(now_dt_utc)
+    current_time = now_local.time()
+
     morning_start = datetime.time(hour=9, minute=0)
     morning_end = datetime.time(hour=11, minute=30)
     afternoon_start = datetime.time(hour=13, minute=0)
@@ -104,7 +117,13 @@ def is_lunch_break(server_state: ServerState) -> bool:
     Vérifie si c'est l'heure de la pause déjeuner.
     (11:30 - 13:00)
     """
-    current_time = get_current_game_time(server_state)
+    current_time_utc = get_current_game_time(server_state)
+    if current_time_utc is None:
+        return False
+    now_dt_utc = datetime.datetime.utcnow().replace(hour=current_time_utc.hour, minute=current_time_utc.minute, second=0, microsecond=0)
+    now_local = _apply_offset(now_dt_utc)
+    current_time = now_local.time()
+
     lunch_start = datetime.time(hour=11, minute=30)
     lunch_end = datetime.time(hour=13, minute=0)
 
