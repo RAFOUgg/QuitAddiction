@@ -11,7 +11,7 @@ import asyncio
 from .phone import PhoneMainView, Phone
 from utils.helpers import clamp
 from utils.logger import get_logger
-from utils.game_time import is_night
+from utils.game_time import is_night, is_work_time, is_lunch_break
 
 logger = get_logger(__name__)
 
@@ -43,14 +43,32 @@ class ActionsView(ui.View):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=2, emoji="⬅️"))
+
         if player.action_cooldown_end_time and now < player.action_cooldown_end_time:
             remaining_seconds = int((player.action_cooldown_end_time - now).total_seconds())
             self.add_item(ui.Button(label=f"Occupé pour {remaining_seconds}s...", style=discord.ButtonStyle.secondary, disabled=True, row=0, emoji="⏳"))
+        elif player.is_working:
+            # Actions au travail
+            self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
+            if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽"))
+            if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩"))
+            
+            if not player.is_on_break:
+                self.add_item(ui.Button(label="Prendre une pause", style=discord.ButtonStyle.secondary, custom_id="action_take_smoke_break", emoji="🚬"))
+            else:
+                self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬"))
+
+            if is_lunch_break(server_state) or not is_work_time(server_state):
+                self.add_item(ui.Button(label="Rentrer à la maison", style=discord.ButtonStyle.success, custom_id="action_go_home", emoji="🏠"))
         else:
+            # Actions à la maison
+            if is_work_time(server_state):
+                self.add_item(ui.Button(label="Aller au travail", style=discord.ButtonStyle.success, custom_id="action_go_to_work", emoji="🏢"))
+            
             self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️"))
             self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
             self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬"))
-            night_time = is_night(server_state)
+            night_time = is_night(server_state);
             if night_time:
                 self.add_item(ui.Button(label="Dormir (Nuit)", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️"))
             else:
@@ -106,6 +124,8 @@ class MainEmbed(commands.Cog):
     def get_image_url(self, player: PlayerProfile) -> str | None:
         asset_cog = self.bot.get_cog("AssetManager"); now = datetime.datetime.utcnow()
         if not asset_cog: return None
+        if player.is_working:
+            return asset_cog.get_url("jobbing")
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
             return asset_cog.get_url(player.last_action)
@@ -126,6 +146,8 @@ class MainEmbed(commands.Cog):
 
     @staticmethod
     def get_character_thoughts(player: PlayerProfile) -> str:
+        if player.is_working:
+            return "Au travail... il faut bien gagner sa vie."
         if player.hunger > 70 and player.stress > 60: return "J'ai l'estomac dans les talons et les nerfs à vif. Un rien pourrait me faire craquer."
         if player.withdrawal_severity > 60 and player.health < 40: return "Chaque partie de mon corps me fait souffrir. Le manque me ronge de l'intérieur, je suis à bout."
         if player.fatigue > 80 and player.boredom > 70: return "Je suis épuisé, mais je m'ennuie tellement que je n'arrive même pas à fermer l'œil."
@@ -138,7 +160,7 @@ class MainEmbed(commands.Cog):
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
         if image_url := self.get_image_url(player): embed.set_image(url=image_url)
         embed.description = f"""**Pensées du Cuisinier :**
-*\"{self.get_character_thoughts(player)}\"*"""
+*"{self.get_character_thoughts(player)}"*"""
         if player.show_inventory_in_view:
             inventory_items = [("food_servings", "🥪 Sandwichs"), ("tacos", "🌮 Tacos"), ("salad_servings", "🥗 Salades"), ("water_bottles", "💧 Eaux"), ("soda_cans", "🥤 Sodas"), ("wine_bottles", "🍷 Vins"), ("cigarettes", "🚬 Cigarettes"), ("e_cigarettes", "💨 Vapoteuses"), ("joints", "🌿 Joints")]
             inventory_list = [f"{label}: **{getattr(player, attr, 0)}**" for attr, label in inventory_items if getattr(player, attr, 0) > 0]
@@ -207,12 +229,14 @@ class MainEmbed(commands.Cog):
                     "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda, 
                     "eat_sandwich": cooker_brain.perform_eat_sandwich, "eat_tacos": cooker_brain.use_tacos, 
                     "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette, 
-                    "smoke_ecigarette": cooker_brain.use_ecigarette 
+                    "smoke_ecigarette": cooker_brain.use_ecigarette,
+                    "action_go_to_work": cooker_brain.perform_go_to_work,
+                    "action_go_home": cooker_brain.perform_go_home,
+                    "action_take_smoke_break": cooker_brain.perform_take_smoke_break
                 }
                 if custom_id in action_map:
-                    if custom_id == "action_sleep":
-                        message, _, duration, sleep_type = action_map[custom_id](player, state)
-                        if sleep_type == "none": duration = 0
+                    if custom_id in ["action_sleep", "action_go_to_work", "action_go_home"]:
+                        message, _, duration, *_ = action_map[custom_id](player, state)
                     else:
                         message, _, duration = action_map[custom_id](player)
 

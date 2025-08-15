@@ -105,6 +105,13 @@ class PlayerProfile(Base):
     show_inventory_in_view: bool = Column(Boolean, default=False)
     
     recent_logs: str = Column(Text, default="")
+
+    # === SECTION 8: TRAVAIL ===
+    is_working: bool = Column(Boolean, default=False, nullable=False)
+    is_on_break: bool = Column(Boolean, default=False, nullable=False)
+    missed_work_days: int = Column(Integer, default=0, nullable=False)
+    last_worked_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
+    first_day_reward_given: bool = Column(Boolean, default=False, nullable=False)
     
     # --- Inventaire ---
     food_servings: int = Column(Integer, default=1)

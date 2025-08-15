@@ -3,21 +3,64 @@ from discord.ext import commands
 from db.models import PlayerProfile, ServerState
 from utils.helpers import clamp
 import datetime
-from utils.game_time import is_night, get_current_game_time
+from utils.game_time import is_night, get_current_game_time, is_work_time, is_lunch_break
+from functools import wraps
+
+def check_not_working(func):
+    @wraps(func)
+    def wrapper(self, player: PlayerProfile, *args, **kwargs):
+        if player.is_working and not player.is_on_break:
+            return "Vous êtes au travail, vous ne pouvez pas faire ça maintenant.", {}, 0
+        return func(self, player, *args, **kwargs)
+    return wrapper
 
 class CookerBrain(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    def perform_go_to_work(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int):
+        if not is_work_time(server_state):
+            return "Ce n'est pas l'heure de travailler.", {}, 0
+        if player.is_working:
+            return "Vous êtes déjà au travail.", {}, 0
 
+        player.is_working = True
+        player.last_action = "jobbing"
+        player.last_action_time = datetime.datetime.utcnow()
+        return "Vous partez au travail.", {}, 30
+
+    def perform_go_home(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int):
+        if not player.is_working:
+            return "Vous n'êtes pas au travail.", {}, 0
+        
+        player.is_working = False
+        player.is_on_break = False
+        player.last_action = "neutral"
+        player.last_action_time = datetime.datetime.utcnow()
+        return "Vous rentrez à la maison.", {}, 30
+
+    def perform_take_smoke_break(self, player: PlayerProfile) -> (str, dict, int):
+        if not player.is_working:
+            return "Vous devez être au travail pour prendre une pause.", {}, 0
+        if player.is_on_break:
+            return "Vous êtes déjà en pause.", {}, 0
+
+        player.is_on_break = True
+        # La pause dure 10 minutes en temps de jeu, soit 60s en temps réel si 1 jour = 24h
+        # On va dire 15s pour l'exemple
+        duration = 15 
+        player.job_performance = clamp(player.job_performance - 2, 0, 100)
+        return "Vous prenez une pause cigarette.", {}, duration
+
+    @check_not_working
     def perform_drink_wine(self, player: PlayerProfile) -> (str, dict, int):
         if player.wine_bottles <= 0: return "Vous n'avez pas de vin.", {}, 0
         player.wine_bottles -= 1
         player.thirst = clamp(player.thirst - 15, 0, 100)
-        player.stress = clamp(player.stress - 40.0, 0, 100) # Très efficace contre le stress
+        player.stress = clamp(player.stress - 40.0, 0, 100)
         player.happiness = clamp(player.happiness + 20, 0, 100)
-        player.tox = clamp(player.tox + 12.0, 0, 100) # ...mais très toxique
-        player.dizziness = clamp(player.dizziness + 25.0, 0, 100) # Rend vaseux
+        player.tox = clamp(player.tox + 12.0, 0, 100)
+        player.dizziness = clamp(player.dizziness + 25.0, 0, 100)
         player.guilt = clamp(player.guilt + 10.0, 0, 100)
         player.last_drank_at = datetime.datetime.utcnow()
         player.last_action = "neutral_drink_wine"
@@ -25,26 +68,29 @@ class CookerBrain(commands.Cog):
         return "Vous buvez une bouteille de vin bon marché. Le stress s'efface dans une douce torpeur.", {}, 15
 
     def perform_smoke_joint(self, player: PlayerProfile) -> (str, dict, int):
+        if player.is_on_break:
+            player.job_performance = clamp(player.job_performance - 15, 0, 100) # Fumer un joint au taf... très mauvaise idée
         if player.joints <= 0: return "Vous n'avez pas de joint.", {}, 0
         player.joints -= 1
-        player.stress = clamp(player.stress - 60.0, 0, 100) # Effet anti-stress radical
+        player.stress = clamp(player.stress - 60.0, 0, 100)
         player.happiness = clamp(player.happiness + 30, 0, 100)
-        player.sanity = clamp(player.sanity - 5.0, 0, 100) # Mais affecte la santé mentale
-        player.hunger = clamp(player.hunger + 30, 0, 100) # Défonce !
+        player.sanity = clamp(player.sanity - 5.0, 0, 100)
+        player.hunger = clamp(player.hunger + 30, 0, 100)
         player.tox = clamp(player.tox + 5.0, 0, 100)
-        player.job_performance = clamp(player.job_performance - 20, 0, 100) # Incompatible avec le travail
+        player.job_performance = clamp(player.job_performance - 20, 0, 100)
         player.guilt = clamp(player.guilt + 20.0, 0, 100)
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "neutral_smoke_joint"
         player.last_action_time = datetime.datetime.utcnow()
+        player.is_on_break = False # Fin de la pause
         return "Vous allumez un joint. Le monde semble plus lent, plus doux... et la faim vous tenaille.", {}, 25
     
+    @check_not_working
     def perform_sleep(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int, str):
         game_time = get_current_game_time(server_state)
         night_time = is_night(server_state)
 
         if night_time:
-            # Nuit complète
             sleep_quality = 1.0 - (player.pain / 150.0) - (player.stress / 200.0)
             energy_gain = 85.0 * sleep_quality
             fatigue_loss = 95.0 * sleep_quality
@@ -59,12 +105,11 @@ class CookerBrain(commands.Cog):
             player.last_action = "neutral_sleep"
             player.last_action_time = datetime.datetime.utcnow()
             
-            duration = 300 # 5 minutes for a full night
+            duration = 300
             return f"Vous avez dormi profondément jusqu'au matin (qualité: {sleep_quality:.0%}). L'énergie et la volonté rechargées.", {}, duration, "night"
 
-        else: # C'est la journée
+        else:
             if player.fatigue > 60:
-                # Sieste possible
                 nap_quality = 1.0 - (player.stress / 250.0)
                 energy_gain = 30.0 * nap_quality
                 fatigue_loss = 40.0 * nap_quality
@@ -77,12 +122,12 @@ class CookerBrain(commands.Cog):
                 player.last_action = "neutral_sleep"
                 player.last_action_time = datetime.datetime.utcnow()
                 
-                duration = 90 # 1.5 minutes for a nap
+                duration = 90
                 return f"Vous avez fait une sieste réparatrice (qualité: {nap_quality:.0%}).", {}, duration, "nap"
             else:
-                # Pas assez fatigué pour une sieste
                 return "Vous n'êtes pas assez fatigué pour faire une sieste maintenant.", {}, 0, "none"
 
+    @check_not_working
     def perform_shower(self, player: PlayerProfile) -> (str, dict, int):
         hygiene_gain = 70.0
         stress_loss = 15.0
@@ -107,7 +152,7 @@ class CookerBrain(commands.Cog):
         bowel_relief = player.bowels
         player.bowels = 0
         player.last_defecated_at = datetime.datetime.utcnow()
-        player.last_action = "neutral_pooping" # Lie l'action à l'image
+        player.last_action = "neutral_pooping"
         player.last_action_time = datetime.datetime.utcnow()
         return f"Vous vous sentez plus léger après ce passage aux toilettes. (Soulagement: {bowel_relief:.0f}%)", {}, 15
     
@@ -116,13 +161,13 @@ class CookerBrain(commands.Cog):
         player.water_bottles -= 1
         player.thirst = clamp(player.thirst - 60.0, 0, 100)
         player.dry_mouth = clamp(player.dry_mouth - 70.0, 0, 100)
-        # L'eau aide à nettoyer le corps
         player.tox = clamp(player.tox - 2.0, 0, 100)
         player.last_drank_at = datetime.datetime.utcnow()
         player.last_action = "sad_drinking" if player.stress > 50 else "neutral_drinking"
         player.last_action_time = datetime.datetime.utcnow()
         return "Vous buvez une bouteille d'eau. Simple, pur, efficace.", {}, 5
 
+    @check_not_working
     def use_soda(self, player: PlayerProfile) -> (str, dict, int):
         if player.soda_cans <= 0: return "Vous n'avez plus de soda !", {}, 0
         player.soda_cans -= 1
@@ -134,29 +179,32 @@ class CookerBrain(commands.Cog):
         player.last_action_time = datetime.datetime.utcnow()
         return "Un soda bien frais. Le sucre pétille agréablement.", {}, 5
 
+    @check_not_working
     def perform_eat_sandwich(self, player: PlayerProfile) -> (str, dict, int):
         if player.food_servings <= 0: return "Vous n'avez plus de sandwich !", {}, 0
         player.food_servings -= 1
         player.hunger = clamp(player.hunger - 50.0, 0, 100)
         player.nausea = clamp(player.nausea - 10.0, 0, 100)
         player.happiness = clamp(player.happiness + 5, 0, 100)
-        player.bowels = clamp(player.bowels + 15, 0, 100) # EFFET AJOUTE
+        player.bowels = clamp(player.bowels + 15, 0, 100)
         player.last_eaten_at = datetime.datetime.utcnow()
         player.last_action = "neutral_eat_sandwich"
         player.last_action_time = datetime.datetime.utcnow()
         return "Vous mangez un sandwich basique. Ça cale l'estomac.", {}, 20
 
+    @check_not_working
     def use_tacos(self, player: PlayerProfile) -> (str, dict, int):
         if player.tacos <= 0: return "Vous n'avez pas de tacos !", {}, 0
         player.tacos -= 1
         player.hunger = clamp(player.hunger - 45, 0, 100)
         player.happiness = clamp(player.happiness + 20, 0, 100)
-        player.bowels = clamp(player.bowels + 25, 0, 100) # EFFET AJOUTE (plus consistant !)
+        player.bowels = clamp(player.bowels + 25, 0, 100)
         player.last_eaten_at = datetime.datetime.utcnow()
         player.last_action = "neutral_eat_tacos"
         player.last_action_time = datetime.datetime.utcnow()
         return "Un tacos bien garni ! Un vrai moment de plaisir.", {}, 25
 
+    @check_not_working
     def use_salad(self, player: PlayerProfile) -> (str, dict, int):
         if player.salad_servings <= 0: return "Vous n'avez pas de salade !", {}, 0
         player.salad_servings -= 1
@@ -164,45 +212,49 @@ class CookerBrain(commands.Cog):
         player.health = clamp(player.health + 5, 0, 100)
         player.happiness = clamp(player.happiness + 10, 0, 100)
         player.tox = clamp(player.tox - 4.0, 0, 100)
-        player.bowels = clamp(player.bowels + 30, 0, 100) # EFFET AJOUTE (riche en fibres !)
+        player.bowels = clamp(player.bowels + 30, 0, 100)
         player.last_eaten_at = datetime.datetime.utcnow()
         player.last_action = "neutral_eat_salad"
         player.last_action_time = datetime.datetime.utcnow()
         return "Une salade fraîche et saine. C'est bon pour le corps et l'esprit.", {}, 20
 
     def perform_smoke_cigarette(self, player: PlayerProfile) -> (str, dict, int):
+        if player.is_on_break:
+            player.job_performance = clamp(player.job_performance - 5, 0, 100) # Fumer pdt la pause, ok mais pas trop
         if player.cigarettes <= 0: return "Vous n'avez plus de cigarettes !", {}, 0
         player.cigarettes -= 1
         
-        # Effet basé sur la tolérance
-        tolerance_factor = 1.0 - (player.substance_tolerance / 200.0) # plus de tolérance, moins d'effet
+        tolerance_factor = 1.0 - (player.substance_tolerance / 200.0)
         stress_relief = 30.0 * tolerance_factor
         
         player.stress = clamp(player.stress - stress_relief, 0, 100)
-        player.withdrawal_severity = 0 # Le manque est instantanément comblé
+        player.withdrawal_severity = 0
         player.craving_nicotine = 0
-        player.tox = clamp(player.tox + 8.0, 0, 100) # Fumer est toxique
+        player.tox = clamp(player.tox + 8.0, 0, 100)
         player.dry_mouth = clamp(player.dry_mouth + 40.0, 0, 100)
         player.sore_throat = clamp(player.sore_throat + 10.0, 0, 100)
-        player.guilt = clamp(player.guilt + 15.0, 0, 100) # Craquer => Culpabilité
+        player.guilt = clamp(player.guilt + 15.0, 0, 100)
         player.substance_addiction_level = clamp(player.substance_addiction_level + 0.5, 0, 100)
         player.substance_tolerance = clamp(player.substance_tolerance + 1.0, 0, 100)
         
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "neutral_smoke_cig"
         player.last_action_time = datetime.datetime.utcnow()
+        player.is_on_break = False # Fin de la pause
         return "Vous allumez une cigarette. Le stress s'envole, mais à quel prix... La culpabilité vous pèse déjà.", {}, 10
 
     def use_ecigarette(self, player: PlayerProfile) -> (str, dict, int):
+        if player.is_on_break:
+            player.job_performance = clamp(player.job_performance - 2, 0, 100) # Moins grave
         if player.e_cigarettes <= 0: return "Votre e-cigarette est vide.", {}, 0
-        #... Logique similaire mais avec des effets moindres (moins de tox, moins de culpabilité)...
         player.stress = clamp(player.stress - 15, 0, 100)
-        player.withdrawal_severity = clamp(player.withdrawal_severity - 40, 0, 100) # Calme bien le manque
+        player.withdrawal_severity = clamp(player.withdrawal_severity - 40, 0, 100)
         player.tox = clamp(player.tox + 2.0, 0, 100)
         player.guilt = clamp(player.guilt + 2.0, 0, 100)
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "vape_e_cig"
         player.last_action_time = datetime.datetime.utcnow()
+        player.is_on_break = False # Fin de la pause
         return "Vous tirez sur votre vapoteuse. Moins satisfaisant, mais ça aide à tenir.", {}, 5
 
 async def setup(bot):

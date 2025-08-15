@@ -46,3 +46,30 @@ def is_night(server_state: ServerState, night_start: int = 22, day_start: int = 
     # Cas où la période de nuit traverse minuit (ex: 1h à 6h, peu probable mais géré)
     else:
         return day_start > current_time.hour >= night_start
+
+def is_work_time(server_state: ServerState) -> bool:
+    """
+    Vérifie si c'est l'heure de travailler dans le jeu.
+    (9:00 - 11:30 et 13:00 - 17:30)
+    """
+    current_time = get_current_game_time(server_state)
+    morning_start = datetime.time(hour=9, minute=0)
+    morning_end = datetime.time(hour=11, minute=30)
+    afternoon_start = datetime.time(hour=13, minute=0)
+    afternoon_end = datetime.time(hour=17, minute=30)
+
+    is_morning_work = morning_start <= current_time < morning_end
+    is_afternoon_work = afternoon_start <= current_time < afternoon_end
+
+    return is_morning_work or is_afternoon_work
+
+def is_lunch_break(server_state: ServerState) -> bool:
+    """
+    Vérifie si c'est l'heure de la pause déjeuner.
+    (11:30 - 13:00)
+    """
+    current_time = get_current_game_time(server_state)
+    lunch_start = datetime.time(hour=11, minute=30)
+    lunch_end = datetime.time(hour=13, minute=0)
+
+    return lunch_start <= current_time < lunch_end
