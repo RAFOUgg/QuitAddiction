@@ -438,13 +438,10 @@ class AdminCog(commands.Cog):
             finally: db.close()
 
     class ConfigButton(ui.Button):
-        def __init__(self, label: str, emoji: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
-            super().__init__(label=label, emoji=emoji, style=style, row=row)
-            self.guild_id, self.label, self.cog = guild_id, label, cog
-        
         async def callback(self, interaction: discord.Interaction):
             if "Arrêter" in self.label:
-                await interaction.response.send_modal(StopGameConfirmationModal(self.guild_id, self.cog)); return
+                await interaction.response.send_modal(StopGameConfirmationModal(self.guild_id, self.cog))
+                return
             
             await interaction.response.defer()
             db = SessionLocal()
@@ -457,18 +454,65 @@ class AdminCog(commands.Cog):
                         followup_message = ("❌ Erreur: Veuillez configurer un salon de jeu avant de démarrer.", True)
                     else:
                         main_embed_cog = self.cog.bot.get_cog("MainEmbed")
+                        cooker_brain = self.cog.bot.get_cog("CookerBrain")
                         player = db.query(PlayerProfile).filter_by(guild_id=self.guild_id).first()
                         now = datetime.datetime.utcnow()
-                        if not player: player = PlayerProfile(guild_id=self.guild_id, last_update=now); db.add(player)
-                        state.game_started, state.game_start_time, state.is_test_mode = True, now, (state.duration_key == 'test')
-                        if state.duration_key == 'real_time':
-                            state.game_day_start_hour = now.hour
-                        db.commit(); db.refresh(player); db.refresh(state)
+                        
+                        # Initialize new player if needed
+                        if not player:
+                            player = PlayerProfile(
+                                guild_id=self.guild_id,
+                                last_update=now,
+                                willpower=85.0,  # Start with high willpower
+                                health=100.0,
+                                energy=100.0,
+                                happiness=70.0
+                            )
+                            db.add(player)
+                        
+                        # Initialize game state
+                        state.game_started = True
+                        state.game_start_time = now
+                        state.is_test_mode = (state.duration_key == 'test')
+                        
+                        # Set initial work state based on current time
+                        current_hour = now.hour
+                        current_minute = now.minute
+                        
+                        # Define work periods
+                        morning_work = (9, 0) <= (current_hour, current_minute) < (11, 30)
+                        afternoon_work = (13, 0) <= (current_hour, current_minute) < (17, 30)
+                        
+                        # Auto-initialize cook's state based on time
+                        if morning_work or afternoon_work:
+                            player.is_working = True
+                            player.last_action = "working"
+                            player.last_worked_at = now
+                            message = "Le cuisinier est déjà au travail."
+                        elif (11, 30) <= (current_hour, current_minute) < (13, 0):
+                            # Lunch break
+                            player.is_working = False
+                            player.last_action = "neutral"
+                            message = "Le cuisinier est en pause déjeuner."
+                        elif current_hour >= 17 or current_hour < 9:
+                            # After work or before work
+                            player.is_working = False
+                            player.last_action = "neutral"
+                            message = "Le cuisinier est chez lui."
+                        
+                        db.commit()
+                        db.refresh(player)
+                        db.refresh(state)
                         
                         game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
-                        game_message = await game_channel.send(embed=main_embed_cog.generate_dashboard_embed(player, state, interaction.guild), view=DashboardView(player))
-                        state.game_message_id = game_message.id; db.commit()
-                        followup_message = (f"✅ Le jeu a démarré dans {game_channel.mention} !", True)
+                        game_message = await game_channel.send(
+                            embed=main_embed_cog.generate_dashboard_embed(player, state, interaction.guild),
+                            view=DashboardView(player)
+                        )
+                        state.game_message_id = game_message.id
+                        db.commit()
+                        
+                        followup_message = (f"✅ {message} Le jeu démarre dans {game_channel.mention} !", True)
 
                 elif "Notifications" in self.label:
                     db.refresh(state) # Assurer que l'état est à jour avant de changer de vue

@@ -280,8 +280,20 @@ class MainEmbed(commands.Cog):
         return "Pour l'instant, ça va à peu près."
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
-        embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
-        if image_url := self.get_image_url(player): embed.set_image(url=image_url)
+        # Get game mode info
+        game_mode = state.game_mode.capitalize() if state.game_mode else "Real Time"
+        duration_key = state.duration_key or "real_time"
+        duration_label = "Test Mode" if duration_key == "test" else "Temps Réel"
+        
+        # Create embed with mode in title
+        embed = discord.Embed(
+            title=f"👨‍🍳 Le Quotidien du Cuisinier [{game_mode}]", 
+            color=0x3498db
+        )
+        
+        if image_url := self.get_image_url(player): 
+            embed.set_image(url=image_url)
+        
         embed.description = f"""**Pensées du Cuisinier :**
 *"{self.get_character_thoughts(player)}"*"""
         if player.show_inventory_in_view:
@@ -310,7 +322,11 @@ class MainEmbed(commands.Cog):
             for row in stats_layout: [embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True) for name, val, bad in row]
         
         game_time = get_current_game_time(state)
-        embed.set_footer(text=f"Powered by LaFoncedalle.fr • ⌚ Heure en jeu : {game_time.strftime('%H:%M')}"); embed.timestamp = datetime.datetime.utcnow()
+        # Add mode info to footer
+        embed.set_footer(
+            text=f"Powered by LaFoncedalle.fr • Mode: {game_mode} ({duration_label}) • ⌚ {game_time.strftime('%H:%M')}"
+        )
+        embed.timestamp = datetime.datetime.utcnow()
         return embed
 
     def generate_work_embed(self, player: PlayerProfile, state: ServerState) -> discord.Embed:

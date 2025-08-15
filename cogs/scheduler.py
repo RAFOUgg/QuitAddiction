@@ -48,14 +48,26 @@ class Scheduler(commands.Cog):
                 player = db.query(PlayerProfile).filter_by(guild_id=server_state.guild_id).first()
                 if not player: continue
 
-                game_time = get_current_game_time(server_state)
-                game_day = (datetime.datetime.utcnow() - server_state.game_start_time).days
+                now = datetime.datetime.utcnow()
+                current_hour = now.hour
+                current_minute = now.minute
 
-                # --- AUTONOMY LOGIC ---
-                AUTONOMY_THRESHOLD = 70
-                if player.willpower >= AUTONOMY_THRESHOLD:
-                    if is_work_time(server_state) and not player.is_working:
+                # --- REAL-TIME WORK MANAGEMENT ---
+                morning_work = (9, 0) <= (current_hour, current_minute) < (11, 30)
+                afternoon_work = (13, 0) <= (current_hour, current_minute) < (17, 30)
+                lunch_break = (11, 30) <= (current_hour, current_minute) < (13, 0)
+                
+                # Auto work management if willpower is high enough
+                if player.willpower >= 70:
+                    if (morning_work or afternoon_work) and not player.is_working:
+                        # Auto go to work
                         cooker_brain_cog.perform_go_to_work(player, server_state)
+                    elif (lunch_break or (current_hour >= 17 or current_hour < 9)) and player.is_working:
+                        # Auto go home
+                        cooker_brain_cog.perform_go_home(player, server_state)
+                
+                # --- EXISTING AUTONOMY LOGIC ---
+                if player.willpower >= 70:
                     if player.hunger > 80 and player.food_servings > 0:
                         cooker_brain_cog.perform_eat_sandwich(player)
                     if is_night(server_state) and player.fatigue > 70:
