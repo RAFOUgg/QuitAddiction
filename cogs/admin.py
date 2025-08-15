@@ -7,9 +7,10 @@ from discord import app_commands, ui
 import hashlib
 import datetime
 import math
-from typing import List, Tuple, Dict, Literal
+from typing import List, Tuple, Dict, Literal, Union, Optional, cast
 import os
 import traceback
+from sqlalchemy.orm import Session
 
 # --- Centralized Imports ---
 from db.database import SessionLocal
@@ -274,25 +275,72 @@ class AdminCog(commands.Cog):
     @app_commands.command(name="config", description="Configure les paramètres du bot et du jeu pour le serveur.")
     @app_commands.default_permissions(administrator=True)
     async def config(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True); db = SessionLocal()
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "Cette commande doit être utilisée dans un serveur.",
+                ephemeral=True
+            )
+            return
+            
+        # Réponse immédiate
+        db = SessionLocal()
         try:
             state = db.query(ServerState).filter_by(guild_id=str(interaction.guild.id)).first()
             if not state:
-                state = ServerState(guild_id=str(interaction.guild.id)); self._update_game_parameters(state)
-                db.add(state); db.commit(); db.refresh(state)
-            await interaction.followup.send(embed=self.generate_config_menu_embed(state), view=self.generate_config_menu_view(str(interaction.guild.id), interaction.guild, state))
-        finally: db.close()
+                state = ServerState(guild_id=str(interaction.guild.id))
+                self._update_game_parameters(state)
+                db.add(state)
+                db.commit()
+                db.refresh(state)
+            
+            embed = self.generate_config_menu_embed(state)
+            view = self.generate_config_menu_view(str(interaction.guild.id), interaction.guild, state)
+            
+            await interaction.response.send_message(
+                embed=embed,
+                view=view,
+                ephemeral=True
+            )
+        except Exception as e:
+            logger.error(f"Error in config command: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "Une erreur s'est produite lors de la configuration.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "Une erreur s'est produite lors de la configuration.",
+                    ephemeral=True
+                )
+        finally:
+            db.close()
 
-    def create_options_and_mapping(self, items: list, item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
-        options, id_mapping = [], {}
+    def create_options_and_mapping(self, items: List[Union[discord.Role, discord.TextChannel]], item_type: str, guild: discord.Guild | None) -> Tuple[List[discord.SelectOption], Dict[str, str]]:
+        options: List[discord.SelectOption] = []
+        id_mapping: Dict[str, str] = {}
+        
         sorted_items = sorted(items, key=lambda x: x.position, reverse=(item_type == "role"))
+        
         for item in sorted_items:
-            if item_type == "role" and item.is_default(): continue
-            item_id, item_name = str(item.id), str(item.name); label = f"🔹 {item_name}" if item_type == "role" else f"#{item_name}"
+            if item_type == "role" and isinstance(item, discord.Role) and item.is_default():
+                continue
+                
+            item_id = str(item.id)
+            item_name = str(item.name)
+            label = f"🔹 {item_name}" if item_type == "role" else f"#{item_name}"
+            
             hashed_id = hashlib.sha256(item_id.encode()).hexdigest()[:25]
-            options.append(discord.SelectOption(label=label[:100], value=hashed_id, description=f"ID: {item_id}"))
+            options.append(discord.SelectOption(
+                label=label[:100],
+                value=hashed_id,
+                description=f"ID: {item_id}"
+            ))
             id_mapping[hashed_id] = item_id
-        if not options: options.append(discord.SelectOption(label="Aucun item trouvé", value="no_items"))
+            
+        if not options:
+            options.append(discord.SelectOption(label="Aucun item trouvé", value="no_items"))
+            
         return options, id_mapping
 
     def generate_notifications_config_embed(self, state: ServerState) -> discord.Embed:
@@ -438,8 +486,20 @@ class AdminCog(commands.Cog):
             finally: db.close()
 
     class ConfigButton(ui.Button):
+        def __init__(self, label: str, emoji: str, guild_id: str, style: discord.ButtonStyle, row: int, cog: 'AdminCog'):
+            super().__init__(label=label, emoji=emoji, style=style, row=row)
+            self.guild_id = guild_id
+            self.cog = cog
+            self.view: Optional[ui.View] = None
+
         async def callback(self, interaction: discord.Interaction):
-            if "Arrêter" in self.label:
+            if not interaction.guild:
+                await interaction.response.send_message("Cette action doit être effectuée dans un serveur.", ephemeral=True)
+                return
+
+            label = self.label or ""
+            
+            if "Arrêter" in label:
                 await interaction.response.send_modal(StopGameConfirmationModal(self.guild_id, self.cog))
                 return
             
@@ -447,9 +507,14 @@ class AdminCog(commands.Cog):
             db = SessionLocal()
             try:
                 state = db.query(ServerState).filter_by(guild_id=self.guild_id).first()
+                if not state:
+                    await interaction.followup.send("État du serveur introuvable.", ephemeral=True)
+                    return
+                    
                 followup_message = None
 
-                if "Démarrer" in self.label:
+                label = self.label or ""
+                if "Démarrer" in label:
                     if not state.game_channel_id:
                         followup_message = ("❌ Erreur: Veuillez configurer un salon de jeu avant de démarrer.", True)
                     else:
@@ -516,7 +581,7 @@ class AdminCog(commands.Cog):
                         
                         followup_message = (f"✅ {message} Le jeu démarre dans {game_channel.mention} !", True)
 
-                elif "Notifications" in self.label:
+                elif "Notifications" in (self.label or ""):
                     db.refresh(state) # Assurer que l'état est à jour avant de changer de vue
                     embed = self.cog.generate_notifications_config_embed(state)
                     view = self.cog.generate_notifications_config_view(self.guild_id, interaction.guild)
