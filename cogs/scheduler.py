@@ -49,6 +49,10 @@ class Scheduler(commands.Cog):
                 if not player: continue
 
                 now = datetime.datetime.utcnow()
+                game_time = get_current_game_time(server_state)
+                # Calculate game day from start time
+                game_day = (now - server_state.game_start_time).days if server_state.game_start_time else 0
+
                 current_hour = now.hour
                 current_minute = now.minute
 
