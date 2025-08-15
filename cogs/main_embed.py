@@ -499,7 +499,7 @@ class MainEmbed(commands.Cog):
                     "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower, 
                     "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate, 
                     "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda, 
-                    "eat_sandwich": cooker_brain.perform_eat_sandwich, "eat_tacos": cooker_brain.use_tacos, 
+                    "eat_sandwich": cooker_brain.perform_eat_food, "eat_tacos": cooker_brain.use_tacos, 
                     "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette, 
                     "smoke_ecigarette": cooker_brain.use_ecigarette,
                     "action_go_to_work": cooker_brain.perform_go_to_work,
