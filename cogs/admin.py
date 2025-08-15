@@ -261,16 +261,13 @@ class AdminCog(commands.Cog):
     BASE_DAILY_RATES = {"hunger": 150, "thirst": 200, "bladder": 120, "stress": 40, "boredom": 200, "hygiene": 100}
     DIFFICULTY_MULTIPLIERS = {"peaceful": 0.75, "medium": 1.0, "hard": 1.5}
     DURATION_SETTINGS = {
-        "test_day": {"minutes_per_day": 24,     "label": "Test (Jour = 24 mins)"},
-        "day":      {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
-        "short":    {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
-        "medium":   {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
-        "long":     {"minutes_per_day": 1440,   "label": "Temps Réel (Jour = 24h)"},
+        "test": {"minutes_per_day": 12, "label": "Test (1 semaine en 84 mins)"},
+        "real_time": {"minutes_per_day": 1440, "label": "Temps Réel (1:1)"},
     }
     def _update_game_parameters(self, state: ServerState):
-        difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "day"
+        difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "real_time"
         multiplier = self.DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
-        duration_setting = self.DURATION_SETTINGS.get(duration_key, self.DURATION_SETTINGS["day"])
+        duration_setting = self.DURATION_SETTINGS.get(duration_key, self.DURATION_SETTINGS["real_time"])
         for rate, value in self.BASE_DAILY_RATES.items(): setattr(state, f"degradation_rate_{rate}", value * multiplier)
         state.game_minutes_per_day = duration_setting["minutes_per_day"]
 
@@ -337,7 +334,7 @@ class AdminCog(commands.Cog):
 
     def generate_mode_duration_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(title="🎮 Difficulté & Durée", color=discord.Color.teal())
-        difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "day"
+        difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "real_time"
         embed.add_field(name="Difficulté Actuelle", value=f"`{difficulty.capitalize()}` (Multiplicateur: x{self.DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)})", inline=False)
         embed.add_field(name="Durée Actuelle", value=f"`{self.DURATION_SETTINGS.get(duration_key, {}).get('label')}`", inline=False)
         return embed
@@ -407,7 +404,7 @@ class AdminCog(commands.Cog):
 
     def generate_config_menu_embed(self, state: ServerState) -> discord.Embed:
         embed = discord.Embed(title="⚙️ Configuration du Bot", color=discord.Color.blue())
-        difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "day"
+        difficulty = state.game_mode or "medium"; duration_key = state.duration_key or "real_time"
         mode_str = f"`{difficulty.capitalize()}`"; duration_str = f"`{self.DURATION_SETTINGS.get(duration_key, {}).get('label')}`"
         embed.add_field(name="▶️ Statut", value=f"**Jeu:** `{'En cours' if state.game_started else 'Non démarré'}`", inline=False)
         embed.add_field(name="🕹️ Paramètres", value=f"**Difficulté:** {mode_str}\n**Échelle de Temps:** {duration_str}", inline=False)
@@ -463,7 +460,7 @@ class AdminCog(commands.Cog):
                         player = db.query(PlayerProfile).filter_by(guild_id=self.guild_id).first()
                         now = datetime.datetime.utcnow()
                         if not player: player = PlayerProfile(guild_id=self.guild_id, last_update=now); db.add(player)
-                        state.game_started, state.game_start_time, state.is_test_mode = True, now, (state.duration_key == 'test_day')
+                        state.game_started, state.game_start_time, state.is_test_mode = True, now, (state.duration_key == 'test')
                         db.commit(); db.refresh(player); db.refresh(state)
                         
                         game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
