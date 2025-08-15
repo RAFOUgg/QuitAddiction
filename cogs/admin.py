@@ -477,21 +477,24 @@ class AdminCog(commands.Cog):
                         current_minute = now.minute
                         logger.info(f"Initializing game state at {current_hour}:{current_minute}")
 
-                        # Auto-initialize cook's state based on time
+                        # Auto-initialize cook's state based on time with high willpower
                         if (9, 0) <= (current_hour, current_minute) < (11, 30) or (13, 0) <= (current_hour, current_minute) < (17, 30):
                             player.is_working = True
                             player.last_action = "working"
                             player.last_worked_at = now
+                            player.willpower = 80  # High initial willpower
                             message = "Le cuisinier démarre en pleine journée de travail."
                             logger.info("Player initialized at work")
                         elif (11, 30) <= (current_hour, current_minute) < (13, 0):
                             player.is_working = False
                             player.last_action = "neutral"
+                            player.willpower = 80  # High initial willpower
                             message = "Le cuisinier démarre pendant sa pause déjeuner."
                             logger.info("Player initialized during lunch break")
                         else:
                             player.is_working = False
                             player.last_action = "neutral"
+                            player.willpower = 80  # High initial willpower
                             message = "Le cuisinier démarre à son domicile."
                             logger.info("Player initialized at home")
 

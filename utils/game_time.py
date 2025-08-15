@@ -4,9 +4,13 @@ from db.models import ServerState
 
 def get_current_game_time(server_state: ServerState) -> datetime.time:
     """
-    Calcule l'heure actuelle dans le jeu en se basant sur le temps réel écoulé
-    depuis le début du jeu.
+    Calcule l'heure actuelle dans le jeu.
+    En mode temps réel (real_time), renvoie l'heure réelle actuelle.
     """
+    if server_state.duration_key == 'real_time':
+        # En mode temps réel, on utilise l'heure actuelle directement
+        return datetime.datetime.utcnow().time()
+    
     if not server_state.game_start_time:
         # Retourne une heure par défaut si le jeu n'a pas encore commencé
         return datetime.time(hour=server_state.game_day_start_hour)

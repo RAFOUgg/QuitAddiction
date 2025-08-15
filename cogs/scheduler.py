@@ -95,13 +95,35 @@ class Scheduler(commands.Cog):
                     if player.last_worked_at and player.last_worked_at.date() == datetime.datetime.utcnow().date():
                         if not player.has_completed_first_work_day:
                             player.has_completed_first_work_day = True
+                            # First day completion reward
+                            player.joints += 1
+                            player.has_unlocked_smokeshop = True
+                            player.first_day_reward_given = True
+                            
+                            # Add friend's message about the joint
+                            friend_message = (
+                                "---\n"
+                                "**Alex** - 17:45\n"
+                                "Hey mec ! Comme promis, je t'ai laissé un petit cadeau dans ta boîte aux lettres... 🌿\n"
+                                "Histoire que tu te détendes après ta première journée ! Et si t'en veux d'autres,\n"
+                                "j'ai un pote qui tient une petite boutique pas loin. Je t'ai mis l'adresse sur ton tel.\n"
+                                "---"
+                            )
+                            player.messages = friend_message + "\n" + (player.messages or "")
+                            
+                            # Send notification
+                            try:
+                                channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+                                embed = discord.Embed(
+                                    title="📱 Nouveau message",
+                                    description="Votre téléphone vibre... Un message d'un ami !",
+                                    color=discord.Color.green()
+                                )
+                                await channel.send(embed=embed, delete_after=10)
+                            except (discord.NotFound, discord.Forbidden, ValueError):
+                                pass
+                                
                     update_job_performance(player)
-
-                # Check for first day completion and unlock rewards
-                if player.has_completed_first_work_day and not player.first_day_reward_given:
-                    player.joints += 1
-                    player.has_unlocked_smokeshop = True
-                    player.first_day_reward_given = True
                     
                     try:
                         # Send notification about new message if possible

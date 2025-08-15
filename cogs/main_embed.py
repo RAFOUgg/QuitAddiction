@@ -281,16 +281,20 @@ class MainEmbed(commands.Cog):
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
         # Get game mode and timing info
-        game_mode = state.game_mode.capitalize() if state.game_mode else "Real Time"
+        game_mode = state.game_mode.capitalize() if state.game_mode else "Normal"
         duration_key = state.duration_key or "real_time"
         duration_label = "Test Mode" if duration_key == "test" else "Temps Réel"
         
         # Add start time info to title
         start_time = state.game_start_time.strftime('%H:%M') if state.game_start_time else "??:??"
+        current_game_time = get_current_game_time(state).strftime('%H:%M')
+        
         embed = discord.Embed(
-            title=f"👨‍🍳 Le Quotidien du Cuisinier [{game_mode}] (Démarré à {start_time})", 
+            title=f"👨‍🍳 Le Quotidien du Cuisinier", 
             color=0x3498db
         )
+        # Mode and time info in footer
+        embed.set_footer(text=f"Mode: {duration_label} | Démarré à {start_time} | Heure actuelle: {current_game_time}")
         
         if image_url := self.get_image_url(player): 
             embed.set_image(url=image_url)

@@ -76,7 +76,8 @@ class Phone(commands.Cog):
         self.browse_effects = {
             "browse_social": {
                 "duration": 15,
-                "sanity": -2.0,
+                "sanity": -5.0,
+                "health": -2.0,
                 "boredom": -30.0,
                 "energy": -5.0,
                 "fatigue": 5.0,
@@ -84,7 +85,8 @@ class Phone(commands.Cog):
             },
             "browse_games": {
                 "duration": 20,
-                "sanity": -3.0,
+                "sanity": -7.0,
+                "health": -3.0,
                 "boredom": -40.0,
                 "energy": -8.0,
                 "fatigue": 8.0,
@@ -92,7 +94,8 @@ class Phone(commands.Cog):
             },
             "browse_videos": {
                 "duration": 25,
-                "sanity": -4.0,
+                "sanity": -10.0,
+                "health": -5.0,
                 "boredom": -50.0,
                 "energy": -10.0,
                 "fatigue": 10.0,
