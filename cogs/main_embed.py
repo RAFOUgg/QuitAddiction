@@ -194,6 +194,8 @@ class MainEmbed(commands.Cog):
 
     def generate_work_embed(self, player: PlayerProfile) -> discord.Embed:
         embed = discord.Embed(title="🏢 Informations sur le travail", color=0x71368a)
+        if image_url := self.get_image_url(player):
+            embed.set_image(url=image_url)
         embed.add_field(name="Horaires", value="9:00 - 11:30 / 13:00 - 17:30", inline=False)
         embed.add_field(name="Performance", value=f"`{int(player.job_performance)}%`\n{generate_progress_bar(player.job_performance, high_is_bad=False)}", inline=True)
         embed.add_field(name="Jours d'absence", value=player.missed_work_days, inline=True)

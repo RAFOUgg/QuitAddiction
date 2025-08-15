@@ -6,10 +6,10 @@ from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 import datetime
 import traceback
-from utils.calculations import chain_reactions
+from utils.calculations import chain_reactions, update_job_performance
 from utils.helpers import clamp, get_player_notif_settings
 from cogs.main_embed import DashboardView
-from utils.game_time import get_current_game_time, is_lunch_break, is_work_time
+from utils.game_time import get_current_game_time, is_lunch_break, is_work_time, is_night
 from cogs.cooker_brain import CookerBrain
 
 class Scheduler(commands.Cog):
@@ -48,15 +48,23 @@ class Scheduler(commands.Cog):
                 player = db.query(PlayerProfile).filter_by(guild_id=server_state.guild_id).first()
                 if not player: continue
 
-                # --- WORK LOGIC ---
                 game_time = get_current_game_time(server_state)
                 game_day = (datetime.datetime.utcnow() - server_state.game_start_time).days
 
-                # Auto go home
+                # --- AUTONOMY LOGIC ---
+                AUTONOMY_THRESHOLD = 70
+                if player.willpower >= AUTONOMY_THRESHOLD:
+                    if is_work_time(server_state) and not player.is_working:
+                        cooker_brain_cog.perform_go_to_work(player, server_state)
+                    if player.hunger > 80 and player.food_servings > 0:
+                        cooker_brain_cog.perform_eat_sandwich(player)
+                    if is_night(server_state) and player.fatigue > 70:
+                        cooker_brain_cog.perform_sleep(player, server_state)
+
+                # --- WORK LOGIC ---
                 if player.is_working and (is_lunch_break(server_state) or not is_work_time(server_state)):
                     cooker_brain_cog.perform_go_home(player, server_state)
                 
-                # Daily check for missed work
                 if game_time.hour == server_state.game_day_start_hour and self.daily_check_done_for_day != game_day:
                     self.daily_check_done_for_day = game_day
                     if player.last_worked_at is None or (datetime.datetime.utcnow().date() - player.last_worked_at.date()).days > 1:
@@ -66,16 +74,16 @@ class Scheduler(commands.Cog):
 
                     if player.missed_work_days >= 2:
                         player.job_performance = 0
-                        # Send notification
 
-                # First day reward
+                if game_time.hour == 17 and game_time.minute == 31:
+                    update_job_performance(player)
+
                 if player.last_worked_at and not player.first_day_reward_given:
                     player.joints += 1
                     player.has_unlocked_smokeshop = True
                     player.first_day_reward_given = True
-                    # Send notification
 
-                # --- 1. DÉGRADATION ---
+                # --- STAT DEGRADATION & CHAIN REACTIONS ---
                 time_delta_minutes = (datetime.datetime.utcnow() - player.last_update).total_seconds() / 60
                 minutes_per_game_day = server_state.game_minutes_per_day
                 if not minutes_per_game_day or minutes_per_game_day <= 0:
@@ -97,7 +105,6 @@ class Scheduler(commands.Cog):
                     new_val = clamp(current_val + change, 0, 100)
                     setattr(player, stat, new_val)
                 
-                # --- 2. RÉACTIONS EN CHAÎNE ---
                 time_since_last_smoke = datetime.datetime.utcnow() - (player.last_smoked_at or datetime.datetime.utcnow())
                 state_dict = {k: v for k, v in player.__dict__.items() if not k.startswith('_')}
                 updated_state, new_logs = chain_reactions(state_dict, time_since_last_smoke)
@@ -110,7 +117,7 @@ class Scheduler(commands.Cog):
                 player.last_update = datetime.datetime.utcnow()
                 db.commit()
 
-                # --- 5. RAFRAÎCHISSEMENT DE L'INTERFACE ---
+                # --- UI REFRESH ---
                 try:
                     guild = self.bot.get_guild(int(server_state.guild_id))
                     if guild and server_state.game_channel_id and server_state.game_message_id:

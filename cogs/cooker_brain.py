@@ -24,10 +24,31 @@ class CookerBrain(commands.Cog):
         if player.is_working:
             return "Vous êtes déjà au travail.", {}, 0
 
+        current_time = get_current_game_time(server_state)
+        morning_start = datetime.time(hour=9, minute=0)
+        afternoon_start = datetime.time(hour=13, minute=0)
+
+        lateness = 0
+        if morning_start <= current_time < datetime.time(hour=11, minute=30):
+            lateness_delta = datetime.datetime.combine(datetime.date.today(), current_time) - datetime.datetime.combine(datetime.date.today(), morning_start)
+            lateness = lateness_delta.total_seconds() / 60
+        elif afternoon_start <= current_time < datetime.time(hour=17, minute=30):
+            if player.last_worked_at is None or player.last_worked_at.date() < datetime.datetime.utcnow().date():
+                 return "Vous avez manqué la session du matin, vous ne pouvez pas commencer l'après-midi.", {}, 0
+            lateness_delta = datetime.datetime.combine(datetime.date.today(), current_time) - datetime.datetime.combine(datetime.date.today(), afternoon_start)
+            lateness = lateness_delta.total_seconds() / 60
+
+        if lateness > 5:
+            player.lateness_minutes += int(lateness)
+            message = f"Vous partez au travail avec {int(lateness)} minutes de retard."
+        else:
+            message = "Vous partez au travail."
+
         player.is_working = True
         player.last_action = "jobbing"
         player.last_action_time = datetime.datetime.utcnow()
-        return "Vous partez au travail.", {}, 30
+        player.last_worked_at = datetime.datetime.utcnow()
+        return message, {}, 30
 
     def perform_go_home(self, player: PlayerProfile, server_state: ServerState) -> (str, dict, int):
         if not player.is_working:
@@ -46,8 +67,6 @@ class CookerBrain(commands.Cog):
             return "Vous êtes déjà en pause.", {}, 0
 
         player.is_on_break = True
-        # La pause dure 10 minutes en temps de jeu, soit 60s en temps réel si 1 jour = 24h
-        # On va dire 15s pour l'exemple
         duration = 15 
         player.job_performance = clamp(player.job_performance - 2, 0, 100)
         return "Vous prenez une pause cigarette.", {}, duration
@@ -69,7 +88,7 @@ class CookerBrain(commands.Cog):
 
     def perform_smoke_joint(self, player: PlayerProfile) -> (str, dict, int):
         if player.is_on_break:
-            player.job_performance = clamp(player.job_performance - 15, 0, 100) # Fumer un joint au taf... très mauvaise idée
+            player.job_performance = clamp(player.job_performance - 15, 0, 100)
         if player.joints <= 0: return "Vous n'avez pas de joint.", {}, 0
         player.joints -= 1
         player.stress = clamp(player.stress - 60.0, 0, 100)
@@ -82,7 +101,7 @@ class CookerBrain(commands.Cog):
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "neutral_smoke_joint"
         player.last_action_time = datetime.datetime.utcnow()
-        player.is_on_break = False # Fin de la pause
+        player.is_on_break = False
         return "Vous allumez un joint. Le monde semble plus lent, plus doux... et la faim vous tenaille.", {}, 25
     
     @check_not_working
@@ -220,7 +239,7 @@ class CookerBrain(commands.Cog):
 
     def perform_smoke_cigarette(self, player: PlayerProfile) -> (str, dict, int):
         if player.is_on_break:
-            player.job_performance = clamp(player.job_performance - 5, 0, 100) # Fumer pdt la pause, ok mais pas trop
+            player.job_performance = clamp(player.job_performance - 5, 0, 100)
         if player.cigarettes <= 0: return "Vous n'avez plus de cigarettes !", {}, 0
         player.cigarettes -= 1
         
@@ -240,12 +259,12 @@ class CookerBrain(commands.Cog):
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "neutral_smoke_cig"
         player.last_action_time = datetime.datetime.utcnow()
-        player.is_on_break = False # Fin de la pause
+        player.is_on_break = False
         return "Vous allumez une cigarette. Le stress s'envole, mais à quel prix... La culpabilité vous pèse déjà.", {}, 10
 
     def use_ecigarette(self, player: PlayerProfile) -> (str, dict, int):
         if player.is_on_break:
-            player.job_performance = clamp(player.job_performance - 2, 0, 100) # Moins grave
+            player.job_performance = clamp(player.job_performance - 2, 0, 100)
         if player.e_cigarettes <= 0: return "Votre e-cigarette est vide.", {}, 0
         player.stress = clamp(player.stress - 15, 0, 100)
         player.withdrawal_severity = clamp(player.withdrawal_severity - 40, 0, 100)
@@ -254,7 +273,7 @@ class CookerBrain(commands.Cog):
         player.last_smoked_at = datetime.datetime.utcnow()
         player.last_action = "vape_e_cig"
         player.last_action_time = datetime.datetime.utcnow()
-        player.is_on_break = False # Fin de la pause
+        player.is_on_break = False
         return "Vous tirez sur votre vapoteuse. Moins satisfaisant, mais ça aide à tenir.", {}, 5
 
 async def setup(bot):

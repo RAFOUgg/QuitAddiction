@@ -87,3 +87,22 @@ def chain_reactions(state_dict: dict, time_since_last_smoke) -> (dict, list):
     state_dict['stomachache'] = clamp((state_dict['hunger'] * 0.5 + state_dict['nausea']), 0, 100)
     
     return state_dict, logs
+
+def update_job_performance(player):
+    # Lateness penalty
+    if player.lateness_minutes > 0:
+        # Lose 0.1 performance point per minute of lateness
+        performance_loss = player.lateness_minutes * 0.1
+        player.job_performance = clamp(player.job_performance - performance_loss, 0, 100)
+        player.lateness_minutes = 0 # Reset lateness after penalty
+
+    # Other factors
+    performance_modifier = 0
+    # Willpower
+    performance_modifier += (player.willpower - 50) / 100 # -0.5 to +0.5
+    # Health
+    performance_modifier += (player.health - 50) / 150 # -0.33 to +0.33
+    # Stress
+    performance_modifier -= player.stress / 200 # -0.5 to 0
+
+    player.job_performance = clamp(player.job_performance + performance_modifier, 0, 100)
