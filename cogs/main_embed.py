@@ -15,6 +15,18 @@ from utils.game_time import is_night, is_work_time, is_lunch_break, get_current_
 
 logger = get_logger(__name__)
 
+# --- Sleep quota helper ---
+def get_sleep_quota(player: PlayerProfile) -> float:
+    # Example: base quota + penalty for low health/sanity, bonus for high willpower
+    base_quota = 7.0  # hours
+    penalty = 0
+    if player.health < 50: penalty += 1
+    if player.sanity < 50: penalty += 1
+    if player.fatigue > 80: penalty += 1
+    bonus = 0
+    if player.willpower > 80: bonus += 0.5
+    return max(5.0, base_quota + penalty - bonus)
+
 def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 5, high_is_bad: bool = False) -> str:
     if not isinstance(value, (int, float)): value = 0.0
     value = clamp(value, 0, max_value)
@@ -53,10 +65,16 @@ class ActionsView(ui.View):
             if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽"))
             if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩"))
             
+            # --- Fix: Show all smoke options during break ---
             if not player.is_on_break:
                 self.add_item(ui.Button(label="Prendre une pause", style=discord.ButtonStyle.secondary, custom_id="action_take_smoke_break", emoji="🚬"))
             else:
-                self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬"))
+                # Show all available smoke options
+                if player.cigarettes > 0: self.add_item(ui.Button(label=f"Cigarette ({player.cigarettes})", emoji="🚬", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
+                if player.e_cigarettes > 0: self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
+                if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
+                self.add_item(ui.Button(label="Finir la pause", style=discord.ButtonStyle.grey, custom_id="action_end_smoke_break", emoji="⬅️"))
+            # --- End fix ---
 
             if is_lunch_break(server_state) or not is_work_time(server_state):
                 self.add_item(ui.Button(label="Rentrer à la maison", style=discord.ButtonStyle.success, custom_id="action_go_home", emoji="🏠"))
@@ -126,11 +144,60 @@ class MainEmbed(commands.Cog):
         finally:
             db.close()
 
+    # --- Willpower automation ---
+    async def willpower_auto_actions(self, player, state, cooker_brain, db, interaction):
+        # Only auto-perform if willpower > 70 and not on cooldown
+        now = datetime.datetime.utcnow()
+        if player.action_cooldown_end_time and now < player.action_cooldown_end_time:
+            return False
+        if player.willpower <= 70:
+            return False
+        # Only for eat, drink, sleep, go to work
+        auto_performed = False
+        # Eat if hunger > 70
+        if player.hunger > 70 and player.food_servings > 0:
+            message, _, duration = cooker_brain.perform_eat_sandwich(player)
+            if duration > 0:
+                player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
+                self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
+            auto_performed = True
+        # Drink if thirst > 70
+        if player.thirst > 70 and player.water_bottles > 0:
+            message, _, duration = cooker_brain.perform_drink_water(player)
+            if duration > 0:
+                player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
+                self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
+            auto_performed = True
+        # Sleep if fatigue > 80 and not working
+        if player.fatigue > 80 and not player.is_working:
+            message, _, duration = cooker_brain.perform_sleep(player, state)
+            if duration > 0:
+                player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
+                self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
+            auto_performed = True
+        # Go to work if work time and not working
+        if is_work_time(state) and not player.is_working:
+            message, _, duration, *_ = cooker_brain.perform_go_to_work(player, state)
+            if duration > 0:
+                player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
+                self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
+            auto_performed = True
+        if auto_performed:
+            db.commit()
+        return auto_performed
+
     def get_image_url(self, player: PlayerProfile) -> str | None:
         asset_cog = self.bot.get_cog("AssetManager"); now = datetime.datetime.utcnow()
         if not asset_cog: return None
+        # --- Fix: Use correct asset keys for work/leave/break ---
         if player.is_working:
-            return asset_cog.get_url("jobbing")
+            if player.is_on_break:
+                # On cigarette break
+                return asset_cog.get_url("work_break")  # Ensure this key exists in AssetManager
+            else:
+                return asset_cog.get_url("working")  # Ensure this key exists in AssetManager
+        if player.last_action == "action_go_to_work":
+            return asset_cog.get_url("leaving_for_work")  # Ensure this key exists in AssetManager
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
             return asset_cog.get_url(player.last_action)
@@ -227,6 +294,10 @@ class MainEmbed(commands.Cog):
 
             if not interaction.response.is_done(): await interaction.response.defer()
 
+            # --- Willpower automation: before showing dashboard/actions, auto-perform if needed ---
+            if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu", "nav_actions"]:
+                await self.willpower_auto_actions(player, state, cooker_brain, db, interaction)
+
             view = None
             embed = None
             if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"]:
@@ -252,7 +323,8 @@ class MainEmbed(commands.Cog):
                     "smoke_ecigarette": cooker_brain.use_ecigarette,
                     "action_go_to_work": cooker_brain.perform_go_to_work,
                     "action_go_home": cooker_brain.perform_go_home,
-                    "action_take_smoke_break": cooker_brain.perform_take_smoke_break
+                    "action_take_smoke_break": cooker_brain.perform_take_smoke_break,
+                    "action_end_smoke_break": cooker_brain.perform_end_smoke_break  # You must implement this in CookerBrain!
                 }
                 if custom_id in action_map:
                     if custom_id in ["action_sleep", "action_go_to_work", "action_go_home"]:
@@ -267,6 +339,7 @@ class MainEmbed(commands.Cog):
                     else:
                         await interaction.followup.send(f"⚠️ {message}", ephemeral=True)
                 
+                # --- Fix: After ending smoke break, show correct work buttons ---
                 if player.is_working:
                     view = ActionsView(player, state)
                 else:
