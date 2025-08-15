@@ -280,14 +280,15 @@ class MainEmbed(commands.Cog):
         return "Pour l'instant, ça va à peu près."
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
-        # Get game mode info
+        # Get game mode and timing info
         game_mode = state.game_mode.capitalize() if state.game_mode else "Real Time"
         duration_key = state.duration_key or "real_time"
         duration_label = "Test Mode" if duration_key == "test" else "Temps Réel"
         
-        # Create embed with mode in title
+        # Add start time info to title
+        start_time = state.game_start_time.strftime('%H:%M') if state.game_start_time else "??:??"
         embed = discord.Embed(
-            title=f"👨‍🍳 Le Quotidien du Cuisinier [{game_mode}]", 
+            title=f"👨‍🍳 Le Quotidien du Cuisinier [{game_mode}] (Démarré à {start_time})", 
             color=0x3498db
         )
         
@@ -322,9 +323,11 @@ class MainEmbed(commands.Cog):
             for row in stats_layout: [embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True) for name, val, bad in row]
         
         game_time = get_current_game_time(state)
-        # Add mode info to footer
+        # Update footer with more complete timing info
+        elapsed = datetime.datetime.utcnow() - state.game_start_time if state.game_start_time else datetime.timedelta()
+        elapsed_mins = int(elapsed.total_seconds() / 60)
         embed.set_footer(
-            text=f"Powered by LaFoncedalle.fr • Mode: {game_mode} ({duration_label}) • ⌚ {game_time.strftime('%H:%M')}"
+            text=f"LaFoncedalle.fr • Mode: {game_mode} ({duration_label}) • ⏰ {start_time} +{elapsed_mins}min • ⌚ {game_time.strftime('%H:%M')}"
         )
         embed.timestamp = datetime.datetime.utcnow()
         return embed

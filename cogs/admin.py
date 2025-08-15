@@ -453,6 +453,7 @@ class AdminCog(commands.Cog):
                     if not state.game_channel_id:
                         followup_message = ("❌ Erreur: Veuillez configurer un salon de jeu avant de démarrer.", True)
                     else:
+                        logger.info(f"Starting new game in guild {self.guild_id}")
                         main_embed_cog = self.cog.bot.get_cog("MainEmbed")
                         cooker_brain = self.cog.bot.get_cog("CookerBrain")
                         player = db.query(PlayerProfile).filter_by(guild_id=self.guild_id).first()
@@ -460,6 +461,7 @@ class AdminCog(commands.Cog):
                         
                         # Initialize new player if needed
                         if not player:
+                            logger.info(f"Creating new player profile for guild {self.guild_id}")
                             player = PlayerProfile(
                                 guild_id=self.guild_id,
                                 last_update=now,
@@ -470,35 +472,32 @@ class AdminCog(commands.Cog):
                             )
                             db.add(player)
                         
-                        # Initialize game state
-                        state.game_started = True
-                        state.game_start_time = now
-                        state.is_test_mode = (state.duration_key == 'test')
-                        
-                        # Set initial work state based on current time
+                        # Initialize game state with time check
                         current_hour = now.hour
                         current_minute = now.minute
-                        
-                        # Define work periods
-                        morning_work = (9, 0) <= (current_hour, current_minute) < (11, 30)
-                        afternoon_work = (13, 0) <= (current_hour, current_minute) < (17, 30)
-                        
+                        logger.info(f"Initializing game state at {current_hour}:{current_minute}")
+
                         # Auto-initialize cook's state based on time
-                        if morning_work or afternoon_work:
+                        if (9, 0) <= (current_hour, current_minute) < (11, 30) or (13, 0) <= (current_hour, current_minute) < (17, 30):
                             player.is_working = True
                             player.last_action = "working"
                             player.last_worked_at = now
-                            message = "Le cuisinier est déjà au travail."
+                            message = "Le cuisinier démarre en pleine journée de travail."
+                            logger.info("Player initialized at work")
                         elif (11, 30) <= (current_hour, current_minute) < (13, 0):
-                            # Lunch break
                             player.is_working = False
                             player.last_action = "neutral"
-                            message = "Le cuisinier est en pause déjeuner."
-                        elif current_hour >= 17 or current_hour < 9:
-                            # After work or before work
+                            message = "Le cuisinier démarre pendant sa pause déjeuner."
+                            logger.info("Player initialized during lunch break")
+                        else:
                             player.is_working = False
                             player.last_action = "neutral"
-                            message = "Le cuisinier est chez lui."
+                            message = "Le cuisinier démarre à son domicile."
+                            logger.info("Player initialized at home")
+
+                        state.game_started = True
+                        state.game_start_time = now
+                        state.is_test_mode = (state.duration_key == 'test')
                         
                         db.commit()
                         db.refresh(player)
