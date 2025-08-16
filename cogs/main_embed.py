@@ -117,30 +117,42 @@ class ActionsView(ui.View):
             
             # Show smoke break button only if not on break
             if not player.is_on_break:
-                self.add_item(ui.Button(label="Prendre une pause", style=discord.ButtonStyle.secondary, custom_id="action_take_smoke_break", emoji="☕"))
+                self.add_item(ui.Button(
+                    label="Prendre une pause",
+                    style=discord.ButtonStyle.secondary,
+                    custom_id="action_take_smoke_break",
+                    emoji="☕"
+                ))
             # When on break, show available smoke options
             elif player.is_on_break:
                 if player.cigarettes > 0: 
                     self.add_item(ui.Button(
-                        label=f"Cigarette ({player.cigarettes})", 
+                        label=f"Fumer une cigarette ({player.cigarettes})", 
                         emoji="🚬", 
                         style=discord.ButtonStyle.danger, 
-                        custom_id="work_smoke_cigarette"  # Changed to match the action mapping
+                        custom_id="smoke_cigarette_work"  # Updated to match action mapping
                     ))
                 if player.e_cigarettes > 0: 
                     self.add_item(ui.Button(
-                        label=f"Vapoteuse ({player.e_cigarettes})", 
+                        label=f"Vapoter ({player.e_cigarettes})", 
                         emoji="💨", 
                         style=discord.ButtonStyle.primary, 
-                        custom_id="work_smoke_ecigarette"
+                        custom_id="smoke_ecigarette_work"  # Updated to match action mapping
                     ))
                 if getattr(player, 'joints', 0) > 0: 
                     self.add_item(ui.Button(
-                        label=f"Joint ({player.joints})", 
+                        label=f"Fumer un joint ({player.joints})", 
                         emoji="🌿", 
                         style=discord.ButtonStyle.success, 
-                        custom_id="work_smoke_joint"  # Changed to match the action mapping
+                        custom_id="smoke_joint_work"  # Updated to match action mapping
                     ))
+                # Ajouter le bouton pour terminer la pause
+                self.add_item(ui.Button(
+                    label="Terminer la pause",
+                    style=discord.ButtonStyle.secondary,
+                    custom_id="action_end_smoke_break",
+                    emoji="⏱️"
+                ))
 
             game_time = get_current_game_time(server_state)
             if is_lunch_break(game_time) or not is_work_time(game_time):
@@ -467,7 +479,10 @@ class MainEmbed(commands.Cog):
         if player.hygiene < 20:
             return asset_cog.get_url("shower") or asset_cog.get_url("neutral")
 
-        # Par défaut
+        # Vérifier si c'est l'heure de travail avant de retourner l'image par défaut
+        game_time = get_current_game_time(self.bot.get_cog("MainEmbed").state)
+        if is_work_time(game_time) and player.is_working:
+            return asset_cog.get_url("working")
         return asset_cog.get_url("neutral")
 
     @staticmethod
@@ -681,24 +696,36 @@ class MainEmbed(commands.Cog):
                 embed = self.generate_dashboard_embed(player, state, interaction.guild)
             else: 
                 action_map = { 
+                    # Actions de base
                     "action_do_sport": cooker_brain.perform_sport,
-                    "drink_wine": cooker_brain.perform_drink_wine, 
-                    "smoke_joint": cooker_brain.perform_smoke_joint, 
                     "action_sleep": cooker_brain.perform_sleep, 
                     "action_shower": cooker_brain.perform_shower, 
                     "action_urinate": cooker_brain.perform_urinate, 
                     "action_defecate": cooker_brain.perform_defecate, 
+                    
+                    # Actions de consommation
+                    "drink_wine": cooker_brain.perform_drink_wine, 
                     "drink_water": cooker_brain.perform_drink_water, 
                     "drink_soda": cooker_brain.perform_drink_water,  # Pour l'instant utiliser drink_water 
                     "eat_sandwich": cooker_brain.perform_eat_food,
                     "eat_tacos": cooker_brain.perform_eat_food,     # Pour l'instant utiliser perform_eat_food
                     "eat_salad": cooker_brain.perform_eat_food,     # Pour l'instant utiliser perform_eat_food
+                    
+                    # Actions normales de consommation de substances
                     "smoke_cigarette": cooker_brain.perform_smoke_cigarette, 
-                    "smoke_ecigarette": cooker_brain.perform_smoke_cigarette, # Pour l'instant utiliser smoke_cigarette
+                    "smoke_ecigarette": cooker_brain.perform_smoke_cigarette,
+                    "smoke_joint": cooker_brain.perform_smoke_joint,
+                    
+                    # Actions de travail
                     "action_go_to_work": cooker_brain.perform_go_to_work,
                     "action_go_home": cooker_brain.perform_go_home,
                     "action_take_smoke_break": cooker_brain.perform_take_smoke_break,
-                    "action_end_smoke_break": cooker_brain.perform_end_smoke_break
+                    "action_end_smoke_break": cooker_brain.perform_end_smoke_break,
+                    
+                    # Actions pendant les pauses au travail
+                    "smoke_cigarette_work": cooker_brain.perform_smoke_cigarette,
+                    "smoke_joint_work": cooker_brain.perform_smoke_joint,
+                    "smoke_ecigarette_work": cooker_brain.perform_smoke_cigarette
                 }
                 if custom_id in action_map:
                     # Gestion des durées d'actions

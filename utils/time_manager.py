@@ -77,9 +77,17 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
 
 def is_work_time(game_time: datetime.datetime) -> bool:
     """Checks if the given game_time is within working hours (9:00-11:30, 13:00-17:30)."""
+    # Assurons-nous que le datetime est conscient du fuseau horaire
+    if game_time.tzinfo is None:
+        game_time = TARGET_TIMEZONE.localize(game_time)
+    
+    # Vérifions aussi que ce n'est pas le weekend
+    if game_time.weekday() in [0, 6]:  # 0 = Lundi, 6 = Dimanche
+        return False
+        
     t = game_time.time()
     return (datetime.time(9, 0) <= t < datetime.time(11, 30)) or \
-           (datetime.time(13, 0) <= t < datetime.time(17, 30))
+           (datetime.time(13, 0) <= t <= datetime.time(17, 30))  # Changé < à <= pour inclure 17:30
 
 def is_lunch_break(game_time: datetime.datetime) -> bool:
     """Checks if the given game_time is during lunch break (11:30-13:00)."""
