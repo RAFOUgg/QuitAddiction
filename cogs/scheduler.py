@@ -34,6 +34,39 @@ class Scheduler(commands.Cog):
         except (discord.Forbidden, discord.HTTPException) as e:
             print(f"Could not send notification to channel {channel.id}: {e}")
 
+    async def _perform_autonomous_action(self, player: PlayerProfile, server_state: ServerState, action_func, action_key: str, *args, **kwargs):
+        """
+        Helper to perform an autonomous action, update player state, and notify.
+        This ensures that autonomous actions correctly trigger images and cooldowns.
+        """
+        now = datetime.datetime.utcnow()
+
+        # Do not perform an action if already on cooldown
+        if player.action_cooldown_end_time and now < player.action_cooldown_end_time:
+            return False
+
+        result = action_func(player, *args, **kwargs)
+
+        # Unpack result tuple, handling different return lengths
+        message, states, duration, *_ = result if isinstance(result, tuple) else (None, None, 0)
+
+        # If duration is 0, it's likely a failure/check message (e.g., "You can't do that"). Don't proceed.
+        if not duration or duration == 0:
+            return False
+
+        # Update player state to reflect the action
+        player.last_action = action_key
+        player.last_action_time = now
+        player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
+
+        # Send a notification to the channel
+        try:
+            channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+            await channel.send(f"🧠 Par automatisme, le cuisinier a décidé d'agir. ({message})", delete_after=15)
+        except (discord.NotFound, discord.Forbidden, ValueError):
+            pass  # Silently fail if channel is not found or no perms
+        return True
+
     @tasks.loop(minutes=1)
     async def tick(self):
         main_embed_cog = self.bot.get_cog("MainEmbed")
@@ -53,34 +86,22 @@ class Scheduler(commands.Cog):
                 # Calculate game day from start time
                 game_day = (now - server_state.game_start_time).days if server_state.game_start_time else 0
 
-                current_hour = now.hour
-                current_minute = now.minute
-
-                # --- REAL-TIME WORK MANAGEMENT ---
-                morning_work = (9, 0) <= (current_hour, current_minute) < (11, 30)
-                afternoon_work = (13, 0) <= (current_hour, current_minute) < (17, 30)
-                lunch_break = (11, 30) <= (current_hour, current_minute) < (13, 0)
-                
-                # Auto work management if willpower is high enough
+                # --- AUTONOMOUS ACTIONS (High Willpower) ---
+                # The character will attempt to perform one essential action per tick if needed.
                 if player.willpower >= 70:
-                    if (morning_work or afternoon_work) and not player.is_working:
-                        # Auto go to work
-                        cooker_brain_cog.perform_go_to_work(player, server_state)
-                    elif (lunch_break or (current_hour >= 17 or current_hour < 9)) and player.is_working:
-                        # Auto go home
-                        cooker_brain_cog.perform_go_home(player, server_state)
-                
-                # --- EXISTING AUTONOMY LOGIC ---
-                if player.willpower >= 70:
-                    if player.hunger > 80 and player.food_servings > 0:
-                        cooker_brain_cog.perform_eat_sandwich(player)
-                    if is_night(server_state) and player.fatigue > 70:
-                        cooker_brain_cog.perform_sleep(player, server_state)
+                    # Auto go to work if it's time and not already working
+                    if is_work_time(server_state) and not player.is_working:
+                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_go_to_work, "action_go_to_work", server_state)
+                    # Auto go home if it's not work time but is currently working
+                    elif not is_work_time(server_state) and player.is_working:
+                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_go_home, "action_go_home", server_state)
+                    # Auto-eat when very hungry and has food
+                    elif player.hunger > 80 and player.food_servings > 0:
+                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_eat_food, "eat_sandwich")
+                    # Auto-sleep when very tired at night
+                    elif is_night(server_state) and player.fatigue > 80:
+                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_sleep, "action_sleep", server_state)
 
-                # --- WORK LOGIC ---
-                if player.is_working and (is_lunch_break(server_state) or not is_work_time(server_state)):
-                    cooker_brain_cog.perform_go_home(player, server_state)
-                
                 if game_time.hour == server_state.game_day_start_hour and self.daily_check_done_for_day != game_day:
                     self.daily_check_done_for_day = game_day
                     if player.last_worked_at is None or (datetime.datetime.utcnow().date() - player.last_worked_at.date()).days > 1:
