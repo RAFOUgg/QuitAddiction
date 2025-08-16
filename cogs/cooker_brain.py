@@ -354,7 +354,7 @@ class CookerBrain(commands.Cog):
 
         if lateness > 5:
             # Pénalités pour retard
-            player.performance = max(0, player.performance - lateness * 0.5)
+            player.job_performance = max(0, player.job_performance - lateness * 0.5)
             player.money = max(0, player.money - int(lateness * 2))  # 2$ par minute de retard
             msg = f"⏰ Vous arrivez en retard de {lateness} minutes ! (-{int(lateness * 2)}$)"
         else:
@@ -371,7 +371,7 @@ class CookerBrain(commands.Cog):
             return "😴 Impossible de rentrer en dormant !", {"confused": True}, 0
 
         if is_work_time(game_time):
-            player.performance = max(0, player.performance - 25)
+            player.job_performance = max(0, player.job_performance - 25)
             player.money = max(0, player.money - 50)
             msg = "🏃 Vous partez plus tôt ! (-50$, -25 performance)"
         else:
@@ -391,7 +391,7 @@ class CookerBrain(commands.Cog):
             return "Vous êtes déjà en pause.", {"confused": True}, 0
 
         player.is_on_break = True
-        player.performance = max(0, player.performance - 5)  # Légère pénalité de performance
+        player.job_performance = max(0, player.job_performance - 5)  # Légère pénalité de performance
         return "☕ Vous prenez une pause.", {"job_pause_cig": True}, 0
 
     def perform_end_smoke_break(self, player: PlayerProfile) -> Tuple[str, Dict, int]:

@@ -531,13 +531,19 @@ class MainEmbed(commands.Cog):
             else: 
                 action_map = { 
                     "action_do_sport": cooker_brain.perform_sport,
-                    "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint, 
-                    "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower, 
-                    "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate, 
-                    "drink_water": cooker_brain.perform_drink_water, "drink_soda": cooker_brain.use_soda, 
-                    "eat_sandwich": cooker_brain.perform_eat_food, "eat_tacos": cooker_brain.use_tacos, 
-                    "eat_salad": cooker_brain.use_salad, "smoke_cigarette": cooker_brain.perform_smoke_cigarette, 
-                    "smoke_ecigarette": cooker_brain.use_ecigarette,
+                    "drink_wine": cooker_brain.perform_drink_wine, 
+                    "smoke_joint": cooker_brain.perform_smoke_joint, 
+                    "action_sleep": cooker_brain.perform_sleep, 
+                    "action_shower": cooker_brain.perform_shower, 
+                    "action_urinate": cooker_brain.perform_urinate, 
+                    "action_defecate": cooker_brain.perform_defecate, 
+                    "drink_water": cooker_brain.perform_drink_water, 
+                    "drink_soda": cooker_brain.perform_drink_water,  # Pour l'instant utiliser drink_water 
+                    "eat_sandwich": cooker_brain.perform_eat_food,
+                    "eat_tacos": cooker_brain.perform_eat_food,     # Pour l'instant utiliser perform_eat_food
+                    "eat_salad": cooker_brain.perform_eat_food,     # Pour l'instant utiliser perform_eat_food
+                    "smoke_cigarette": cooker_brain.perform_smoke_cigarette, 
+                    "smoke_ecigarette": cooker_brain.perform_smoke_cigarette, # Pour l'instant utiliser smoke_cigarette
                     "action_go_to_work": cooker_brain.perform_go_to_work,
                     "action_go_home": cooker_brain.perform_go_home,
                     "action_take_smoke_break": cooker_brain.perform_take_smoke_break,

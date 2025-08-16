@@ -35,25 +35,37 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
     """
     Calculates the current in-game time based on the game mode.
     Returns a timezone-aware datetime object in the TARGET_TIMEZONE.
+    
+    Test Mode: 84 minutes real time = 7 days game time (1 minute real = 2 hours game)
+    Real Time: Game time = Real time
     """
     now_utc = get_utc_now()
 
-    # For real-time games, game time IS the real-world time.
+    # Pour le mode temps réel
     if state.duration_key == 'real_time' or not state.game_minutes_per_day:
         return now_utc.astimezone(TARGET_TIMEZONE)
 
-    # For accelerated time modes (e.g., 'test')
+    # Pour le mode test (accéléré)
     if not state.game_start_time:
-        return now_utc.astimezone(TARGET_TIMEZONE) # Fallback
+        return now_utc.astimezone(TARGET_TIMEZONE)
 
-    # Ensure game_start_time is timezone-aware in UTC
+    # Assurer que game_start_time a un timezone
     game_start_time = state.game_start_time
     if game_start_time.tzinfo is None:
         game_start_time = pytz.utc.localize(game_start_time)
 
+    # En mode test :
+    # - 84 minutes réelles = 1 semaine de jeu (7 jours)
+    # - 1 minute réelle = 2 heures de jeu (120 minutes)
     elapsed_real_seconds = (now_utc - game_start_time).total_seconds()
-    real_seconds_per_game_day = state.game_minutes_per_day * 60
-    game_seconds_elapsed = (elapsed_real_seconds / real_seconds_per_game_day) * (24 * 3600)
+    
+    if state.duration_key == 'test':
+        # 84 minutes réelles = 7 jours = 168 heures
+        # Donc 1 minute réelle = 2 heures = 120 minutes de jeu
+        game_minutes_elapsed = elapsed_real_seconds / 60 * 120
+    else:
+        real_seconds_per_game_day = state.game_minutes_per_day * 60
+        game_minutes_elapsed = (elapsed_real_seconds / real_seconds_per_game_day) * (24 * 60)
 
     start_hour = state.game_day_start_hour or 9 # Default to 9 AM
     game_time_at_start_utc = state.game_start_time.replace(hour=start_hour, minute=0, second=0, microsecond=0)
