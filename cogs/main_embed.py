@@ -191,13 +191,15 @@ class WorkView(ui.View):
         super().__init__(timeout=None)
         current_weekday = server_state.game_start_time.weekday() if server_state.game_start_time else -1
         
-        # Jours de repos (Dimanche et Lundi)
+        # Jours de repos (Dimanche et Lundi), on montre uniquement le bouton pour faire du sport
         if current_weekday in [0, 6]:
             self.add_item(ui.Button(
                 label="🏃‍♂️ Faire du sport",
                 custom_id="action_do_sport",
                 style=discord.ButtonStyle.success
             ))
+        # Pour les jours de travail, on ne montre aucun bouton car tout est disponible via le menu Actions
+        # Les boutons ont été retirés pour éviter la redondance
         else:
             self.add_item(ui.Button(
                 label="🏃 Aller au travail",

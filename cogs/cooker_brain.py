@@ -168,7 +168,7 @@ class CookerBrain(commands.Cog):
         player.health = max(0, player.health - 5)
         player.substance_addiction_level = min(100, player.substance_addiction_level + 5)
         
-        return "🚬 Vous fumez une cigarette.", {"smoke_cigarette": True}, 7
+        return "🚬 Vous fumez une cigarette.", {"job_pause_cig" if player.is_working else "smoke_cigarette": True}, 7
 
     @check_not_working
     def perform_smoke_joint(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
@@ -372,7 +372,7 @@ class CookerBrain(commands.Cog):
 
         if is_work_time(game_time):
             player.job_performance = max(0, player.job_performance - 25)
-            player.money = max(0, player.money - 50)
+            player.wallet = max(0, player.wallet - 50)
             msg = "🏃 Vous partez plus tôt ! (-50$, -25 performance)"
         else:
             msg = "🏠 Vous rentrez chez vous après une journée de travail."
@@ -424,7 +424,7 @@ class CookerBrain(commands.Cog):
         player.mental_health = max(0, mental - 10)
         player.willpower = max(0, willpower - 5)
         
-        return "🌿 Vous fumez un joint.", {"smoke_joint": True}, 10
+        return "🌿 Vous fumez un joint.", {"job_pause_joint" if player.is_working else "smoke_joint": True}, 10
 
     @check_not_working
     def perform_smoke_cigarette(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
@@ -442,7 +442,7 @@ class CookerBrain(commands.Cog):
         player.stress = max(0, stress - 15)
         player.craving_nicotine = max(0, craving - 50)
         
-        return "🚬 Vous fumez une cigarette.", {"smoke_cigarette": True}, 5
+        return "🚬 Vous fumez une cigarette.", {"job_pause_cig" if player.is_working else "smoke_cigarette": True}, 5
 
     @check_not_working
     def use_ecigarette(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
