@@ -4,6 +4,9 @@ from discord import app_commands
 from db.database import SessionLocal
 from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
+from utils.time_manager import prepare_for_db
+import datetime
+import pytz
 
 logger = get_logger(__name__)
 
@@ -77,12 +80,105 @@ class AdminDebugCommands(commands.GroupCog, name="debug"):
             # Disable test mode
             server.is_test_mode = False
             server.game_tick_interval_minutes = 30  # Back to normal update interval
+            server.duration_key = 'real_time'
             
             db.commit()
-            await interaction.response.send_message("✅ Mode normal réactivé", ephemeral=True)
+            await interaction.response.send_message("✅ Mode normal réactivé (temps réel 1:1)", ephemeral=True)
         except Exception as e:
             db.rollback()
             logger.error(f"Erreur lors de la désactivation du mode accéléré: {e}")
+            await interaction.response.send_message("❌ Une erreur est survenue", ephemeral=True)
+        finally:
+            db.close()
+
+    @app_commands.command(name="set_game_time", description="[DEBUG] Définit l'heure dans le jeu")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(
+        hour="Heure (0-23)",
+        minute="Minute (0-59)",
+        speed="Vitesse du temps (1 = temps réel, 2 = x2, etc...)"
+    )
+    async def set_game_time(
+        self, 
+        interaction: discord.Interaction, 
+        hour: app_commands.Range[int, 0, 23],
+        minute: app_commands.Range[int, 0, 59],
+        speed: app_commands.Range[int, 1, 60] = 1
+    ):
+        db = SessionLocal()
+        try:
+            server = db.query(ServerState).filter_by(guild_id=str(interaction.guild_id)).first()
+            if not server:
+                await interaction.response.send_message("❌ Configuration serveur non trouvée", ephemeral=True)
+                return
+
+            # Calculer la nouvelle heure de début de jeu
+            now = datetime.datetime.now(pytz.UTC)
+            target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # Configurer la vitesse du temps
+            if speed == 1:
+                server.duration_key = 'real_time'
+            else:
+                server.duration_key = 'test'
+                server.game_minutes_per_day = 1440 // speed  # 1440 = minutes in a day
+            
+            # Mettre à jour l'heure de début
+            server.game_start_time = prepare_for_db(target_time)
+            server.game_tick_interval_minutes = max(1, 30 // speed)  # Ajuster la fréquence des mises à jour
+            
+            db.commit()
+            await interaction.response.send_message(
+                f"✅ Heure du jeu réglée sur {hour:02d}:{minute:02d}\n"
+                f"Vitesse: x{speed} (1 minute réelle = {speed} minutes en jeu)",
+                ephemeral=True
+            )
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Erreur lors du réglage de l'heure: {e}")
+            await interaction.response.send_message("❌ Une erreur est survenue", ephemeral=True)
+        finally:
+            db.close()
+
+    @app_commands.command(name="give_items", description="[DEBUG] Donne des objets au joueur")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(
+        item_type="Type d'objet à donner",
+        quantity="Quantité à donner"
+    )
+    @app_commands.choices(item_type=[
+        app_commands.Choice(name='Cigarettes', value='cigarettes'),
+        app_commands.Choice(name='E-Cigarettes', value='e_cigarettes'),
+        app_commands.Choice(name='Joints', value='joints'),
+        app_commands.Choice(name='Argent', value='money'),
+        app_commands.Choice(name='Sandwichs', value='food_servings'),
+        app_commands.Choice(name='Bouteilles d\'eau', value='water_bottles'),
+    ])
+    async def give_items(
+        self, 
+        interaction: discord.Interaction, 
+        item_type: str,
+        quantity: app_commands.Range[int, 1, 100]
+    ):
+        db = SessionLocal()
+        try:
+            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild_id)).first()
+            if not player:
+                await interaction.response.send_message("❌ Profil joueur non trouvé", ephemeral=True)
+                return
+
+            # Donner les objets
+            current_value = getattr(player, item_type, 0)
+            setattr(player, item_type, current_value + quantity)
+            
+            db.commit()
+            await interaction.response.send_message(
+                f"✅ Ajouté {quantity} {item_type.replace('_', ' ')} à l'inventaire",
+                ephemeral=True
+            )
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Erreur lors de l'ajout d'objets: {e}")
             await interaction.response.send_message("❌ Une erreur est survenue", ephemeral=True)
         finally:
             db.close()
