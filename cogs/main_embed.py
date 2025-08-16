@@ -101,31 +101,43 @@ class ActionsView(ui.View):
 class ScheduleButton(ui.Button):
     def __init__(self):
         super().__init__(
-            label="📅 Voir l'emploi du temps",
+            label="📅 Emploi du temps",
             style=discord.ButtonStyle.secondary,
             custom_id="show_schedule",
             row=1
         )
 
     async def callback(self, interaction: discord.Interaction):
-        schedule = """📅 **Emploi du temps du cuisinier**
+        from cogs.main_embed import get_dashboard_view
+        db = SessionLocal()
+        try:
+            player = db.query(PlayerProfile).filter_by(guild_id=str(interaction.guild_id)).first()
+            state = db.query(ServerState).filter_by(guild_id=str(interaction.guild_id)).first()
+            if not player or not state:
+                await interaction.response.send_message("Erreur : Profil ou état du jeu introuvable.", ephemeral=True)
+                return
 
-🔵 **Heures de travail:**
-• Matin: 9h00 - 11h30
-• Après-midi: 13h00 - 17h30
+            # Basculer l'affichage de l'emploi du temps
+            player.show_schedule_in_view = not getattr(player, 'show_schedule_in_view', False)
+            # Désactiver les autres vues si on active l'emploi du temps
+            if player.show_schedule_in_view:
+                player.show_inventory_in_view = False
+                player.show_stats_in_view = False
+            db.commit()
 
-📆 **Jours travaillés:**
-• Mardi: ✅
-• Mercredi: ✅
-• Jeudi: ✅
-• Vendredi: ✅
-• Samedi: ✅
-• Dimanche: ❌ REPOS
-• Lundi: ❌ REPOS
-
-💡 Note: Les retards sont sanctionnés."""
-
-        await interaction.response.send_message(content=schedule, ephemeral=True)
+            # Mettre à jour l'affichage
+            self.label = "📅 Masquer l'emploi du temps" if player.show_schedule_in_view else "📅 Emploi du temps"
+            await interaction.message.edit(
+                embed=get_dashboard_view().generate_dashboard_embed(player, state, interaction.guild),
+                view=DashboardView(player)
+            )
+            await interaction.response.defer()
+            
+        except Exception as e:
+            print(f"Erreur dans ScheduleButton callback: {e}")
+            await interaction.response.send_message("Une erreur est survenue.", ephemeral=True)
+        finally:
+            db.close()
 
 class WorkView(ui.View):
     def __init__(self, player: PlayerProfile, server_state: ServerState):
@@ -417,6 +429,24 @@ class MainEmbed(commands.Cog):
             else:
                 embed.add_field(name="🎒 Inventaire", value="*Vide*", inline=True)
             embed.add_field(name="💰 Argent", value=f"**{getattr(player, 'wallet', 0)}$**", inline=False)
+
+        # Schedule view
+        if getattr(player, 'show_schedule_in_view', False):
+            schedule = """🔵 **Heures de travail:**
+• Matin: 9h00 - 11h30
+• Après-midi: 13h00 - 17h30
+
+📆 **Jours travaillés:**
+• Mardi: ✅
+• Mercredi: ✅
+• Jeudi: ✅
+• Vendredi: ✅
+• Samedi: ✅
+• Dimanche: ❌ REPOS
+• Lundi: ❌ REPOS
+
+💡 Note: Les retards sont sanctionnés."""
+            embed.add_field(name="📅 Emploi du temps", value=schedule, inline=False)
 
         # Stats view
         if getattr(player, 'show_stats_in_view', False):

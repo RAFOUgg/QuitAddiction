@@ -100,10 +100,8 @@ class PlayerProfile(Base):
     # === SECTION 7: AUTRES & MÉTA-DONNÉES ===
     wallet: int = Column(Integer, default=20)
     show_stats_in_view: bool = Column(Boolean, default=False)
-    
-    # NOUVEAU: Ajout du flag pour l'inventaire
     show_inventory_in_view: bool = Column(Boolean, default=False)
-    
+    show_schedule_in_view: bool = Column(Boolean, default=False)
     recent_logs: str = Column(Text, default="")
 
     # === SECTION 8: STATUTS ACTUELS ===

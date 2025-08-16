@@ -18,7 +18,10 @@ from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
 from cogs.main_embed import DashboardView
-from utils.time_manager import get_utc_now, to_localized, is_work_time as is_wt, is_lunch_break as is_lb
+from utils.time_manager import (
+    get_utc_now, to_localized, prepare_for_db,
+    is_work_time as is_wt, is_lunch_break as is_lb
+)
 
 # --- Setup Logger for this Cog ---
 logger = get_logger(__name__)
@@ -572,7 +575,7 @@ class AdminCog(commands.Cog):
                             logger.info("Player initialized at home")
 
                         state.game_started = True
-                        state.game_start_time = utc_now
+                        state.game_start_time = prepare_for_db(utc_now)  # Store as naive UTC
                         state.is_test_mode = (state.duration_key == 'test')
                         
                         db.commit()

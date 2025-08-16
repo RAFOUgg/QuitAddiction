@@ -20,6 +20,17 @@ def to_localized(dt: datetime.datetime) -> datetime.datetime:
         dt = pytz.utc.localize(dt)
     return dt.astimezone(TARGET_TIMEZONE)
 
+def prepare_for_db(dt: datetime.datetime) -> datetime.datetime:
+    """
+    Prepares a datetime for storage in the database by converting to UTC and removing timezone info.
+    SQLAlchemy stores datetimes as naive UTC by convention.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(pytz.UTC).replace(tzinfo=None)
+
 def get_current_game_time(state: 'ServerState') -> datetime.datetime:
     """
     Calculates the current in-game time based on the game mode.
@@ -35,7 +46,12 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
     if not state.game_start_time:
         return now_utc.astimezone(TARGET_TIMEZONE) # Fallback
 
-    elapsed_real_seconds = (now_utc - state.game_start_time).total_seconds()
+    # Ensure game_start_time is timezone-aware in UTC
+    game_start_time = state.game_start_time
+    if game_start_time.tzinfo is None:
+        game_start_time = pytz.utc.localize(game_start_time)
+
+    elapsed_real_seconds = (now_utc - game_start_time).total_seconds()
     real_seconds_per_game_day = state.game_minutes_per_day * 60
     game_seconds_elapsed = (elapsed_real_seconds / real_seconds_per_game_day) * (24 * 3600)
 
