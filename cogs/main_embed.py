@@ -117,12 +117,30 @@ class ActionsView(ui.View):
             
             # Show smoke break button only if not on break
             if not player.is_on_break:
-                self.add_item(ui.Button(label="Prendre une pause", style=discord.ButtonStyle.secondary, custom_id="action_take_smoke_break", emoji="🚬"))
+                self.add_item(ui.Button(label="Prendre une pause", style=discord.ButtonStyle.secondary, custom_id="action_take_smoke_break", emoji="☕"))
             # When on break, show available smoke options
             elif player.is_on_break:
-                if player.cigarettes > 0: self.add_item(ui.Button(label=f"Cigarette ({player.cigarettes})", emoji="🚬", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette_work"))
-                if player.e_cigarettes > 0: self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette_work"))
-                if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint_work"))
+                if player.cigarettes > 0: 
+                    self.add_item(ui.Button(
+                        label=f"Cigarette ({player.cigarettes})", 
+                        emoji="🚬", 
+                        style=discord.ButtonStyle.danger, 
+                        custom_id="work_smoke_cigarette"  # Changed to match the action mapping
+                    ))
+                if player.e_cigarettes > 0: 
+                    self.add_item(ui.Button(
+                        label=f"Vapoteuse ({player.e_cigarettes})", 
+                        emoji="💨", 
+                        style=discord.ButtonStyle.primary, 
+                        custom_id="work_smoke_ecigarette"
+                    ))
+                if getattr(player, 'joints', 0) > 0: 
+                    self.add_item(ui.Button(
+                        label=f"Joint ({player.joints})", 
+                        emoji="🌿", 
+                        style=discord.ButtonStyle.success, 
+                        custom_id="work_smoke_joint"  # Changed to match the action mapping
+                    ))
 
             game_time = get_current_game_time(server_state)
             if is_lunch_break(game_time) or not is_work_time(game_time):
@@ -191,32 +209,16 @@ class WorkView(ui.View):
         super().__init__(timeout=None)
         current_weekday = server_state.game_start_time.weekday() if server_state.game_start_time else -1
         
-        # Jours de repos (Dimanche et Lundi), on montre uniquement le bouton pour faire du sport
+        # Jours de repos (Dimanche et Lundi), montrer uniquement le bouton pour faire du sport
         if current_weekday in [0, 6]:
             self.add_item(ui.Button(
                 label="🏃‍♂️ Faire du sport",
                 custom_id="action_do_sport",
                 style=discord.ButtonStyle.success
             ))
-        # Pour les jours de travail, on ne montre aucun bouton car tout est disponible via le menu Actions
-        # Les boutons ont été retirés pour éviter la redondance
-        else:
-            self.add_item(ui.Button(
-                label="🏃 Aller au travail",
-                custom_id="action_go_to_work",
-                style=discord.ButtonStyle.primary
-            ))
-            self.add_item(ui.Button(
-                label="🏠 Rentrer",
-                custom_id="action_go_home",
-                style=discord.ButtonStyle.danger
-            ))
-            self.add_item(ui.Button(
-                label="☕ Pause",
-                custom_id="action_take_smoke_break",
-                style=discord.ButtonStyle.secondary
-            ))
-        
+            
+        # Ajouter uniquement le bouton de retour pour les jours de travail
+        # car les actions sont disponibles via le menu principal
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", emoji="⬅️"))
 
 class EatView(ui.View):
