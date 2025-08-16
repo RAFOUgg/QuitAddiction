@@ -22,9 +22,8 @@ class AssetManager(commands.Cog):
     async def cog_load(self):
         """
         Cette méthode est appelée automatiquement quand le cog est chargé.
-        Elle attend que le bot soit prêt avant d'initialiser les assets.
+        Initialise les assets immédiatement.
         """
-        await self.bot.wait_until_ready()
         if not self.initialized:
             await self.initialize_assets()
 

@@ -33,15 +33,24 @@ class QuitAddictionBot(commands.Bot):
 
     async def setup_hook(self):
         logger.info("--- Loading Cogs ---")
+        
+        # Load AssetManager first
+        try:
+            await self.load_extension("cogs.assets_manager")
+            logger.info("✅ Cog loaded: assets_manager.py")
+            self.asset_manager = self.get_cog("AssetManager")
+        except Exception as e:
+            logger.error(f"❌ Failed to load AssetManager cog: {e}", exc_info=True)
+            return  # Exit if AssetManager fails to load as it's critical
+            
+        # Then load other cogs
         for filename in os.listdir(COGS_DIR):
-            if filename.endswith(".py") and not filename.startswith("__"):
+            if filename.endswith(".py") and not filename.startswith("__") and filename != "assets_manager.py":
                 try:
                     await self.load_extension(f"{COGS_DIR}.{filename[:-3]}")
                     logger.info(f"✅ Cog loaded: {filename}")
                 except Exception as e:
                     logger.error(f"❌ Failed to load cog {filename}: {e}", exc_info=True)
-        
-        self.asset_manager = self.get_cog("AssetManager")
 
     async def on_ready(self):
         logger.info(f"🚀 Logged in as {self.user} (ID: {self.user.id})")
