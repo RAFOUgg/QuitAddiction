@@ -41,8 +41,10 @@ class DashboardView(ui.View):
         super().__init__(timeout=None)
         now = datetime.datetime.utcnow()
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
+        # Le téléphone est désactivé au travail, sauf pendant une pause.
+        phone_disabled = is_on_cooldown or (player.is_working and not getattr(player, 'is_on_break', False))
         self.add_item(ui.Button(label="Actions", style=discord.ButtonStyle.primary, custom_id="nav_actions", emoji="🏃‍♂️", disabled=is_on_cooldown))
-        self.add_item(ui.Button(label="Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_open", emoji="📱", disabled=is_on_cooldown))
+        self.add_item(ui.Button(label="Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_open", emoji="📱", disabled=phone_disabled))
         self.add_item(ui.Button(label="Travail", style=discord.ButtonStyle.secondary, custom_id="nav_work", emoji="🏢"))
         inv_label = "Cacher Inventaire" if player.show_inventory_in_view else "Afficher Inventaire"
         inv_style = discord.ButtonStyle.success if player.show_inventory_in_view else discord.ButtonStyle.secondary
@@ -133,23 +135,23 @@ class WorkView(ui.View):
         if current_weekday in [0, 6]:
             self.add_item(ui.Button(
                 label="🏃‍♂️ Faire du sport",
-                custom_id="do_sport",
+                custom_id="action_do_sport",
                 style=discord.ButtonStyle.success
             ))
         else:
             self.add_item(ui.Button(
                 label="🏃 Aller au travail",
-                custom_id="go_to_work",
+                custom_id="action_go_to_work",
                 style=discord.ButtonStyle.primary
             ))
             self.add_item(ui.Button(
                 label="🏠 Rentrer",
-                custom_id="go_home",
+                custom_id="action_go_home",
                 style=discord.ButtonStyle.danger
             ))
             self.add_item(ui.Button(
                 label="☕ Pause",
-                custom_id="take_break",
+                custom_id="action_take_smoke_break",
                 style=discord.ButtonStyle.secondary
             ))
         
@@ -171,15 +173,16 @@ class DrinkView(ui.View):
         if player.water_bottles > 0: self.add_item(ui.Button(label=f"Eau ({player.water_bottles})", emoji="💧", style=discord.ButtonStyle.primary, custom_id="drink_water"))
         if player.soda_cans > 0: self.add_item(ui.Button(label=f"Soda ({player.soda_cans})", emoji="🥤", style=discord.ButtonStyle.blurple, custom_id="drink_soda"))
         if player.wine_bottles > 0: self.add_item(ui.Button(label=f"Vin ({player.wine_bottles})", emoji="🍷", style=discord.ButtonStyle.danger, custom_id="drink_wine"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
 class SmokeView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
-        self.add_item(ScheduleButton())
         if player.cigarettes > 0: self.add_item(ui.Button(label=f"Cigarette ({player.cigarettes})", emoji="🚬", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
         if player.e_cigarettes > 0: self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
         if player.joints > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.secondary, custom_id="smoke_joint"))
         if player.has_bong: self.add_item(ui.Button(label="Utiliser le bong", emoji="🌊", style=discord.ButtonStyle.secondary, custom_id="use_bong"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
 
 class MainEmbed(commands.Cog):
     def __init__(self, bot):
@@ -495,6 +498,7 @@ class MainEmbed(commands.Cog):
                 view = views[custom_id](player)
             else: 
                 action_map = { 
+                    "action_do_sport": cooker_brain.perform_sport,
                     "drink_wine": cooker_brain.perform_drink_wine, "smoke_joint": cooker_brain.perform_smoke_joint, 
                     "action_sleep": cooker_brain.perform_sleep, "action_shower": cooker_brain.perform_shower, 
                     "action_urinate": cooker_brain.perform_urinate, "action_defecate": cooker_brain.perform_defecate, 
@@ -509,7 +513,7 @@ class MainEmbed(commands.Cog):
                 }
                 if custom_id in action_map:
                     # Correction: Gère tous les retours d'action correctement
-                    if custom_id in ["action_sleep", "action_go_to_work", "action_go_home"]:
+                    if custom_id in ["action_sleep", "action_go_to_work", "action_go_home", "action_do_sport"]:
                         result = action_map[custom_id](player, state)
                         if isinstance(result, tuple) and len(result) >= 3:
                             message, states, duration, *_ = result
