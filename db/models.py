@@ -106,9 +106,10 @@ class PlayerProfile(Base):
     
     recent_logs: str = Column(Text, default="")
 
-    # === SECTION 8: TRAVAIL ===
+    # === SECTION 8: STATUTS ACTUELS ===
     is_working: bool = Column(Boolean, default=False, nullable=False)
     is_on_break: bool = Column(Boolean, default=False, nullable=False)
+    is_sleeping: bool = Column(Boolean, default=False, nullable=False)
     missed_work_days: int = Column(Integer, default=0, nullable=False)
     last_worked_at: Optional[datetime.datetime] = Column(DateTime, nullable=True)
     first_day_reward_given: bool = Column(Boolean, default=False, nullable=False)

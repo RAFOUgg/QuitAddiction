@@ -43,11 +43,47 @@ def check_not_working(func):
     def wrapper(self, player: PlayerProfile, *args, **kwargs):
         if player.is_working:
             return "Vous ne pouvez pas faire ça en travaillant !", {"confused": True}, 0
+        if player.is_sleeping:
+            return "Vous ne pouvez pas faire ça en dormant !", {"sleep": True}, 0
         return func(self, player, *args, **kwargs)
     return wrapper
 
 class CookerBrain(commands.Cog):
     def __init__(self, bot):
+        self.bot = bot
+
+    @check_not_working
+    def perform_sleep(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
+        """Go to sleep to recover energy"""
+        if not is_night(game_time):
+            return "😴 Il est encore trop tôt pour dormir ! (22h-6h)", {"confused": True}, 0
+            
+        if player.energy > 80:
+            return "😴 Vous n'êtes pas fatigué !", {"confused": True}, 0
+            
+        player.is_sleeping = True
+        player.energy = min(100, player.energy + 40)  # Initial energy boost
+        
+        # Reset some negative effects
+        player.fatigue = max(0, player.fatigue - 50)
+        player.stress = max(0, player.stress - 20)
+        player.headache = max(0, player.headache - 30)
+        
+        return "😴 Vous vous endormez paisiblement.", {"sleep": True}, 30
+
+    @check_not_working
+    def perform_wake_up(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Wake up from sleep"""
+        if not player.is_sleeping:
+            return "🌅 Vous êtes déjà réveillé !", {"confused": True}, 0
+            
+        player.is_sleeping = False
+        player.energy = min(100, player.energy + 20)  # Final energy boost
+        
+        # Morning effects
+        player.bladder = min(100, player.bladder + 30)  # Morning bathroom need
+        
+        return "🌅 Vous vous réveillez en pleine forme.", {"neutral": True}, 5
         self.bot = bot
 
     def perform_sport(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
