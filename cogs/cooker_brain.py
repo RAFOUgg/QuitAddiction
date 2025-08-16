@@ -74,11 +74,16 @@ class CookerBrain(commands.Cog):
 
         # Appliquer les effets positifs
         player.energy = max(10, player.energy - 20)  # Fatigue mais pas trop
-        player.physical_health = min(100, player.physical_health + 15)
-        player.mental_health = min(100, player.mental_health + 10)
+        player.health = min(100, player.health + 15)
+        player.sanity = min(100, player.sanity + 10)
         player.stress = max(0, player.stress - 15)
         player.boredom = max(0, player.boredom - 25)
         player.willpower = min(100, player.willpower + 5)
+        
+        # Réduire les envies de substances
+        player.craving_nicotine = max(0, player.craving_nicotine - 10)
+        player.craving_alcohol = max(0, player.craving_alcohol - 10)
+        player.craving_cannabis = max(0, player.craving_cannabis - 10)
 
         message = "🏃‍♂️ Excellente séance de sport ! Votre corps et votre esprit se sentent revigorés."
         if can_self_motivate:
@@ -87,6 +92,89 @@ class CookerBrain(commands.Cog):
             message += "\n👥 L'encouragement des autres vous a aidé à vous dépasser !"
             
         return message, {"sporting": True}, 30  # 30 minutes de sport
+
+    @check_not_working
+    def perform_check_phone(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Check phone to reduce boredom and potentially increase happiness"""
+        if is_night(datetime.datetime.now()):
+            # Checking phone at night increases stress
+            player.stress = min(100, player.stress + 10)
+            player.energy = max(0, player.energy - 5)
+            msg = "📱 Vous regardez votre téléphone tard dans la nuit... Ce n'est pas très bon pour votre sommeil."
+        else:
+            player.boredom = max(0, player.boredom - 15)
+            player.happiness = min(100, player.happiness + 5)
+            msg = "📱 Vous passez un moment sur votre téléphone."
+            
+        return msg, {"on_phone": True}, 10
+
+    @check_not_working
+    def perform_take_shower(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Take a shower to improve hygiene and reduce stress"""
+        if player.hygiene > 80:
+            return "🚿 Vous êtes déjà propre !", {"confused": True}, 0
+            
+        player.hygiene = min(100, player.hygiene + 50)
+        player.stress = max(0, player.stress - 15)
+        player.energy = min(100, player.energy + 10)
+        
+        return "🚿 Vous prenez une douche rafraîchissante.", {"shower": True}, 15
+
+    @check_not_working
+    def perform_smoke_cigarette(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Smoke a cigarette"""
+        if player.cigarettes <= 0:
+            return "🚬 Vous n'avez plus de cigarettes !", {"confused": True}, 0
+            
+        player.cigarettes -= 1
+        player.stress = max(0, player.stress - 20)
+        player.craving_nicotine = max(0, player.craving_nicotine - 70)
+        player.health = max(0, player.health - 5)
+        player.substance_addiction_level = min(100, player.substance_addiction_level + 5)
+        
+        return "🚬 Vous fumez une cigarette.", {"smoke_cigarette": True}, 7
+
+    @check_not_working
+    def perform_smoke_joint(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Smoke a joint"""
+        if player.joints <= 0:
+            return "🌿 Vous n'avez plus de joints !", {"confused": True}, 0
+            
+        player.joints -= 1
+        player.stress = max(0, player.stress - 30)
+        player.craving_cannabis = max(0, player.craving_cannabis - 80)
+        player.intoxication_level = min(100, player.intoxication_level + 25)
+        player.substance_addiction_level = min(100, player.substance_addiction_level + 7)
+        player.energy = max(0, player.energy - 15)
+        
+        return "🌿 Vous fumez un joint.", {"smoke_joint": True}, 10
+
+    @check_not_working
+    def perform_drink_alcohol(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Drink alcohol (beer or wine)"""
+        has_beer = player.beers > 0
+        has_wine = player.wine_bottles > 0
+        
+        if not (has_beer or has_wine):
+            return "🍺 Vous n'avez plus d'alcool !", {"confused": True}, 0
+            
+        # Prefer beer if available
+        if has_beer:
+            player.beers -= 1
+            intox_increase = 15
+            msg = "🍺 Vous buvez une bière."
+        else:
+            player.wine_bottles -= 1
+            intox_increase = 25
+            msg = "🍷 Vous buvez un verre de vin."
+            
+        player.stress = max(0, player.stress - 20)
+        player.craving_alcohol = max(0, player.craving_alcohol - 60)
+        player.intoxication_level = min(100, player.intoxication_level + intox_increase)
+        player.substance_addiction_level = min(100, player.substance_addiction_level + 6)
+        player.thirst = max(0, player.thirst - 10)
+        
+        return msg, {"sad_drinking": True}, 10
 
     def perform_use_bong(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
         """
@@ -126,6 +214,82 @@ class CookerBrain(commands.Cog):
         set_attr_int(player, 'bong_uses', bong_uses + 1)
         
         return f"🌊 Vous utilisez le bong avec du {substance}. L'effet est puissant !", {"smoke_bang": True}, 15
+
+    @check_not_working
+    def perform_eat(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Eat food to reduce hunger"""
+        # Check available food types
+        has_sandwich = player.food_servings > 0
+        has_tacos = player.tacos > 0
+        has_salad = player.salad_servings > 0
+        
+        if not (has_sandwich or has_tacos or has_salad):
+            return "🍽️ Vous n'avez plus de nourriture !", {"hungry": True}, 0
+        
+        # Prioritize healthy food if available
+        if has_salad:
+            player.salad_servings -= 1
+            hunger_reduction = 25
+            energy_boost = 15
+            health_boost = 5
+            msg = "🥗 Vous mangez une salade fraîche."
+            image = "eat_salad"
+        elif has_sandwich:
+            player.food_servings -= 1
+            hunger_reduction = 30
+            energy_boost = 10
+            health_boost = 2
+            msg = "🥪 Vous mangez un sandwich."
+            image = "eat_sandwich"
+        else:
+            player.tacos -= 1
+            hunger_reduction = 35
+            energy_boost = 8
+            health_boost = 0
+            msg = "🌮 Vous mangez un tacos."
+            image = "eat_tacos"
+            
+        player.hunger = max(0, player.hunger - hunger_reduction)
+        player.energy = min(100, player.energy + energy_boost)
+        player.health = min(100, player.health + health_boost)
+        
+        return msg, {image: True}, 15
+
+    @check_not_working
+    def perform_drink_water(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Drink water to reduce thirst"""
+        if player.water_bottles <= 0:
+            return "💧 Vous n'avez plus d'eau !", {"confused": True}, 0
+            
+        player.water_bottles -= 1
+        player.thirst = max(0, player.thirst - 25)
+        player.bladder = min(100, player.bladder + 15)
+        
+        return "💧 Vous buvez de l'eau.", {"drink_water": True}, 5
+
+    @check_not_working
+    def perform_use_bathroom(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Use bathroom to reduce bladder needs"""
+        if player.bladder < 20:
+            return "🚽 Vous n'avez pas besoin d'aller aux toilettes.", {"confused": True}, 0
+            
+        need_type = "pee" if player.bladder >= 20 and player.bowels < 50 else "poop"
+        old_bladder = player.bladder
+        old_bowels = player.bowels
+        
+        if need_type == "pee":
+            player.bladder = max(0, player.bladder - 80)
+            image = "peed"
+            msg = "🚽 Vous êtes allé aux toilettes."
+            duration = 5
+        else:
+            player.bowels = max(0, player.bowels - 80)
+            player.stress = max(0, player.stress - 10)
+            image = "pooping"
+            msg = "🚽 Vous êtes allé faire vos besoins."
+            duration = 10
+            
+        return msg, {image: True}, duration
 
     def perform_go_to_work(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
         current_weekday = game_time.weekday()
