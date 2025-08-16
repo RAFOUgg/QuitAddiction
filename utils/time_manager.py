@@ -69,7 +69,7 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
 
     start_hour = state.game_day_start_hour or 9 # Default to 9 AM
     game_time_at_start_utc = state.game_start_time.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-    current_game_time_utc = game_time_at_start_utc + datetime.timedelta(seconds=game_seconds_elapsed)
+    current_game_time_utc = game_time_at_start_utc + datetime.timedelta(minutes=game_minutes_elapsed)
     
     return to_localized(current_game_time_utc)
 
