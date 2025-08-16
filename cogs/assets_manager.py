@@ -17,6 +17,7 @@ class AssetManager(commands.Cog):
             'smoke_bang.png',  # Pour l'utilisation du bong
             # ... autres images existantes
         ]
+        self.bot.loop.create_task(self.initialize_assets())
 
     # La méthode cog_load est supprimée car elle est la source du deadlock.
     # Nous la remplaçons par une méthode d'initialisation manuelle.

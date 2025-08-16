@@ -48,7 +48,7 @@ class QuitAddictionBot(commands.Bot):
         logger.info("--------------------------------------------------")
 
         if not self._synced:
-            logger.info("--- First Time Ready: Syncing commands and initializing assets ---")
+            logger.info("--- First Time Ready: Syncing commands ---")
             
             try:
                 target_guild = discord.Object(id=DEV_GUILD_ID) if DEV_GUILD_ID else None
@@ -62,13 +62,10 @@ class QuitAddictionBot(commands.Bot):
             except Exception as e:
                 logger.error(f"❌ Failed to sync commands: {e}", exc_info=True)
 
-            if self.asset_manager:
-                await self.asset_manager.initialize_assets()
-
             self._synced = True
             logger.info("--- Bot is fully operational ---")
         else:
-            logger.info("--- Bot reconnected, skipping sync and init. ---")
+            logger.info("--- Bot reconnected, skipping sync. ---")
 
 
 def init_db():
