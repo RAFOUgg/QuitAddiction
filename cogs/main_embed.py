@@ -62,20 +62,19 @@ class ActionsView(ui.View):
             remaining_seconds = int((player.action_cooldown_end_time - now).total_seconds())
             self.add_item(ui.Button(label=f"Occupé pour {remaining_seconds}s...", style=discord.ButtonStyle.secondary, disabled=True, row=0, emoji="⏳"))
         elif player.is_working:
-            self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
+            if player.willpower <= 25:  # Only show drink button if willpower is low
+                self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
             if player.bladder > 30: self.add_item(ui.Button(label=f"Uriner ({player.bladder:.0f}%)", style=discord.ButtonStyle.danger if player.bladder > 80 else discord.ButtonStyle.blurple, custom_id="action_urinate", emoji="🚽"))
             if player.bowels > 40: self.add_item(ui.Button(label=f"Déféquer ({player.bowels:.0f}%)", style=discord.ButtonStyle.danger if player.bowels > 80 else discord.ButtonStyle.blurple, custom_id="action_defecate", emoji="💩"))
             
-            # --- Fix: Show all smoke options during break ---
+            # Show smoke break button only if not on break
             if not player.is_on_break:
                 self.add_item(ui.Button(label="Prendre une pause", style=discord.ButtonStyle.secondary, custom_id="action_take_smoke_break", emoji="🚬"))
-            else:
-                # Show all available smoke options
+            # When on break, show available smoke options
+            elif player.is_on_break:
                 if player.cigarettes > 0: self.add_item(ui.Button(label=f"Cigarette ({player.cigarettes})", emoji="🚬", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
                 if player.e_cigarettes > 0: self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
                 if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
-                self.add_item(ui.Button(label="Finir la pause", style=discord.ButtonStyle.grey, custom_id="action_end_smoke_break", emoji="⬅️"))
-            # --- End fix ---
 
             game_time = get_current_game_time(server_state)
             if is_lunch_break(game_time) or not is_work_time(game_time):
@@ -168,8 +167,6 @@ class WorkView(ui.View):
                 style=discord.ButtonStyle.secondary
             ))
         
-        super().__init__(timeout=None)
-        self.add_item(ScheduleButton())
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", emoji="⬅️"))
 
 class EatView(ui.View):
@@ -276,13 +273,74 @@ class MainEmbed(commands.Cog):
 
         # Actions immédiates (cooldown ou action récente)
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
+        
+        # Vérifier si le joueur vient de se réveiller
+        just_woke_up = (player.last_action == "action_sleep" and 
+                       player.last_action_time and 
+                       (now - player.last_action_time).total_seconds() < 5)
+        
+        if just_woke_up:
+            return asset_cog.get_url("waking_up") or asset_cog.get_url("neutral")
+            
         if player.last_action and player.last_action_time and ((now - player.last_action_time).total_seconds() < 2 or is_on_cooldown):
+            # Mapping complet des actions et états vers les images
             action_to_asset = {
+                # États de base
+                "neutral": "neutral",                      # État neutre par défaut
+                "sad": "sad",                             # État triste
+                "sob": "sob",                             # État très triste/désespéré
+                "confused": "confused",                    # État confus/perdu
+                "waking_up": "waking_up",                 # État au réveil
+                
+                # Actions de repas
+                "eat_sandwich": "eat_sandwich",           # Action de manger un sandwich
+                "eat_tacos": "eat_tacos",                 # Action de manger des tacos
+                "eat_salad": "eat_salad",                 # Action de manger une salade
+                "hand_stomach": "hand_stomach",           # État d'avoir mal au ventre
+                "hungry": "hungry",                       # État d'avoir faim
+                
+                # Actions de boisson
+                "drink_water": "drink_water",             # Action de boire de l'eau
+                "drink_soda": "drink_soda",               # Action de boire un soda
+                "drink_wine": "drink_wine",               # Action de boire du vin
+                "sad_drinking": "sad_drinking",           # Action de boire tristement
+                "job_drinking": "job_drinking",           # Action de boire au travail
+                
+                # Actions de consommation de substances
+                "smoke_cigarette": "smoke_cigarette",     # Action de fumer une cigarette
+                "smoke_ecigarette": "smoke_ecigarette",   # Action de vapoter
+                "smoke_joint": "smoke_joint",             # Action de fumer un joint
+                "smoke_bang": "smoke_bang",               # Action d'utiliser le bang
+                "rolling": "rolling",                     # Action de rouler
+                "neutral_hold_e_cig": "neutral_hold_e_cig", # État tenant une e-cig
+                "job_smoke_cig": "job_pause_cig",         # Action de fumer une cigarette au travail
+                "job_smoke_joint": "job_pause_joint",     # Action de fumer un joint au travail
+                
+                # Actions physiologiques
+                "sleep": "sleep",                         # Action de dormir
+                "shower": "shower",                       # Action de se doucher
+                "pooping": "pooping",                     # Action d'aller aux toilettes
+                "need_pee": "need_pee",                   # État d'avoir envie
+                "peed": "peed",                          # État après avoir uriné
+                
+                # États de santé/confort
+                "scratch_eye": "scratch_eye",             # Action de se gratter les yeux (fatigue)
+                "sporting": "sporting",                   # Action de faire du sport
+                
+                # Actions liées au travail
+                "working": "working",                     # État de travail normal
+                "leaving_for_work": "leaving_for_work",   # Action d'aller au travail
+                "job_hungry": "job_hungry",               # État d'avoir faim au travail
+                "job_pooping": "job_pooping",             # État d'avoir envie au travail
+                
+                # Activités diverses
+                "on_phone": "on_phone",                   # Action d'être au téléphone
+
+                # Mappings d'actions vers les états
                 "neutral_eat_sandwich": "eat_sandwich",
                 "neutral_eat_tacos": "eat_tacos",
                 "neutral_eat_salad": "eat_salad",
                 "neutral_drinking": "drink_water",
-                "sad_drinking": "sad_drinking",
                 "neutral_drinking_soda": "drink_soda",
                 "neutral_drink_wine": "drink_wine",
                 "neutral_smoke_cig": "smoke_cigarette",
@@ -290,41 +348,13 @@ class MainEmbed(commands.Cog):
                 "vape_e_cig": "smoke_ecigarette",
                 "neutral_shower": "shower",
                 "neutral_sleep": "sleep",
-                "action_urinate": "pooping",  # Use pooping image for urinate action
+                "action_urinate": "pooping",
                 "neutral_pooping": "pooping",
                 "jobbing": "leaving_for_work",
-                "working": "working",
                 "work_break_cig": "job_pause_cig",
                 "work_break_joint": "job_pause_joint",
-                "job_pause_cig": "job_pause_cig",
-                "job_pause_joint": "job_pause_joint",
-                "pause": "job_pause_cig",  # fallback
-                "action_go_to_work": "leaving_for_work",
-                # Additional direct mappings for files present in assets/cooker
-                "hand_stomach": "hand_stomach",
-                "hungry": "hungry",
-                "job_hungry": "job_hungry",
-                "job_pooping": "job_pooping",
-                "leaving_for_work": "leaving_for_work",
-                "need_pee": "need_pee",
-                "neutral": "neutral",
-                "neutral_hold_e_cig": "neutral_hold_e_cig",
-                "on_phone": "on_phone",
-                "peed": "peed",
-                "pooping": "pooping",
-                "rolling": "rolling",
-                "sad": "sad",
-                "sad_drinking": "sad_drinking",
-                "scratch_eye": "scratch_eye",
-                "shower": "shower",
-                "sleep": "sleep",
-                "smoke_bang": "smoke_bang",
-                "smoke_cigarette": "smoke_cigarette",
-                "smoke_ecigarette": "smoke_ecigarette",
-                "smoke_joint": "smoke_joint",
-                "sob": "sob",
-                "sporting": "sporting",
-                "working": "working",
+                "pause": "job_pause_cig",
+                "action_go_to_work": "leaving_for_work"
             }
             asset_name = action_to_asset.get(player.last_action, player.last_action)
             return asset_cog.get_url(asset_name) or asset_cog.get_url("neutral")
@@ -337,15 +367,19 @@ class MainEmbed(commands.Cog):
             if player.hunger > 60 or player.thirst > 70 or player.stomachache > 50:
                 return asset_cog.get_url("job_hungry") or asset_cog.get_url("working")
 
-            # Ensuite gestion des pauses cigarette
+            # Ensuite gestion des pauses et actions au travail
             if player.is_on_break:
-                if player.last_action in ("neutral_smoke_cig", "work_break_cig", "job_pause_cig"):
+                # Vérifier les actions spécifiques pendant la pause
+                if player.last_action in ("smoke_cigarette", "work_break_cig", "job_pause_cig", "action_take_smoke_break"):
                     return asset_cog.get_url("job_pause_cig") or asset_cog.get_url("working")
-                elif player.last_action in ("neutral_smoke_joint", "work_break_joint", "job_pause_joint"):
+                elif player.last_action in ("smoke_joint", "work_break_joint", "job_pause_joint"):
                     return asset_cog.get_url("job_pause_joint") or asset_cog.get_url("working")
-                else:
-                    return asset_cog.get_url("job_pause_cig") or asset_cog.get_url("working")
+                elif player.last_action in ("drink_water", "drink_soda"):
+                    return asset_cog.get_url("job_drinking") or asset_cog.get_url("working")
             else:
+                # Vérifier les actions spécifiques pendant le travail
+                if player.last_action in ("drink_water", "drink_soda"):
+                    return asset_cog.get_url("job_drinking") or asset_cog.get_url("working")
                 return asset_cog.get_url("working")
 
         # Départ au travail
