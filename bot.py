@@ -47,25 +47,29 @@ class QuitAddictionBot(commands.Bot):
         logger.info(f"🚀 Logged in as {self.user} (ID: {self.user.id})")
         logger.info("--------------------------------------------------")
 
-        if not self._synced:
-            logger.info("--- First Time Ready: Syncing commands ---")
-            
+        # Force sync commands every time in development
+        if DEV_GUILD_ID:
+            logger.info("--- Syncing commands (Development Mode) ---")
             try:
-                target_guild = discord.Object(id=DEV_GUILD_ID) if DEV_GUILD_ID else None
-                if target_guild:
-                    logger.info(f"Syncing commands to DEVELOPMENT guild (ID: {DEV_GUILD_ID})...")
-                else:
-                    logger.info("Syncing GLOBAL commands...")
-
+                target_guild = discord.Object(id=int(DEV_GUILD_ID))
+                # Clear existing commands first
+                self.tree.clear_commands(guild=target_guild)
+                # Sync new commands
                 synced = await self.tree.sync(guild=target_guild)
-                logger.info(f"✅ Synced {len(synced)} commands.")
+                logger.info(f"✅ Synced {len(synced)} commands to development guild.")
+            except Exception as e:
+                logger.error(f"❌ Failed to sync commands: {e}", exc_info=True)
+        # In production, only sync once
+        elif not self._synced:
+            logger.info("--- First Time Ready: Syncing global commands ---")
+            try:
+                synced = await self.tree.sync()
+                logger.info(f"✅ Synced {len(synced)} commands globally.")
+                self._synced = True
             except Exception as e:
                 logger.error(f"❌ Failed to sync commands: {e}", exc_info=True)
 
-            self._synced = True
-            logger.info("--- Bot is fully operational ---")
-        else:
-            logger.info("--- Bot reconnected, skipping sync. ---")
+        logger.info("--- Bot is fully operational ---")
 
 
 def init_db():

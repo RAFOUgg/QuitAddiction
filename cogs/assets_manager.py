@@ -12,18 +12,28 @@ class AssetManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.asset_urls = {}
+        self.initialized = False
         self.required_images = [
             'sporting.png',  # Pour l'activité sportive
             'smoke_bang.png',  # Pour l'utilisation du bong
             # ... autres images existantes
         ]
-        self.bot.loop.create_task(self.initialize_assets())
 
-    # La méthode cog_load est supprimée car elle est la source du deadlock.
-    # Nous la remplaçons par une méthode d'initialisation manuelle.
+    async def cog_load(self):
+        """
+        Cette méthode est appelée automatiquement quand le cog est chargé.
+        Elle attend que le bot soit prêt avant d'initialiser les assets.
+        """
+        await self.bot.wait_until_ready()
+        if not self.initialized:
+            await self.initialize_assets()
 
     async def initialize_assets(self):
-        """Charge les images et met en cache leurs URLs. Doit être appelée après on_ready."""
+        """Charge les images et met en cache leurs URLs une seule fois."""
+        if self.initialized:
+            return
+
+        logger.info("Initializing and caching assets...")
         logger.info("Initializing and caching assets...")
         if not ASSET_CHANNEL_ID:
             logger.error("ASSET_CHANNEL_ID is not set in .env! Asset loading cancelled.")
@@ -59,6 +69,7 @@ class AssetManager(commands.Cog):
                     except Exception as e:
                         logger.error(f"Failed to upload asset '{filename}': {e}")
         
+        self.initialized = True
         logger.info("Asset caching finished.")
         logger.info(f"Cached URLs: {self.asset_urls}")
 
