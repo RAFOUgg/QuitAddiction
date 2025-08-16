@@ -304,6 +304,20 @@ class CookerBrain(commands.Cog):
         return "💧 Vous buvez de l'eau.", {"drink_water": True}, 5
 
     @check_not_working
+    def perform_drink_soda(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+        """Boire un soda - Plus sucré que l'eau, donne un boost d'énergie temporaire"""
+        if player.soda_cans <= 0:
+            return "🥤 Vous n'avez plus de soda !", {"confused": True}, 0
+            
+        player.soda_cans -= 1
+        player.thirst = max(0, player.thirst - 20)
+        player.bladder = min(100, player.bladder + 20)
+        player.energy = min(100, player.energy + 15)  # Boost d'énergie temporaire
+        player.health = max(0, player.health - 2)  # Petit impact négatif sur la santé
+        
+        return "🥤 Vous buvez un soda rafraîchissant.", {"drink_soda": True}, 5
+
+    @check_not_working
     def perform_use_bathroom(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
         """Use bathroom to reduce bladder needs"""
         if player.bladder < 20:

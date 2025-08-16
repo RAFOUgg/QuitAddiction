@@ -134,26 +134,6 @@ class PlayerProfile(Base):
     joints = Column(Integer, default=0)
 
     # --- INVENTAIRE SMOKE SHOP ---
-    weed_grams = Column(Integer, default=0)
-    hash_grams = Column(Integer, default=0)
-    cbd_grams = Column(Integer, default=0)
-    tobacco_grams = Column(Integer, default=0)
-    rolling_papers = Column(Integer, default=0)
-    toncs = Column(Integer, default=0)
-    has_grinder = Column(Boolean, default=False)
-    has_bong = Column(Boolean, default=False)
-    has_chillum = Column(Boolean, default=False)
-    has_vaporizer = Column(Boolean, default=False)
-
-    # --- HISTORIQUE DES CRAFTS ---
-    joints_crafted = Column(Integer, default=0)
-    bong_uses = Column(Integer, default=0)
-    chillum_uses = Column(Integer, default=0)
-    vaporizer_uses = Column(Integer, default=0)
-
-    # --- Notifications Config ---
-
-    # --- INVENTAIRE SMOKE SHOP ---
     weed_grams: int = Column(Integer, default=0)
     hash_grams: int = Column(Integer, default=0)
     cbd_grams: int = Column(Integer, default=0)
@@ -194,6 +174,7 @@ class PlayerProfile(Base):
     # --- Flags Narratifs ---
     has_unlocked_smokeshop: bool = Column(Boolean, default=False)
     messages: str = Column(Text, default="")
+    last_action_by: str = Column(String, nullable=True)
     
     # --- Téléphone ---
     phone_uses_today: int = Column(Integer, default=0)

@@ -706,7 +706,7 @@ class MainEmbed(commands.Cog):
                     # Actions de consommation
                     "drink_wine": cooker_brain.perform_drink_wine, 
                     "drink_water": cooker_brain.perform_drink_water, 
-                    "drink_soda": cooker_brain.perform_drink_water,  # Pour l'instant utiliser drink_water 
+                    "drink_soda": cooker_brain.perform_drink_soda,  # Utilise la nouvelle fonction perform_drink_soda
                     "eat_sandwich": cooker_brain.perform_eat_food,
                     "eat_tacos": cooker_brain.perform_eat_food,     # Pour l'instant utiliser perform_eat_food
                     "eat_salad": cooker_brain.perform_eat_food,     # Pour l'instant utiliser perform_eat_food
