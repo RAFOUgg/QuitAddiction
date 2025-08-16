@@ -493,13 +493,9 @@ class MainEmbed(commands.Cog):
         localized_start = to_localized(state.game_start_time) if state.game_start_time else None
         start_time = localized_start.strftime('%H:%M') if localized_start else "??:??"
         
-        # Utiliser le temps réel si mode real_time, sinon utiliser le temps de jeu
-        if state.duration_key == "real_time":
-            current_time = get_utc_now()
-            current_game_time_str = current_time.strftime('%H:%M')
-        else:
-            game_time = get_current_game_time(state)
-            current_game_time_str = game_time.strftime('%H:%M')
+        # get_current_game_time gère déjà le mode real_time
+        game_time = get_current_game_time(state)
+        current_game_time_str = game_time.strftime('%H:%M')
 
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
