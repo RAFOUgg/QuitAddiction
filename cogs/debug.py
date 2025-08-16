@@ -10,12 +10,12 @@ import pytz
 
 logger = get_logger(__name__)
 
-class AdminDebugCommands(commands.GroupCog, name="debug"):
+class DebugCommandsCog(commands.GroupCog, name="dev"):
     def __init__(self, bot):
         self.bot = bot
         super().__init__()
 
-    @app_commands.command(name="unlock_all", description="[DEBUG] Débloque tous les achievements et le smoke shop")
+    @app_commands.command(name="dev_unlock", description="[DEBUG] Débloque tous les achievements et le smoke shop")
     @app_commands.default_permissions(administrator=True)
     async def unlock_all(self, interaction: discord.Interaction):
         db = SessionLocal()
@@ -44,7 +44,7 @@ class AdminDebugCommands(commands.GroupCog, name="debug"):
         finally:
             db.close()
 
-    @app_commands.command(name="fast_time", description="[DEBUG] Accélère le temps de jeu (x10)")
+    @app_commands.command(name="dev_fast_time", description="[DEBUG] Accélère le temps de jeu (x10)")
     @app_commands.default_permissions(administrator=True)
     async def fast_time(self, interaction: discord.Interaction):
         db = SessionLocal()
@@ -243,4 +243,4 @@ class AdminDebugCommands(commands.GroupCog, name="debug"):
             db.close()
 
 async def setup(bot):
-    await bot.add_cog(AdminDebugCommands(bot))
+    await bot.add_cog(DebugCommandsCog(bot))

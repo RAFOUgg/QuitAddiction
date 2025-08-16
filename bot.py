@@ -63,6 +63,7 @@ class QuitAddictionBot(commands.Bot):
                 target_guild = discord.Object(id=int(DEV_GUILD_ID))
                 # Clear existing commands first
                 self.tree.clear_commands(guild=target_guild)
+                await self.tree.copy_global_to(guild=target_guild)
                 # Sync new commands
                 synced = await self.tree.sync(guild=target_guild)
                 logger.info(f"✅ Synced {len(synced)} commands to development guild.")
