@@ -67,7 +67,7 @@ class DebugCommandsCog(commands.GroupCog, name="dev"):
         finally:
             db.close()
 
-    @app_commands.command(name="normal_time", description="[DEBUG] Remet la vitesse du temps normale")
+    @app_commands.command(name="dev_normal_time", description="[DEBUG] Remet la vitesse du temps normale")
     @app_commands.default_permissions(administrator=True)
     async def normal_time(self, interaction: discord.Interaction):
         db = SessionLocal()
@@ -91,7 +91,7 @@ class DebugCommandsCog(commands.GroupCog, name="dev"):
         finally:
             db.close()
 
-    @app_commands.command(name="set_game_time", description="[DEBUG] Définit l'heure dans le jeu")
+    @app_commands.command(name="dev_set_time", description="[DEBUG] Définit l'heure dans le jeu")
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         hour="Heure (0-23)",

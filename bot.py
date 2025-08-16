@@ -61,12 +61,11 @@ class QuitAddictionBot(commands.Bot):
             logger.info("--- Syncing commands (Development Mode) ---")
             try:
                 target_guild = discord.Object(id=int(DEV_GUILD_ID))
-                # Clear existing commands first
-                self.tree.clear_commands(guild=target_guild)
-                await self.tree.copy_global_to(guild=target_guild)
-                # Sync new commands
-                synced = await self.tree.sync(guild=target_guild)
-                logger.info(f"✅ Synced {len(synced)} commands to development guild.")
+                # Sync both global and guild commands in development
+                # This ensures all commands are available in the test guild
+                await self.tree.sync()
+                synced_guild = await self.tree.sync(guild=target_guild)
+                logger.info(f"✅ Synced {len(synced_guild)} commands to development guild.")
             except Exception as e:
                 logger.error(f"❌ Failed to sync commands: {e}", exc_info=True)
         # In production, only sync once
