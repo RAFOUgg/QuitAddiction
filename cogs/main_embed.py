@@ -221,11 +221,11 @@ class WorkView(ui.View):
 
 class EatView(ui.View):
     def __init__(self, player: PlayerProfile):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)  # Changed timeout to None to match other views
         if player.food_servings > 0: self.add_item(ui.Button(label=f"Sandwich ({player.food_servings})", emoji="🥪", style=discord.ButtonStyle.success, custom_id="eat_sandwich"))
         if getattr(player, 'tacos', 0) > 0: self.add_item(ui.Button(label=f"Tacos ({player.tacos})", emoji="🌮", style=discord.ButtonStyle.primary, custom_id="eat_tacos"))
         if getattr(player, 'salad_servings', 0) > 0: self.add_item(ui.Button(label=f"Salade ({player.salad_servings})", emoji="🥗", style=discord.ButtonStyle.success, custom_id="eat_salad"))
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=1, emoji="⬅️"))
 
 class DrinkView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -233,7 +233,7 @@ class DrinkView(ui.View):
         if player.water_bottles > 0: self.add_item(ui.Button(label=f"Eau ({player.water_bottles})", emoji="💧", style=discord.ButtonStyle.primary, custom_id="drink_water"))
         if player.soda_cans > 0: self.add_item(ui.Button(label=f"Soda ({player.soda_cans})", emoji="🥤", style=discord.ButtonStyle.blurple, custom_id="drink_soda"))
         if player.wine_bottles > 0: self.add_item(ui.Button(label=f"Vin ({player.wine_bottles})", emoji="🍷", style=discord.ButtonStyle.danger, custom_id="drink_wine"))
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=1, emoji="⬅️"))
 
 class SmokeView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -242,7 +242,7 @@ class SmokeView(ui.View):
         if player.e_cigarettes > 0: self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
         if player.joints > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.secondary, custom_id="smoke_joint"))
         if player.has_bong: self.add_item(ui.Button(label="Utiliser le bong", emoji="🌊", style=discord.ButtonStyle.secondary, custom_id="use_bong"))
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_actions", row=1, emoji="⬅️"))
+        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="nav_main_menu", row=1, emoji="⬅️"))
 
 class MainEmbed(commands.Cog):
     def __init__(self, bot):
@@ -490,8 +490,14 @@ class MainEmbed(commands.Cog):
         # Get localized times for display
         localized_start = to_localized(state.game_start_time) if state.game_start_time else None
         start_time = localized_start.strftime('%H:%M') if localized_start else "??:??"
-        game_time = get_current_game_time(state)
-        current_game_time_str = game_time.strftime('%H:%M')
+        
+        # Utiliser le temps réel si mode real_time, sinon utiliser le temps de jeu
+        if state.duration_key == "real_time":
+            current_time = get_utc_now()
+            current_game_time_str = current_time.strftime('%H:%M')
+        else:
+            game_time = get_current_game_time(state)
+            current_game_time_str = game_time.strftime('%H:%M')
 
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
@@ -667,12 +673,14 @@ class MainEmbed(commands.Cog):
                 view = DashboardView(player)
             elif custom_id == "nav_actions":
                 view = ActionsView(player, state)
+                embed = self.generate_dashboard_embed(player, state, interaction.guild)
             elif custom_id == "nav_work":
                 view = WorkView(player, state)
                 embed = self.generate_work_embed(player, state)
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
                 views = {"action_eat_menu": EatView, "action_drink_menu": DrinkView, "action_smoke_menu": SmokeView}
                 view = views[custom_id](player)
+                embed = self.generate_dashboard_embed(player, state, interaction.guild)
             else: 
                 action_map = { 
                     "action_do_sport": cooker_brain.perform_sport,
