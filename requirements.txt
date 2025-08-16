@@ -12,3 +12,6 @@ aiohttp==3.9.5
 
 # Recommandé par discord.py pour le support de la voix (supprime un warning au démarrage)
 PyNaCl==1.5.0
+
+# Timezone support
+pytz==2024.1
