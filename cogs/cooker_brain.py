@@ -4,7 +4,7 @@ from typing import Tuple, Dict, Optional
 import datetime
 from db.models import PlayerProfile, ServerState
 from utils.helpers import clamp
-from utils.game_time import is_night, get_current_game_time, is_work_time, is_lunch_break
+from utils.time_manager import is_night, is_work_time
 from functools import wraps
 
 def get_attr_int(player: PlayerProfile, attr: str) -> int:
@@ -42,7 +42,7 @@ def check_not_working(func):
     @wraps(func)
     def wrapper(self, player: PlayerProfile, *args, **kwargs):
         if player.is_working:
-            return "Vous ne pouvez pas faire ça pendant le travail !", {"confused": True}, 0
+            return "Vous ne pouvez pas faire ça en travaillant !", {"confused": True}, 0
         return func(self, player, *args, **kwargs)
     return wrapper
 
@@ -50,15 +50,12 @@ class CookerBrain(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def perform_sport(self, player: PlayerProfile, server_state: ServerState) -> Tuple[str, Dict, int]:
+    def perform_sport(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
         """
         Permet au joueur de faire du sport pendant ses jours de repos.
         Les avantages sont nombreux : santé physique et mentale, réduction de l'ennui.
         """
-        if not server_state or not server_state.game_start_time:
-            return "Erreur: La partie n'a pas encore commencé.", {"confused": True}, 0
-            
-        current_weekday = server_state.game_start_time.weekday()
+        current_weekday = game_time.weekday()
         
         # Vérifier si c'est un jour de sport (dimanche ou lundi)
         if current_weekday not in [0, 6]:  # Lundi (0) ou Dimanche (6)
@@ -130,18 +127,14 @@ class CookerBrain(commands.Cog):
         
         return f"🌊 Vous utilisez le bong avec du {substance}. L'effet est puissant !", {"smoke_bang": True}, 15
 
-    def perform_go_to_work(self, player: PlayerProfile, server_state: ServerState) -> Tuple[str, Dict, int]:
-        if not server_state or not server_state.game_start_time:
-            return "Erreur: La partie n'a pas encore commencé.", {"confused": True}, 0
-            
-        current_time = get_current_game_time(server_state)
-        current_weekday = server_state.game_start_time.weekday()
+    def perform_go_to_work(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
+        current_weekday = game_time.weekday()
 
         # Vérifier si c'est un jour de repos
         if current_weekday in [0, 6]:  # Lundi (0) ou Dimanche (6)
             return "📅 C'est votre jour de repos ! Profitez-en pour faire du sport.", {"confused": True}, 0
 
-        if not is_work_time(server_state):
+        if not is_work_time(game_time):
             return "⏰ Les horaires de travail sont 9h-11h30 et 13h-17h30.", {"confused": True}, 0
             
         if player.is_working:
@@ -154,10 +147,10 @@ class CookerBrain(commands.Cog):
         afternoon_start = datetime.time(hour=13, minute=0)
 
         lateness = 0
-        if morning_start <= current_time < datetime.time(hour=11, minute=30):
-            lateness = (current_time.hour - morning_start.hour) * 60 + (current_time.minute - morning_start.minute)
-        elif afternoon_start <= current_time < datetime.time(hour=17, minute=30):
-            lateness = (current_time.hour - afternoon_start.hour) * 60 + (current_time.minute - afternoon_start.minute)
+        if morning_start <= game_time.time() < datetime.time(hour=11, minute=30):
+            lateness = (game_time.hour - morning_start.hour) * 60 + (game_time.minute - morning_start.minute)
+        elif afternoon_start <= game_time.time() < datetime.time(hour=17, minute=30):
+            lateness = (game_time.hour - afternoon_start.hour) * 60 + (game_time.minute - afternoon_start.minute)
 
         if lateness > 5:
             # Pénalités pour retard
@@ -170,15 +163,14 @@ class CookerBrain(commands.Cog):
         player.is_working = True
         return msg, {"leaving_for_work": True}, 0
 
-    def perform_go_home(self, player: PlayerProfile, server_state: ServerState) -> Tuple[str, Dict, int]:
+    def perform_go_home(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
         if not player.is_working:
             return "Vous n'êtes pas au travail.", {"confused": True}, 0
 
         if player.is_sleeping:
             return "😴 Impossible de rentrer en dormant !", {"confused": True}, 0
 
-        current_time = get_current_game_time(server_state)
-        if current_time < datetime.time(hour=11, minute=30) or (datetime.time(hour=13, minute=0) <= current_time < datetime.time(hour=17, minute=30)):
+        if is_work_time(game_time):
             player.performance = max(0, player.performance - 25)
             player.money = max(0, player.money - 50)
             msg = "🏃 Vous partez plus tôt ! (-50$, -25 performance)"
@@ -331,8 +323,8 @@ class CookerBrain(commands.Cog):
         return "🌮 Vous mangez un tacos.", {"eat_tacos": True}, 5
 
     @check_not_working
-    def perform_sleep(self, player: PlayerProfile, server_state: ServerState) -> Tuple[str, Dict, int, str]:
-        if not is_night(server_state):
+    def perform_sleep(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int, str]:
+        if not is_night(game_time):
             return "Vous ne pouvez dormir que la nuit (22h-6h).", {"confused": True}, 0, ""
 
         if player.is_working:

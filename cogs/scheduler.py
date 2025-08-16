@@ -8,8 +8,8 @@ import datetime
 import traceback
 from utils.calculations import chain_reactions, update_job_performance
 from utils.helpers import clamp, get_player_notif_settings
-from cogs.main_embed import DashboardView
-from utils.game_time import get_current_game_time, is_lunch_break, is_work_time, is_night
+from cogs.main_embed import DashboardView # Keep for UI refresh
+from utils.time_manager import get_current_game_time, is_work_time, is_night
 from cogs.cooker_brain import CookerBrain
 
 class Scheduler(commands.Cog):
@@ -54,7 +54,7 @@ class Scheduler(commands.Cog):
         if not duration or duration == 0:
             return False
 
-        # Update player state to reflect the action
+        # Update player state to reflect the action. The action key is now passed in.
         player.last_action = action_key
         player.last_action_time = now
         player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
@@ -82,25 +82,26 @@ class Scheduler(commands.Cog):
                 if not player: continue
 
                 now = datetime.datetime.utcnow()
-                game_time = get_current_game_time(server_state)
+                game_time = get_current_game_time(server_state) # This is now a localized datetime object
                 # Calculate game day from start time
                 game_day = (now - server_state.game_start_time).days if server_state.game_start_time else 0
 
                 # --- AUTONOMOUS ACTIONS (High Willpower) ---
                 # The character will attempt to perform one essential action per tick if needed.
                 if player.willpower >= 70:
+                    # Pass game_time to the action functions
                     # Auto go to work if it's time and not already working
-                    if is_work_time(server_state) and not player.is_working:
-                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_go_to_work, "action_go_to_work", server_state)
+                    if is_work_time(game_time) and not player.is_working:
+                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_go_to_work, "action_go_to_work", game_time)
                     # Auto go home if it's not work time but is currently working
-                    elif not is_work_time(server_state) and player.is_working:
-                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_go_home, "action_go_home", server_state)
+                    elif not is_work_time(game_time) and player.is_working:
+                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_go_home, "action_go_home", game_time)
                     # Auto-eat when very hungry and has food
                     elif player.hunger > 80 and player.food_servings > 0:
                         await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_eat_food, "eat_sandwich")
                     # Auto-sleep when very tired at night
-                    elif is_night(server_state) and player.fatigue > 80:
-                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_sleep, "action_sleep", server_state)
+                    elif is_night(game_time) and player.fatigue > 80:
+                        await self._perform_autonomous_action(player, server_state, cooker_brain_cog.perform_sleep, "action_sleep", game_time)
 
                 if game_time.hour == server_state.game_day_start_hour and self.daily_check_done_for_day != game_day:
                     self.daily_check_done_for_day = game_day

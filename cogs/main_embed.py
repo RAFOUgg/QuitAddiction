@@ -11,8 +11,7 @@ import asyncio
 from .phone import PhoneMainView, Phone
 from utils.helpers import clamp
 from utils.logger import get_logger
-from utils.game_time import is_night, is_work_time, is_lunch_break, get_current_game_time, localize_datetime
-
+from utils.time_manager import get_current_game_time, is_night, is_work_time, is_lunch_break, to_localized, get_utc_now
 logger = get_logger(__name__)
 
 # --- Sleep quota helper ---
@@ -78,16 +77,18 @@ class ActionsView(ui.View):
                 self.add_item(ui.Button(label="Finir la pause", style=discord.ButtonStyle.grey, custom_id="action_end_smoke_break", emoji="⬅️"))
             # --- End fix ---
 
-            if is_lunch_break(server_state) or not is_work_time(server_state):
+            game_time = get_current_game_time(server_state)
+            if is_lunch_break(game_time) or not is_work_time(game_time):
                 self.add_item(ui.Button(label="Rentrer à la maison", style=discord.ButtonStyle.success, custom_id="action_go_home", emoji="🏠"))
         else:
-            if is_work_time(server_state):
+            game_time = get_current_game_time(server_state)
+            if is_work_time(game_time):
                 self.add_item(ui.Button(label="Aller au travail", style=discord.ButtonStyle.success, custom_id="action_go_to_work", emoji="🏢"))
             
             self.add_item(ui.Button(label="Manger", style=discord.ButtonStyle.success, custom_id="action_eat_menu", emoji="🍽️"))
             self.add_item(ui.Button(label="Boire", style=discord.ButtonStyle.primary, custom_id="action_drink_menu", emoji="💧"))
             self.add_item(ui.Button(label="Fumer", style=discord.ButtonStyle.danger, custom_id="action_smoke_menu", emoji="🚬"))
-            night_time = is_night(server_state)
+            night_time = is_night(game_time)
             if night_time:
                 self.add_item(ui.Button(label="Dormir (Nuit)", style=discord.ButtonStyle.secondary, custom_id="action_sleep", emoji="🛏️"))
             else:
@@ -213,31 +214,32 @@ class MainEmbed(commands.Cog):
         if player.willpower <= 70:
             return False
         # Only for eat, drink, sleep, go to work
+        game_time = get_current_game_time(state)
         auto_performed = False
         # Eat if hunger > 70
         if player.hunger > 70 and player.food_servings > 0:
-            message, _, duration = cooker_brain.perform_eat_sandwich(player)
+            message, _, duration = cooker_brain.perform_eat_food(player)
             if duration > 0:
                 player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
                 self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
             auto_performed = True
         # Drink if thirst > 70
-        if player.thirst > 70 and player.water_bottles > 0:
+        elif player.thirst > 70 and player.water_bottles > 0:
             message, _, duration = cooker_brain.perform_drink_water(player)
             if duration > 0:
                 player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
                 self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
             auto_performed = True
         # Sleep if fatigue > 80 and not working
-        if player.fatigue > 80 and not player.is_working:
-            message, _, duration = cooker_brain.perform_sleep(player, state)
+        elif player.fatigue > 80 and not player.is_working and is_night(game_time):
+            message, _, duration, *_ = cooker_brain.perform_sleep(player, game_time)
             if duration > 0:
                 player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
                 self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
             auto_performed = True
         # Go to work if work time and not working
-        if is_work_time(state) and not player.is_working:
-            message, _, duration, *_ = cooker_brain.perform_go_to_work(player, state)
+        elif is_work_time(game_time) and not player.is_working:
+            message, _, duration, *_ = cooker_brain.perform_go_to_work(player, game_time)
             if duration > 0:
                 player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
                 self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
@@ -376,19 +378,19 @@ class MainEmbed(commands.Cog):
         return "Pour l'instant, ça va à peu près."
 
     def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
-        """Create the main dashboard embed, localizing times with GAME_TIME_OFFSET_HOURS."""
+        """Create the main dashboard embed, using the centralized time manager."""
         # Basic mode labels
         game_mode = state.game_mode.capitalize() if state.game_mode else "Normal"
         duration_key = state.duration_key or "real_time"
         duration_label = "Test Mode" if duration_key == "test" else "Temps Réel"
 
-        # Localized start time for display (treat stored times as UTC)
-        localized_start = localize_datetime(state.game_start_time) if state.game_start_time else None
+        # Get localized times for display
+        localized_start = to_localized(state.game_start_time) if state.game_start_time else None
         start_time = localized_start.strftime('%H:%M') if localized_start else "??:??"
-        current_game_time = get_current_game_time(state).strftime('%H:%M')
+        game_time = get_current_game_time(state)
+        current_game_time_str = game_time.strftime('%H:%M')
 
-        embed = discord.Embed(title=f"👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
-        embed.set_footer(text=f"Mode: {duration_label} | Démarré à {start_time} | Heure actuelle: {current_game_time}")
+        embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
         # Image selection
         if image_url := self.get_image_url(player):
@@ -439,11 +441,10 @@ class MainEmbed(commands.Cog):
                     embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True)
 
         # Timing footer and timestamp
-        game_time = get_current_game_time(state)
         elapsed = datetime.datetime.utcnow() - state.game_start_time if state.game_start_time else datetime.timedelta()
         elapsed_mins = int(elapsed.total_seconds() / 60)
-        embed.set_footer(text=f"LaFoncedalle.fr • Mode: {game_mode} ({duration_label}) • ⏰ {start_time} +{elapsed_mins}min • ⌚ {game_time.strftime('%H:%M')}")
-        embed.timestamp = localize_datetime(datetime.datetime.utcnow())
+        embed.set_footer(text=f"LaFoncedalle.fr • Mode: {game_mode} ({duration_label}) • ⏰ {start_time} +{elapsed_mins}min • ⌚ {current_game_time_str}")
+        embed.timestamp = get_utc_now()
         return embed
 
     def generate_work_embed(self, player: PlayerProfile, state: ServerState) -> discord.Embed:
@@ -470,6 +471,7 @@ class MainEmbed(commands.Cog):
 
             custom_id = interaction.data["custom_id"]
             cooker_brain = self.bot.get_cog("CookerBrain")
+            game_time = get_current_game_time(state) # Get current game time once for this interaction
 
             if custom_id.startswith("phone_") or custom_id.startswith("shop_buy_") or custom_id.startswith("ubereats_buy_"):
                 phone_cog = self.bot.get_cog("Phone")
@@ -514,7 +516,7 @@ class MainEmbed(commands.Cog):
                 if custom_id in action_map:
                     # Correction: Gère tous les retours d'action correctement
                     if custom_id in ["action_sleep", "action_go_to_work", "action_go_home", "action_do_sport"]:
-                        result = action_map[custom_id](player, state)
+                        result = action_map[custom_id](player, game_time)
                         if isinstance(result, tuple) and len(result) >= 3:
                             message, states, duration, *_ = result
                         else:

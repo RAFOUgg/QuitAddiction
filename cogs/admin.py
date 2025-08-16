@@ -18,6 +18,7 @@ from db.models import ServerState, PlayerProfile
 from utils.logger import get_logger
 from utils.embed_builder import create_styled_embed
 from cogs.main_embed import DashboardView
+from utils.time_manager import get_utc_now, to_localized, is_work_time as is_wt, is_lunch_break as is_lb
 
 # --- Setup Logger for this Cog ---
 logger = get_logger(__name__)
@@ -530,46 +531,40 @@ class AdminCog(commands.Cog):
                         main_embed_cog = self.cog.bot.get_cog("MainEmbed")
                         cooker_brain = self.cog.bot.get_cog("CookerBrain")
                         player = db.query(PlayerProfile).filter_by(guild_id=self.guild_id).first()
-                        now = datetime.datetime.utcnow()
+                        utc_now = get_utc_now()
                         
                         # Initialize new player if needed
                         if not player:
                             logger.info(f"Creating new player profile for guild {self.guild_id}")
                             player = PlayerProfile(
                                 guild_id=self.guild_id,
-                                last_update=now,
+                                last_update=utc_now,
                                 willpower=85.0,  # Start with high willpower
                                 health=100.0,
                                 energy=100.0,
                                 happiness=70.0
                             )
                             db.add(player)
-                        
-                        # Initialize game state with time check
-                        current_hour = now.hour
-                        current_minute = now.minute
-                        logger.info(f"Initializing game state at {current_hour}:{current_minute}")
 
                         # Auto-initialize cook's state based on time with high willpower
-                        current_time = (current_hour, current_minute)
-                        is_work_time = ((9, 0) <= current_time < (11, 30)) or ((13, 0) <= current_time < (17, 30))
-                        is_lunch_break = (11, 30) <= current_time < (13, 0)
+                        # The initial state is based on the real-world time.
+                        localized_now = to_localized(utc_now)
+                        logger.info(f"Initializing game state at {localized_now.strftime('%H:%M')} localized time.")
 
-                        if is_work_time:
+                        if is_wt(localized_now):
                             player.is_working = True
                             player.last_action = "working"
-                            player.last_worked_at = now
+                            player.last_worked_at = utc_now
                             player.willpower = 80  # High initial willpower
                             message = "Le cuisinier démarre en pleine journée de travail."
                             logger.info("Player initialized at work")
-                        elif is_lunch_break:
+                        elif is_lb(localized_now):
                             player.is_working = False
                             player.last_action = "neutral"
                             player.willpower = 80  # High initial willpower
                             message = "Le cuisinier démarre pendant sa pause déjeuner."
                             logger.info("Player initialized during lunch break")
                         else:
-                            # En dehors des heures de travail (avant 9h, après 17h30 ou pendant la pause déjeuner)
                             player.is_working = False
                             player.last_action = "neutral"
                             player.willpower = 80  # High initial willpower
@@ -577,7 +572,7 @@ class AdminCog(commands.Cog):
                             logger.info("Player initialized at home")
 
                         state.game_started = True
-                        state.game_start_time = now
+                        state.game_start_time = utc_now
                         state.is_test_mode = (state.duration_key == 'test')
                         
                         db.commit()
