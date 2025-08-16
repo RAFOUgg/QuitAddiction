@@ -1,5 +1,53 @@
 # --- cogs/main_embed.py (REVISED) ---
 
+# Configuration des durées d'actions (en secondes)
+ACTION_DURATIONS = {
+    # Actions de base
+    "default": 10,            # Durée par défaut pour les actions non spécifiées
+    
+    # Actions de repas
+    "eat_sandwich": 180,      # 3 minutes pour manger un sandwich
+    "eat_tacos": 240,        # 4 minutes pour manger un tacos
+    "eat_salad": 300,        # 5 minutes pour manger une salade
+    
+    # Actions de boisson
+    "drink_water": 10,       # 10 secondes pour boire de l'eau
+    "drink_soda": 20,        # 20 secondes pour boire un soda
+    "drink_wine": 120,       # 2 minutes pour boire un verre de vin
+    
+    # Actions de consommation de substances
+    "smoke_cigarette": 240,   # 4 minutes pour fumer une cigarette
+    "smoke_cigarette_work": 240,  # 4 minutes pour fumer une cigarette au travail
+    "smoke_ecigarette": 180,  # 3 minutes pour vapoter
+    "smoke_joint": 600,      # 10 minutes pour fumer un joint
+    "smoke_joint_work": 600,  # 10 minutes pour fumer un joint au travail
+    "use_bong": 180,        # 3 minutes pour utiliser le bong
+    
+    # Actions physiologiques
+    "sleep": {               # Durée de sommeil variable
+        "min": 6 * 3600,     # Minimum 6 heures
+        "max": 10 * 3600,    # Maximum 10 heures
+        "nap": 1800,         # Sieste de 30 minutes
+    },
+    "shower": 600,          # 10 minutes pour une douche
+    "urinate": 120,         # 2 minutes pour uriner
+    "defecate": 300,        # 5 minutes pour déféquer
+    
+    # Actions de travail
+    "work": {               # Périodes de travail
+        "morning": 2.5 * 3600,   # 2h30 le matin
+        "afternoon": 4.5 * 3600, # 4h30 l'après-midi
+    },
+    "work_break": {         # Durées des pauses
+        "normal": 900,       # 15 minutes de pause normale
+        "lunch": 5400,       # 1h30 de pause déjeuner
+    },
+    
+    # Autres activités
+    "sport": 3600,          # 1 heure de sport
+    "phone": 300,           # 5 minutes sur le téléphone
+}
+
 import discord
 from discord.ext import commands
 from discord import ui
@@ -72,9 +120,9 @@ class ActionsView(ui.View):
                 self.add_item(ui.Button(label="Prendre une pause", style=discord.ButtonStyle.secondary, custom_id="action_take_smoke_break", emoji="🚬"))
             # When on break, show available smoke options
             elif player.is_on_break:
-                if player.cigarettes > 0: self.add_item(ui.Button(label=f"Cigarette ({player.cigarettes})", emoji="🚬", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette"))
-                if player.e_cigarettes > 0: self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette"))
-                if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint"))
+                if player.cigarettes > 0: self.add_item(ui.Button(label=f"Cigarette ({player.cigarettes})", emoji="🚬", style=discord.ButtonStyle.danger, custom_id="smoke_cigarette_work"))
+                if player.e_cigarettes > 0: self.add_item(ui.Button(label=f"Vapoteuse ({player.e_cigarettes})", emoji="💨", style=discord.ButtonStyle.primary, custom_id="smoke_ecigarette_work"))
+                if getattr(player, 'joints', 0) > 0: self.add_item(ui.Button(label=f"Joint ({player.joints})", emoji="🌿", style=discord.ButtonStyle.success, custom_id="smoke_joint_work"))
 
             game_time = get_current_game_time(server_state)
             if is_lunch_break(game_time) or not is_work_time(game_time):
@@ -307,14 +355,21 @@ class MainEmbed(commands.Cog):
                 "job_drinking": "job_drinking",           # Action de boire au travail
                 
                 # Actions de consommation de substances
-                "smoke_cigarette": "smoke_cigarette",     # Action de fumer une cigarette
-                "smoke_ecigarette": "smoke_ecigarette",   # Action de vapoter
-                "smoke_joint": "smoke_joint",             # Action de fumer un joint
+                # Actions standard
+                "smoke_cigarette": "smoke_cigarette",     # Action de fumer une cigarette (hors travail)
+                "smoke_ecigarette": "smoke_ecigarette",   # Action de vapoter (hors travail)
+                "smoke_joint": "smoke_joint",             # Action de fumer un joint (hors travail)
                 "smoke_bang": "smoke_bang",               # Action d'utiliser le bang
                 "rolling": "rolling",                     # Action de rouler
                 "neutral_hold_e_cig": "neutral_hold_e_cig", # État tenant une e-cig
-                "job_smoke_cig": "job_pause_cig",         # Action de fumer une cigarette au travail
-                "job_smoke_joint": "job_pause_joint",     # Action de fumer un joint au travail
+                
+                # Actions au travail (pause)
+                "work_smoke_cigarette": "job_pause_cig",  # Action de fumer une cigarette au travail
+                "work_smoke_joint": "job_pause_joint",    # Action de fumer un joint au travail
+                
+                # Mappings des actions vers les images de travail
+                "smoke_cigarette_work": "job_pause_cig",  # Fumer cigarette pendant la pause
+                "smoke_joint_work": "job_pause_joint",    # Fumer joint pendant la pause
                 
                 # Actions physiologiques
                 "sleep": "sleep",                         # Action de dormir
@@ -370,9 +425,9 @@ class MainEmbed(commands.Cog):
             # Ensuite gestion des pauses et actions au travail
             if player.is_on_break:
                 # Vérifier les actions spécifiques pendant la pause
-                if player.last_action in ("smoke_cigarette", "work_break_cig", "job_pause_cig", "action_take_smoke_break"):
+                if player.last_action in ("smoke_cigarette_work", "work_smoke_cigarette"):
                     return asset_cog.get_url("job_pause_cig") or asset_cog.get_url("working")
-                elif player.last_action in ("smoke_joint", "work_break_joint", "job_pause_joint"):
+                elif player.last_action in ("smoke_joint_work", "work_smoke_joint"):
                     return asset_cog.get_url("job_pause_joint") or asset_cog.get_url("working")
                 elif player.last_action in ("drink_water", "drink_soda"):
                     return asset_cog.get_url("job_drinking") or asset_cog.get_url("working")
@@ -515,9 +570,63 @@ class MainEmbed(commands.Cog):
         embed = discord.Embed(title="🏢 Informations sur le travail", color=0x71368a)
         if image_url := self.get_image_url(player):
             embed.set_image(url=image_url)
-        embed.add_field(name="Horaires", value="9:00 - 11:30 / 13:00 - 17:30", inline=False)
-        embed.add_field(name="Performance", value=f"`{int(player.job_performance)}%`\n{generate_progress_bar(player.job_performance, high_is_bad=False)}", inline=True)
-        embed.add_field(name="Jours d'absence", value=player.missed_work_days, inline=True)
+
+        # Horaires et présence
+        embed.add_field(
+            name="📅 Horaires",
+            value="```\nMatin: 9h00 - 11h30\nAprès-midi: 13h00 - 17h30\n```",
+            inline=False
+        )
+
+        # Performance globale
+        perf_color = "🟢" if player.job_performance >= 80 else "🟡" if player.job_performance >= 50 else "🔴"
+        embed.add_field(
+            name=f"{perf_color} Performance Globale",
+            value=f"`{int(player.job_performance)}%`\n{generate_progress_bar(player.job_performance, high_is_bad=False)}",
+            inline=False
+        )
+
+        # Stats de présence
+        total_minutes_late = getattr(player, 'total_minutes_late', 0)
+        total_break_time = getattr(player, 'total_break_time', 0) # en minutes
+        embed.add_field(
+            name="⏰ Ponctualité",
+            value=f"Retards: **{total_minutes_late}** min\nAbsences: **{player.missed_work_days}** jour(s)",
+            inline=True
+        )
+
+        # Stats des pauses
+        allowed_break_time = 15  # minutes par pause
+        over_break = max(0, total_break_time - allowed_break_time)
+        embed.add_field(
+            name="☕ Pauses",
+            value=f"Durée totale: **{total_break_time}** min\nDépassement: **{over_break}** min",
+            inline=True
+        )
+
+        # Calcul du temps de travail perdu
+        lost_time = total_minutes_late + over_break
+        work_day_minutes = (2.5 + 4.5) * 60  # 7h de travail par jour
+        lost_productivity = (lost_time / work_day_minutes) * 100 if work_day_minutes > 0 else 0
+        
+        embed.add_field(
+            name="⚠️ Temps de travail perdu",
+            value=f"Total: **{lost_time}** min\nProductivité perdue: **{lost_productivity:.1f}%**",
+            inline=True
+        )
+
+        # Ajouter une note de l'employeur
+        note = "Excellent travail! 👏" if player.job_performance >= 90 else \
+               "Bon travail, continuez ainsi! 👍" if player.job_performance >= 70 else \
+               "Des améliorations sont nécessaires. 🤔" if player.job_performance >= 50 else \
+               "Performance insuffisante! ⚠️"
+        
+        embed.add_field(
+            name="📝 Note de l'employeur",
+            value=note,
+            inline=False
+        )
+
         return embed
 
     @commands.Cog.listener()
@@ -584,7 +693,7 @@ class MainEmbed(commands.Cog):
                     "action_end_smoke_break": cooker_brain.perform_end_smoke_break
                 }
                 if custom_id in action_map:
-                    # Correction: Gère tous les retours d'action correctement
+                    # Gestion des durées d'actions
                     if custom_id in ["action_sleep", "action_go_to_work", "action_go_home", "action_do_sport"]:
                         result = action_map[custom_id](player, game_time)
                         if isinstance(result, tuple) and len(result) >= 3:
@@ -593,6 +702,28 @@ class MainEmbed(commands.Cog):
                             message, states, duration = result
                     else:
                         message, states, duration = action_map[custom_id](player)
+                        
+                        # Ajuster la durée selon l'action si elle n'est pas déjà définie
+                        if duration <= 0:
+                            # Convertir custom_id en clé pour ACTION_DURATIONS
+                            action_key = custom_id.replace("action_", "")
+                            if action_key in ACTION_DURATIONS:
+                                if isinstance(ACTION_DURATIONS[action_key], dict):
+                                    # Pour les actions avec durées variables
+                                    if action_key == "sleep":
+                                        duration = ACTION_DURATIONS[action_key]["nap"] if not is_night(game_time) else \
+                                                 ACTION_DURATIONS[action_key]["min"]
+                                    elif action_key == "work_break":
+                                        duration = ACTION_DURATIONS[action_key]["normal"]
+                                else:
+                                    duration = ACTION_DURATIONS[action_key]
+                            # Gestion spéciale des actions de travail
+                            elif custom_id.endswith("_work"):
+                                base_action = custom_id.replace("_work", "")
+                                if base_action in ACTION_DURATIONS:
+                                    duration = ACTION_DURATIONS[base_action]
+                            else:
+                                duration = ACTION_DURATIONS["default"]
 
                     # Record last action + timestamp and states for image display
                     player.last_action = custom_id

@@ -1,8 +1,44 @@
 # --- utils/calculations.py (REFACTORED WITH NEW STATS) ---
 
 from .helpers import clamp
+from datetime import datetime
+from typing import Tuple
 
-def chain_reactions(state_dict: dict, time_since_last_smoke) -> (dict, list):
+def update_work_stats(player, game_time) -> Tuple[float, str]:
+    """
+    Met à jour les statistiques de travail du joueur et calcule l'impact sur la performance
+    """
+    perf_impact = 0
+    message = ""
+
+    # Vérification des retards
+    if game_time.hour == 9 and game_time.minute > 0:
+        minutes_late = game_time.minute
+        player.total_minutes_late += minutes_late
+        perf_impact -= (minutes_late / 60) * 10  # -10% par heure de retard
+        if minutes_late > 15:
+            message = "Retard important ! Impact négatif sur la performance."
+
+    # Gestion des pauses
+    if player.last_break_start:
+        break_duration = (datetime.now() - player.last_break_start).total_seconds() / 60
+        if break_duration > 15:  # Pause standard de 15 minutes
+            excess_time = break_duration - 15
+            player.total_break_time += excess_time
+            perf_impact -= (excess_time / 60) * 5  # -5% par heure de pause excessive
+
+    # Impact du temps de travail perdu sur la performance
+    total_lost_time = player.total_minutes_late + player.total_break_time
+    work_day_minutes = (2.5 + 4.5) * 60  # 7h de travail par jour
+    lost_productivity = (total_lost_time / work_day_minutes) * 100
+
+    if lost_productivity > 20:
+        message = "Temps de travail perdu important. Votre performance est affectée."
+        perf_impact -= lost_productivity / 2
+
+    return perf_impact, message
+
+def chain_reactions(state_dict: dict, time_since_last_smoke) -> Tuple[dict, list]:
     """
     Applique les réactions en chaîne sur un dictionnaire d'état du joueur.
     C'est le cœur de la simulation, avec des effets non-linéaires et des interdépendances.
@@ -88,21 +124,45 @@ def chain_reactions(state_dict: dict, time_since_last_smoke) -> (dict, list):
     
     return state_dict, logs
 
-def update_job_performance(player):
-    # Lateness penalty
-    if player.lateness_minutes > 0:
-        # Lose 0.1 performance point per minute of lateness
-        performance_loss = player.lateness_minutes * 0.1
-        player.job_performance = clamp(player.job_performance - performance_loss, 0, 100)
-        player.lateness_minutes = 0 # Reset lateness after penalty
-
-    # Other factors
+def update_job_performance(player, game_time=None):
     performance_modifier = 0
-    # Willpower
-    performance_modifier += (player.willpower - 50) / 100 # -0.5 to +0.5
-    # Health
-    performance_modifier += (player.health - 50) / 150 # -0.33 to +0.33
-    # Stress
-    performance_modifier -= player.stress / 200 # -0.5 to 0
 
-    player.job_performance = clamp(player.job_performance + performance_modifier, 0, 100)
+    # Impact des stats de travail
+    if game_time:
+        work_impact, message = update_work_stats(player, game_time)
+        performance_modifier += work_impact
+
+    # Impact des stats du joueur
+    # Volonté (plus importante maintenant)
+    performance_modifier += (player.willpower - 50) / 75  # -0.67 à +0.67
+    
+    # Santé
+    performance_modifier += (player.health - 50) / 100  # -0.5 à +0.5
+    
+    # Stress (impact plus important)
+    stress_impact = player.stress / 100  # 0 à 1
+    performance_modifier -= stress_impact * 2  # jusqu'à -2
+    
+    # Fatigue
+    if hasattr(player, 'fatigue'):
+        fatigue_impact = player.fatigue / 100  # 0 à 1
+        performance_modifier -= fatigue_impact * 1.5  # jusqu'à -1.5
+
+    # Intoxication
+    if hasattr(player, 'intoxication_level'):
+        intox_impact = player.intoxication_level / 100  # 0 à 1
+        performance_modifier -= intox_impact * 3  # jusqu'à -3
+        
+        if player.intoxication_level > 50:
+            performance_modifier -= 5  # Pénalité supplémentaire pour forte intoxication
+
+    # Application des modifications avec un système de momentum
+    # La performance change plus lentement pour plus de réalisme
+    current_perf = player.job_performance
+    target_perf = clamp(current_perf + performance_modifier, 0, 100)
+    
+    # La performance change de maximum 5 points par mise à jour
+    max_change = 5
+    actual_change = clamp(target_perf - current_perf, -max_change, max_change)
+    
+    player.job_performance = clamp(current_perf + actual_change, 0, 100)

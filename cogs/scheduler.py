@@ -117,12 +117,10 @@ class Scheduler(commands.Cog):
                     if player.last_worked_at and player.last_worked_at.date() == datetime.datetime.utcnow().date():
                         if not player.has_completed_first_work_day:
                             player.has_completed_first_work_day = True
-                            # First day completion reward
                             player.joints += 1
                             player.has_unlocked_smokeshop = True
                             player.first_day_reward_given = True
                             
-                            # Add friend's message about the joint
                             friend_message = (
                                 "---\n"
                                 "**Alex** - 17:45\n"
@@ -133,7 +131,6 @@ class Scheduler(commands.Cog):
                             )
                             player.messages = friend_message + "\n" + (player.messages or "")
                             
-                            # Send notification
                             try:
                                 channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
                                 embed = discord.Embed(
@@ -144,12 +141,52 @@ class Scheduler(commands.Cog):
                                 await channel.send(embed=embed, delete_after=10)
                             except (discord.NotFound, discord.Forbidden, ValueError):
                                 pass
-                                
-                    update_job_performance(player)
+
+                        # Mise à jour des stats de travail de fin de journée
+                        update_job_performance(player, game_time)
+                        
+                        # Calcul du temps de travail effectif
+                        work_time = (2.5 + 4.5) * 60  # 7h de travail théorique
+                        lost_time = player.total_minutes_late + player.total_break_time
+                        effective_work_time = work_time - lost_time
+                        player.total_work_time += effective_work_time
+                        
+                        # Envoi d'un rapport de fin de journée
+                        try:
+                            channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
+                            embed = discord.Embed(
+                                title="📊 Rapport de fin de journée",
+                                description="Voici le bilan de votre journée de travail :",
+                                color=discord.Color.blue()
+                            )
+                            
+                            # Stats de la journée
+                            perf_emoji = "🟢" if player.job_performance >= 80 else "🟡" if player.job_performance >= 50 else "🔴"
+                            embed.add_field(
+                                name="Performance",
+                                value=f"{perf_emoji} {int(player.job_performance)}%",
+                                inline=True
+                            )
+                            
+                            embed.add_field(
+                                name="Temps perdu",
+                                value=f"⏰ Retards: {player.total_minutes_late}min\n☕ Pauses: {player.total_break_time}min",
+                                inline=True
+                            )
+                            
+                            embed.add_field(
+                                name="Temps de travail effectif",
+                                value=f"⚡ {int(effective_work_time)}min / {int(work_time)}min",
+                                inline=True
+                            )
+                            
+                            await channel.send(embed=embed, delete_after=30)
+                        except (discord.NotFound, discord.Forbidden, ValueError):
+                            pass
                     
                     try:
                         # Send notification about new message if possible
-                        channel = await self.bot.fetch_channel(int(state.game_channel_id))
+                        channel = await self.bot.fetch_channel(int(server_state.game_channel_id))
                         embed = discord.Embed(
                             title="📱 Nouveau message",
                             description="Votre téléphone vibre... Un message d'un ami !",

@@ -97,6 +97,13 @@ class PlayerProfile(Base):
     immune_system: float = Column(Float, default=100.0)
     is_sick: bool = Column(Boolean, default=False)
 
+    # === SECTION 6.1: STATISTIQUES DE TRAVAIL ===
+    total_minutes_late: int = Column(Integer, default=0)
+    total_break_time: int = Column(Integer, default=0)
+    total_work_time: int = Column(Integer, default=0)
+    work_days_streak: int = Column(Integer, default=0)
+    last_break_start: DateTime = Column(DateTime, nullable=True)
+
     # === SECTION 7: AUTRES & MÉTA-DONNÉES ===
     wallet: int = Column(Integer, default=20)
     show_stats_in_view: bool = Column(Boolean, default=False)
