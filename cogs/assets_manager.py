@@ -22,17 +22,15 @@ class AssetManager(commands.Cog):
     async def cog_load(self):
         """
         Cette méthode est appelée automatiquement quand le cog est chargé.
-        Initialise les assets immédiatement.
         """
-        if not self.initialized:
-            await self.initialize_assets()
+        # Initialization is now handled by the setup function to ensure the bot is ready.
+        pass
 
     async def initialize_assets(self):
         """Charge les images et met en cache leurs URLs une seule fois."""
         if self.initialized:
             return
 
-        logger.info("Initializing and caching assets...")
         logger.info("Initializing and caching assets...")
         if not ASSET_CHANNEL_ID:
             logger.error("ASSET_CHANNEL_ID is not set in .env! Asset loading cancelled.")
@@ -49,7 +47,10 @@ class AssetManager(commands.Cog):
             logger.error(f"Asset directory '{asset_directory}' not found.")
             return
 
-        existing_assets = {msg.attachments[0].filename: msg.attachments[0].url async for msg in asset_channel.history(limit=100) if msg.attachments}
+        existing_assets = {}
+        async for msg in asset_channel.history(limit=200):
+            if msg.attachments:
+                existing_assets[msg.attachments[0].filename] = msg.attachments[0].url
 
         for filename in os.listdir(asset_directory):
             if filename.endswith(".png"):

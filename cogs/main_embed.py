@@ -57,7 +57,7 @@ import datetime
 import traceback
 import asyncio
 from .phone import PhoneMainView, Phone
-from .brain_view import BrainStatsView
+from .brain_stats import BrainStatsView
 from utils.helpers import clamp
 from utils.logger import get_logger
 from utils.time_manager import get_current_game_time, is_night, is_work_time, is_lunch_break, to_localized, get_utc_now
@@ -574,7 +574,7 @@ class MainEmbed(commands.Cog):
 
         # Stats view
         if getattr(player, 'show_stats_in_view', False):
-            brain_view = BrainStatsView(player)
+            brain_view = BrainStatsView(player, self)
             fields = brain_view.get_stats_fields()
 
             embed.add_field(name="**🧬 Physique & Besoins**", value="", inline=True)
@@ -728,21 +728,13 @@ class MainEmbed(commands.Cog):
 
             view = None
             embed = None
-            if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"] or custom_id.startswith("brain_"):
+            if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"]:
                 if custom_id == "nav_toggle_stats":
                     player.show_stats_in_view = not player.show_stats_in_view
                     if player.show_stats_in_view:
-                        view = BrainStatsView(player)
+                        view = BrainStatsView(player, self)
                     else:
                         view = DashboardView(player)
-                elif custom_id.startswith("brain_"):
-                    brain_view = BrainStatsView(player)
-                    if custom_id == "brain_back":
-                        player.show_stats_in_view = False
-                        view = DashboardView(player)
-                    else:
-                        brain_view.current_section = custom_id.replace("brain_", "")
-                        view = brain_view
                 elif custom_id == "nav_toggle_inventory":
                     player.show_inventory_in_view = not player.show_inventory_in_view
                     view = DashboardView(player)

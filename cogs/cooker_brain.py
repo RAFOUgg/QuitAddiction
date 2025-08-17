@@ -457,63 +457,7 @@ class CookerBrain(commands.Cog):
         player.is_on_break = False
         return "👨‍🍳 Vous reprenez le travail.", {"working": True}, 0
 
-    @check_not_working
-    def perform_smoke_joint(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
-        if get_attr_bool(player, 'is_sleeping'):
-            return "😴 Impossible de fumer en dormant !", {"confused": True}, 0
-
-        joints = get_attr_int(player, 'joints')
-        if joints <= 0:
-            return "Vous n'avez pas de joint.", {"confused": True}, 0
-            
-        set_attr_int(player, 'joints', max(0, joints - 1))
-        intox = get_attr_float(player, 'intoxication_level')
-        stress = get_attr_float(player, 'stress')
-        mental = get_attr_float(player, 'mental_health')
-        willpower = get_attr_float(player, 'willpower')
-        
-        player.intoxication_level = min(100, intox + 25)
-        player.stress = max(0, stress - 20)
-        player.mental_health = max(0, mental - 10)
-        player.willpower = max(0, willpower - 5)
-        
-        return "🌿 Vous fumez un joint.", {"job_pause_joint" if player.is_working else "smoke_joint": True}, 10
-
-    @check_not_working
-    def perform_smoke_cigarette(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
-        if get_attr_bool(player, 'is_sleeping'):
-            return "😴 Impossible de fumer en dormant !", {"confused": True}, 0
-
-        cigarettes = get_attr_int(player, 'cigarettes')
-        if cigarettes <= 0:
-            return "Vous n'avez plus de cigarettes.", {"confused": True}, 0
-            
-        set_attr_int(player, 'cigarettes', max(0, cigarettes - 1))
-        stress = get_attr_float(player, 'stress')
-        craving = get_attr_float(player, 'craving_nicotine')
-        
-        player.stress = max(0, stress - 15)
-        player.craving_nicotine = max(0, craving - 50)
-        
-        return "🚬 Vous fumez une cigarette.", {"job_pause_cig" if player.is_working else "smoke_cigarette": True}, 5
-
-    @check_not_working
-    def use_ecigarette(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
-        if get_attr_bool(player, 'is_sleeping'):
-            return "😴 Impossible de vapoter en dormant !", {"confused": True}, 0
-
-        e_cigarettes = get_attr_int(player, 'e_cigarettes')
-        if e_cigarettes <= 0:
-            return "Vous n'avez plus de cigarette électronique.", {"confused": True}, 0
-            
-        set_attr_int(player, 'e_cigarettes', max(0, e_cigarettes - 1))
-        stress = get_attr_float(player, 'stress')
-        craving = get_attr_float(player, 'craving_nicotine')
-        
-        player.stress = max(0, stress - 10)
-        player.craving_nicotine = max(0, craving - 30)
-        
-        return "💨 Vous utilisez votre vapoteuse.", {"smoke_ecigarette": True}, 3
+    
 
     @check_not_working
     def perform_eat_food(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
@@ -575,34 +519,7 @@ class CookerBrain(commands.Cog):
 
         return "🌮 Vous mangez un tacos.", {"eat_tacos": True}, 5
 
-    @check_not_working
-    def perform_sleep(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int, str]:
-        if not is_night(game_time):
-            return "Vous ne pouvez dormir que la nuit (22h-6h).", {"confused": True}, 0, ""
-
-        if player.is_working:
-            return "Vous ne pouvez pas dormir au travail !", {"confused": True}, 0, ""
-            
-        if player.energy >= 95:
-            return "Vous n'êtes pas fatigué.", {"confused": True}, 0, ""
-        
-        # Dormir restaure l'énergie et autres stats
-        energy_gain = min(95 - player.energy, 80)
-        player.is_sleeping = True
-        player.energy = min(100, player.energy + energy_gain)
-        player.stress = max(0, player.stress - 30)
-        player.mental_health = min(100, player.mental_health + 20)
-        player.fatigue = max(0, player.fatigue - 40)
-        
-        hours_slept = energy_gain / 10
-        return f"😴 Vous dormez pendant {hours_slept:.1f}h.", {"sleep": True}, int(hours_slept * 60), "sleep"
-
-    def perform_wake_up(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
-        if not player.is_sleeping:
-            return "Vous ne dormez pas.", {"confused": True}, 0
-
-        player.is_sleeping = False
-        return "🌅 Vous vous réveillez.", {"neutral": True}, 0
+    
 
     def perform_shower(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
         if player.is_sleeping:
@@ -652,25 +569,7 @@ class CookerBrain(commands.Cog):
         
         return "💧 Vous buvez de l'eau.", {"drink_water": True}, 1
 
-    @check_not_working
-    def use_soda(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
-        if get_attr_bool(player, 'is_sleeping'):
-            return "😴 Impossible de boire en dormant !", {"confused": True}, 0
-
-        soda_cans = get_attr_int(player, 'soda_cans')
-        if soda_cans <= 0:
-            return "Vous n'avez plus de soda !", {"confused": True}, 0
-            
-        player.soda_cans = max(0, soda_cans - 1)
-        thirst = get_attr_float(player, 'thirst')
-        bladder = get_attr_float(player, 'bladder')
-        energy = get_attr_float(player, 'energy')
-        
-        player.thirst = max(0, thirst - 30)
-        player.bladder = min(100, bladder + 25)
-        player.energy = min(100, energy + 10)
-        
-        return "🥤 Vous buvez un soda.", {"drink_soda": True}, 1
+    
 
     @check_not_working
     def perform_drink_wine(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
