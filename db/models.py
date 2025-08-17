@@ -68,8 +68,9 @@ class PlayerProfile(Base):
     # === SECTION 3: ÉTAT MENTAL & ÉMOTIONNEL ===
     sanity: float = Column(Float, default=100.0)
     stress: float = Column(Float, default=0.0)
-    happiness: float = Column(Float, default=50.0)
+    mood: float = Column(Float, default=50.0, nullable=False)
     boredom: float = Column(Float, default=0.0)
+    relaxation: float = Column(Float, default=50.0, nullable=False)
     
     # === SECTION 4: SYMPTÔMES SPÉCIFIQUES ===
     nausea: float = Column(Float, default=0.0)
@@ -80,6 +81,10 @@ class PlayerProfile(Base):
     stomachache: float = Column(Float, default=0.0)
     
     # === SECTION 5: ADDICTION & CONSOMMATION ===
+    nicotine_addiction: float = Column(Float, default=0.0, nullable=False)
+    alcohol_addiction: float = Column(Float, default=0.0, nullable=False)
+    cannabis_addiction: float = Column(Float, default=0.0, nullable=False)
+    caffeine_addiction: float = Column(Float, default=0.0, nullable=False)
     substance_addiction_level: float = Column(Float, default=0.0)
     substance_tolerance: float = Column(Float, default=0.0)
     withdrawal_severity: float = Column(Float, default=0.0)
