@@ -477,7 +477,7 @@ class MainEmbed(commands.Cog):
         # États mentaux critiques
         if player.emotional_stability < 30 or (player.happiness < 10 and player.stress > 80):
             return asset_cog.get_url("sob") or asset_cog.get_url("neutral")
-        if player.mental_clarity < 40 or (player.confusion > 70 and player.dizziness > 60):
+        if (player.mental_clarity < 40 and player.cognitive_load > 70) or (player.confusion > 60 and player.disorientation > 50):
             return asset_cog.get_url("confused") or asset_cog.get_url("neutral")
             
         # États physiques critiques

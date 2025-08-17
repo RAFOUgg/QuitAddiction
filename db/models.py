@@ -97,32 +97,24 @@ class PlayerProfile(Base):
     frustration: float = Column(Float, default=0.0)          # Frustration
     irritability: float = Column(Float, default=0.0)         # Irritabilité
 
-    # État Mental et Cognitif
+    # === SECTION 3.1: ÉTAT MENTAL ET COGNITIF ===
     mental_clarity: float = Column(Float, default=100.0)    # Clarté mentale
     concentration: float = Column(Float, default=100.0)     # Capacité de concentration
     memory_function: float = Column(Float, default=100.0)   # Fonction mémorielle
     decision_making: float = Column(Float, default=100.0)   # Prise de décision
     creativity: float = Column(Float, default=50.0)         # Créativité
     cognitive_load: float = Column(Float, default=0.0)      # Charge cognitive
+    confusion: float = Column(Float, default=0.0)          # Niveau de confusion mentale
+    disorientation: float = Column(Float, default=0.0)     # Niveau de désorientation
 
-    # États Sociaux
+    # === SECTION 3.2: ÉTATS SOCIAUX ET ENVIRONNEMENTAUX ===
     social_anxiety: float = Column(Float, default=20.0)     # Anxiété sociale
     social_energy: float = Column(Float, default=100.0)     # Énergie sociale
     environmental_stress: float = Column(Float, default=0.0) # Stress environnemental
     sensory_overload: float = Column(Float, default=0.0)    # Surcharge sensorielle
     loneliness: float = Column(Float, default=0.0)          # Sentiment de solitude
-    mental_clarity: float = Column(Float, default=100.0)     # Clarté mentale
-    concentration: float = Column(Float, default=100.0)      # Concentration
-    memory_function: float = Column(Float, default=100.0)    # Fonction mémorielle
-    decision_making: float = Column(Float, default=100.0)    # Prise de décision
-    creativity: float = Column(Float, default=50.0)          # Créativité
-    cognitive_load: float = Column(Float, default=0.0)       # Charge cognitive
-    
-    # Social & Environmental Response
-    social_anxiety: float = Column(Float, default=0.0)
-    social_energy: float = Column(Float, default=100.0)
-    environmental_stress: float = Column(Float, default=0.0)
-    sensory_overload: float = Column(Float, default=0.0)
+    social_comfort: float = Column(Float, default=50.0)     # Confort en situation sociale
+    social_awareness: float = Column(Float, default=70.0)   # Conscience sociale
     
     # === SECTION 4: PHYSICAL SYMPTOMS ===
     # General Discomfort

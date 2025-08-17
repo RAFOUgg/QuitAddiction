@@ -725,20 +725,24 @@ class AdminCog(commands.Cog):
                                 frustration=20.0,
                                 irritability=15.0,
 
-                                # Cognitive States
+                                # === SECTION 3.1: ÉTAT MENTAL ET COGNITIF ===
                                 mental_clarity=100.0,
                                 concentration=100.0,
                                 memory_function=100.0,
                                 decision_making=100.0,
                                 creativity=50.0,
                                 cognitive_load=0.0,
+                                confusion=0.0,
+                                disorientation=0.0,
 
-                                # Social States
+                                # === SECTION 3.2: ÉTATS SOCIAUX ET ENVIRONNEMENTAUX ===
                                 social_anxiety=20.0,
                                 social_energy=100.0,
                                 environmental_stress=0.0,
                                 sensory_overload=0.0,
                                 loneliness=0.0,
+                                social_comfort=50.0,
+                                social_awareness=70.0,
 
                                 # === SECTION 4: SYMPTOMS ===
                                 nausea=0.0,
