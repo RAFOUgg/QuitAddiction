@@ -41,13 +41,25 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
     """
     now_utc = get_utc_now()
 
-    # Pour le mode temps réel
-    if state.duration_key == 'real_time' or not state.game_minutes_per_day:
-        return now_utc.astimezone(TARGET_TIMEZONE)
-
-    # Pour le mode test (accéléré)
+    # Vérifier si le jeu a démarré
     if not state.game_start_time:
         return now_utc.astimezone(TARGET_TIMEZONE)
+
+    # Pour le mode temps réel
+    if state.duration_key == 'real_time' or not state.game_minutes_per_day:
+        # Calculer le temps écoulé depuis le début du jeu
+        game_start = state.game_start_time
+        if game_start.tzinfo is None:
+            game_start = pytz.utc.localize(game_start)
+        
+        # Si on est en temps réel, on garde le même temps que la réalité
+        # mais on commence à l'heure de début configurée
+        start_hour = state.game_day_start_hour or 9
+        base_time = game_start.astimezone(TARGET_TIMEZONE).replace(
+            hour=start_hour, minute=0, second=0, microsecond=0
+        )
+        elapsed = now_utc - game_start
+        return (base_time + elapsed).astimezone(TARGET_TIMEZONE)
 
     # Assurer que game_start_time a un timezone
     game_start_time = state.game_start_time

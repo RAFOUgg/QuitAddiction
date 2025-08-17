@@ -676,12 +676,22 @@ class AdminCog(commands.Cog):
                         player = db.query(PlayerProfile).filter_by(guild_id=self.guild_id).first()
                         utc_now = get_utc_now()
                         
+                        # Initialize game time and state
+                        start_hour = state.game_day_start_hour or 9
+                        state.game_start_time = utc_now
+                        logger.info(f"Initializing game state at {start_hour}:00 localized time.")
+                        db.commit()
+
                         # Initialize new player if needed
                         if not player:
                             logger.info(f"Creating new player profile for guild {self.guild_id}")
                             player = PlayerProfile(
                                 guild_id=self.guild_id,
                                 last_update=utc_now,
+                                is_at_home=True,  # Le joueur commence chez lui
+                                is_working=False,
+                                is_sleeping=False,
+                                is_on_break=False,
 
                                 # === SECTION 1: PHYSICAL HEALTH CORE ===
                                 health=100.0,

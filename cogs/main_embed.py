@@ -87,6 +87,25 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
 class DashboardView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=None)
+        
+        # Vérifier si le joueur est initialisé correctement
+        if not hasattr(player, 'is_at_home'):
+            player.is_at_home = True
+        if not hasattr(player, 'is_working'):
+            player.is_working = False
+        if not hasattr(player, 'is_sleeping'):
+            player.is_sleeping = False
+            
+        # Actions de base toujours disponibles
+        self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_main_menu", row=0))
+        self.add_item(ui.Button(label="📊 Stats", style=discord.ButtonStyle.secondary, custom_id="nav_toggle_stats", row=0))
+        self.add_item(ui.Button(label="🎒 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_toggle_inventory", row=0))
+        
+        # Actions contextuelles selon la position du joueur
+        if player.is_at_home and not player.is_sleeping:
+            self.add_item(ui.Button(label="⚡ Actions", style=discord.ButtonStyle.success, custom_id="nav_actions", row=0))
+        elif player.is_working:
+            self.add_item(ui.Button(label="💼 Travail", style=discord.ButtonStyle.primary, custom_id="nav_work", row=0))
         now = datetime.datetime.utcnow()
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         # Le téléphone est désactivé au travail, sauf pendant une pause.
