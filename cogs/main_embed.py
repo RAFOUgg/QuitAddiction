@@ -303,13 +303,22 @@ class MainEmbed(commands.Cog):
                 player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
                 self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
             auto_performed = True
-        # Sleep if fatigue > 80 and not working
-        elif player.fatigue > 80 and not player.is_working and is_night(game_time):
-            message, _, duration, *_ = cooker_brain.perform_sleep(player, game_time)
-            if duration > 0:
-                player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
-                self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
-            auto_performed = True
+        # Gestion automatique du sommeil avec plusieurs critères
+        elif not player.is_working:
+            should_sleep = (
+                # Conditions de sommeil automatique
+                (is_night(game_time) and player.fatigue > 60) or  # Fatigué pendant la nuit
+                (is_night(game_time) and player.stress > 70) or   # Stressé pendant la nuit
+                player.fatigue > 90 or                            # Extrêmement fatigué
+                (player.sanity < 30 and is_night(game_time)) or   # Santé mentale basse la nuit
+                (game_time.hour >= 2 and game_time.hour < 6)      # Entre 2h et 6h du matin
+            )
+            if should_sleep and not player.is_sleeping:
+                message, _, duration, *_ = cooker_brain.perform_sleep(player, game_time)
+                if duration > 0:
+                    player.action_cooldown_end_time = now + datetime.timedelta(seconds=duration)
+                    self.bot.loop.create_task(self.force_refresh_on_cooldown_end(interaction, duration))
+                auto_performed = True
         # Go to work if work time and not working
         elif is_work_time(game_time) and not player.is_working:
             message, _, duration, *_ = cooker_brain.perform_go_to_work(player, game_time)
@@ -479,10 +488,7 @@ class MainEmbed(commands.Cog):
         if player.hygiene < 20:
             return asset_cog.get_url("shower") or asset_cog.get_url("neutral")
 
-        # Vérifier si c'est l'heure de travail avant de retourner l'image par défaut
-        game_time = get_current_game_time(self.bot.get_cog("MainEmbed").state)
-        if is_work_time(game_time) and player.is_working:
-            return asset_cog.get_url("working")
+        # Par défaut
         return asset_cog.get_url("neutral")
 
     @staticmethod
@@ -514,8 +520,15 @@ class MainEmbed(commands.Cog):
 
         embed = discord.Embed(title="👨‍🍳 Le Quotidien du Cuisinier", color=0x3498db)
 
-        # Image selection
-        if image_url := self.get_image_url(player):
+        # Image selection based on current state and time
+        game_time = get_current_game_time(state)
+        image_url = self.get_image_url(player)
+        if is_work_time(game_time) and player.is_working:
+            asset_cog = self.bot.get_cog("AssetsManager")
+            if asset_cog:
+                image_url = asset_cog.get_url("working") or image_url
+                
+        if image_url:
             embed.set_image(url=image_url)
 
         embed.description = f"""**Pensées du Cuisinier :**
@@ -567,13 +580,47 @@ class MainEmbed(commands.Cog):
             embed.add_field(name="**🧠 Mental & Émotions**", value="", inline=True)
             embed.add_field(name="**🚬 Addiction & Symptômes**", value="", inline=True)
 
+            # Organisation plus détaillée des stats
             stats_layout = [
-                [('Santé', getattr(player, 'health', 0), False), ('Humeur', getattr(player, 'happiness', 0), False), ('Dépendance', getattr(player, 'substance_addiction_level', 0), True)],
-                [('Énergie', getattr(player, 'energy', 0), False), ('Stress', getattr(player, 'stress', 0), True), ('Sevrage', getattr(player, 'withdrawal_severity', 0), True)],
-                [('Hygiène', getattr(player, 'hygiene', 0), False), ('Volonté', getattr(player, 'willpower', 0), False), ('Envie', max(getattr(player, 'craving_nicotine', 0), getattr(player, 'craving_alcohol', 0), getattr(player, 'craving_cannabis', 0)), True)],
-                [('Fatigue', getattr(player, 'fatigue', 0), True), ('S. Mentale', getattr(player, 'sanity', 0), False), ('Toxine', getattr(player, 'tox', 0), True)],
-                [('Faim', getattr(player, 'hunger', 0), True), ('Culpabilité', getattr(player, 'guilt', 0), True), ('Douleur', getattr(player, 'pain', 0), True)],
-                [('Soif', getattr(player, 'thirst', 0), True), ('Ennui', getattr(player, 'boredom', 0), True), ('Nausée', getattr(player, 'nausea', 0), True)],
+                # Colonne 1: Stats Vitales & Physiques
+                [('❤️ Santé', getattr(player, 'health', 0), False), 
+                 ('🔋 Énergie', getattr(player, 'energy', 0), False), 
+                 ('🛡️ Immunité', getattr(player, 'immune_system', 0), False)],
+                
+                # Colonne 2: Besoins Physiologiques
+                [('🍽️ Faim', getattr(player, 'hunger', 0), True), 
+                 ('💧 Soif', getattr(player, 'thirst', 0), True),
+                 ('🚽 Vessie', getattr(player, 'bladder', 0), True)],
+                
+                # Colonne 3: État Mental
+                [('🧠 Mental', getattr(player, 'sanity', 0), False),
+                 ('😊 Humeur', getattr(player, 'happiness', 0), False),
+                 ('😫 Stress', getattr(player, 'stress', 0), True)],
+                
+                # Colonne 4: Addiction & Cravings
+                [('🚬 Nicotine', getattr(player, 'craving_nicotine', 0), True),
+                 ('🍷 Alcool', getattr(player, 'craving_alcohol', 0), True),
+                 ('🌿 Cannabis', getattr(player, 'craving_cannabis', 0), True)],
+                
+                # Colonne 5: Effets Physiques
+                [('😴 Fatigue', getattr(player, 'fatigue', 0), True),
+                 ('🤢 Nausée', getattr(player, 'nausea', 0), True),
+                 ('🤕 Douleur', getattr(player, 'pain', 0), True)],
+                
+                # Colonne 6: Stats Long Terme
+                [('💪 Volonté', getattr(player, 'willpower', 0), False),
+                 ('🧼 Hygiène', getattr(player, 'hygiene', 0), False),
+                 ('📈 Perf.', getattr(player, 'job_performance', 0), False)],
+                
+                # Colonne 7: Dépendance & Sevrage
+                [('🔗 Dépend.', getattr(player, 'substance_addiction_level', 0), True),
+                 ('😖 Sevrage', getattr(player, 'withdrawal_severity', 0), True),
+                 ('☠️ Toxines', getattr(player, 'tox', 0), True)],
+                
+                # Colonne 8: États Spéciaux
+                [('😶 Vertige', getattr(player, 'dizziness', 0), True),
+                 ('🤒 Fièvre', getattr(player, 'headache', 0), True),
+                 ('😴 Insomnie', getattr(player, 'insomnia', 0), True)]
             ]
 
             for row in stats_layout:

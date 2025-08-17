@@ -121,6 +121,13 @@ class PlayerProfile(Base):
     lateness_minutes: int = Column(Integer, default=0, nullable=False)
     has_completed_first_work_day: bool = Column(Boolean, default=False, nullable=False)
     
+    # === SECTION 8.1: GESTION DU SOMMEIL ===
+    sleep_quality: float = Column(Float, default=100.0)  # Qualité du sommeil (affecte la récupération)
+    sleep_minutes_today: int = Column(Integer, default=0)  # Minutes de sommeil aujourd'hui
+    sleep_quota_needed: int = Column(Integer, default=480)  # Minutes de sommeil nécessaires (8h par défaut)
+    last_sleep_check: Optional[datetime.datetime] = Column(DateTime, nullable=True)  # Pour le calcul du quota
+    insomnia: float = Column(Float, default=0.0)  # Difficulté à dormir (augmente avec stress/santé mentale basse)
+    
     # --- INVENTAIRE BASE ---
     food_servings = Column(Integer, default=1)
     water_bottles = Column(Integer, default=5)

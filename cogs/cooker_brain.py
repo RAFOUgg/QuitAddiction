@@ -43,8 +43,8 @@ def check_not_working(func):
     def wrapper(self, player: PlayerProfile, *args, **kwargs):
         if player.is_working:
             return "Vous ne pouvez pas faire ça en travaillant !", {"confused": True}, 0
-        if player.is_sleeping:
-            return "Vous ne pouvez pas faire ça en dormant !", {"sleep": True}, 0
+        if player.is_sleeping and not func.__name__ == "perform_wake_up":
+            return "💤 Vous dormez profondément...", {"sleep": True}, 0
         return func(self, player, *args, **kwargs)
     return wrapper
 
@@ -55,36 +55,75 @@ class CookerBrain(commands.Cog):
     @check_not_working
     def perform_sleep(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
         """Go to sleep to recover energy"""
-        if not is_night(game_time):
-            return "😴 Il est encore trop tôt pour dormir ! (22h-6h)", {"confused": True}, 0
+        if player.is_sleeping:
+            return "� Vous dormez déjà...", {"sleep": True}, 0
             
-        if player.energy > 80:
-            return "😴 Vous n'êtes pas fatigué !", {"confused": True}, 0
+        # Vérification de l'heure et conditions physiques/mentales
+        is_sleepy = (
+            player.energy < 40 or
+            player.fatigue > 70 or
+            (player.stress > 80 and is_night(game_time)) or
+            player.sanity < 30 or
+            (game_time.hour >= 22 or game_time.hour < 6)  # Période normale de sommeil
+        )
             
+        if not is_sleepy and not is_night(game_time):
+            return "😴 Vous n'êtes pas encore fatigué.", {"confused": True}, 0
+            
+        # Effets du sommeil
         player.is_sleeping = True
-        player.energy = min(100, player.energy + 40)  # Initial energy boost
         
-        # Reset some negative effects
+        # Récupération d'énergie initiale
+        energy_recovery = 40
+        if player.fatigue > 80:
+            energy_recovery += 20  # Bonus si très fatigué
+            
+        player.energy = min(100, player.energy + energy_recovery)
+        
+        # Reset des effets négatifs
         player.fatigue = max(0, player.fatigue - 50)
         player.stress = max(0, player.stress - 20)
         player.headache = max(0, player.headache - 30)
+        player.sanity = min(100, player.sanity + 10)  # Le sommeil aide la santé mentale
         
-        return "😴 Vous vous endormez paisiblement.", {"sleep": True}, 30
+        # Messages différents selon la situation
+        if player.fatigue > 90:
+            return "😴 Épuisé, vous tombez dans un sommeil profond.", {"sleep": True}, 30
+        elif player.stress > 80:
+            return "😴 Le stress vous a épuisé, vous vous endormez rapidement.", {"sleep": True}, 30
+        elif game_time.hour >= 22:
+            return "😴 Il se fait tard, vous décidez d'aller dormir.", {"sleep": True}, 30
+        else:
+            return "😴 Vous vous endormez paisiblement.", {"sleep": True}, 30
 
-    @check_not_working
-    def perform_wake_up(self, player: PlayerProfile) -> Tuple[str, Dict, int]:
+    def perform_wake_up(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
         """Wake up from sleep"""
         if not player.is_sleeping:
             return "🌅 Vous êtes déjà réveillé !", {"confused": True}, 0
             
+        # Vérifier s'il est trop tôt pour se réveiller
+        if game_time.hour < 6:
+            return "💤 Il est trop tôt pour se lever...", {"sleep": True}, 0
+            
+        if player.energy < 50 and not is_work_time(game_time):
+            return "😴 Vous êtes encore trop fatigué...", {"sleep": True}, 0
+        
         player.is_sleeping = False
         player.energy = min(100, player.energy + 20)  # Final energy boost
+        player.stress = max(0, player.stress - 15)    # Réduction du stress
         
         # Morning effects
         player.bladder = min(100, player.bladder + 30)  # Morning bathroom need
+        player.hunger = min(100, player.hunger + 20)    # Morning hunger
+        player.thirst = min(100, player.thirst + 20)    # Morning thirst
         
-        return "🌅 Vous vous réveillez en pleine forme.", {"neutral": True}, 5
-        self.bot = bot
+        # Messages différents selon l'heure
+        if game_time.hour < 8:
+            return "🌅 Vous vous réveillez tôt, prêt pour une nouvelle journée.", {"wake_up": True}, 5
+        elif is_work_time(game_time):
+            return "⏰ Vous vous réveillez pour aller travailler.", {"wake_up": True}, 5
+        else:
+            return "🌅 Vous vous réveillez en pleine forme.", {"wake_up": True}, 5
 
     def perform_sport(self, player: PlayerProfile, game_time: datetime.datetime) -> Tuple[str, Dict, int]:
         """
