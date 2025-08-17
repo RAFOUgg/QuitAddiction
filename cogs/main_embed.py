@@ -181,3 +181,8 @@ class MainEmbed(commands.Cog):
             return asset_cog.get_url(player.current_state) or asset_cog.get_url("neutral")
 
         return asset_cog.get_url("neutral")
+
+async def setup(bot):
+    await bot.add_cog(MainEmbed(bot))
+
+

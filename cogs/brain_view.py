@@ -64,4 +64,4 @@ class BrainViewCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(BrainViewCog(bot))
-        return sections.get(self.current_section, sections["general"])
+    return sections.get(self.current_section, sections["general"])
