@@ -1,5 +1,3 @@
-import discord
-from discord.ext import commands
 from discord import ui, ButtonStyle
 from db.models import PlayerProfile
 from utils.helpers import clamp
@@ -34,7 +32,7 @@ class BrainStatsView(ui.View):
                 {"name": "💪 Santé", "value": f"{generate_progress_bar(p.health)} {p.health}/100"},
                 {"name": "🏃‍♂️ Énergie", "value": f"{generate_progress_bar(p.energy)} {p.energy}/100"},
                 {"name": "😴 Fatigue", "value": f"{generate_progress_bar(p.fatigue, high_is_bad=True)} {p.fatigue}/100"},
-                {"name": "💰 Argent", "value": f"{p.wallet}€"},
+                {"name": "💰 Argent", "value": f"{p.money}€"},
                 {"name": "💪 Force Mentale", "value": f"{generate_progress_bar(p.willpower)} {p.willpower}/100"}
             ],
             "needs": [
@@ -57,10 +55,3 @@ class BrainStatsView(ui.View):
             ]
         }
         return sections.get(self.current_section, sections["general"])
-
-class BrainViewCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-
-async def setup(bot):
-    await bot.add_cog(BrainViewCog(bot))
