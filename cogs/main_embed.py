@@ -97,15 +97,15 @@ class DashboardView(ui.View):
             player.is_sleeping = False
             
         # Actions de base toujours disponibles
-        self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_main_menu", row=0))
-        self.add_item(ui.Button(label="📊 Stats", style=discord.ButtonStyle.secondary, custom_id="nav_toggle_stats", row=0))
-        self.add_item(ui.Button(label="🎒 Inventaire", style=discord.ButtonStyle.secondary, custom_id="nav_toggle_inventory", row=0))
+        self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_menu", row=0))
+        self.add_item(ui.Button(label="📊 Stats", style=discord.ButtonStyle.secondary, custom_id="toggle_stats", row=0))
+        self.add_item(ui.Button(label="🎒 Inventaire", style=discord.ButtonStyle.secondary, custom_id="toggle_inv", row=0))
         
         # Actions contextuelles selon la position du joueur
         if player.is_at_home and not player.is_sleeping:
-            self.add_item(ui.Button(label="⚡ Actions", style=discord.ButtonStyle.success, custom_id="nav_actions", row=0))
+            self.add_item(ui.Button(label="⚡ Actions", style=discord.ButtonStyle.success, custom_id="show_actions", row=0))
         elif player.is_working:
-            self.add_item(ui.Button(label="💼 Travail", style=discord.ButtonStyle.primary, custom_id="nav_work", row=0))
+            self.add_item(ui.Button(label="💼 Travail", style=discord.ButtonStyle.primary, custom_id="show_work", row=0))
         now = datetime.datetime.utcnow()
         is_on_cooldown = player.action_cooldown_end_time and now < player.action_cooldown_end_time
         # Le téléphone est désactivé au travail, sauf pendant une pause.
@@ -753,27 +753,27 @@ class MainEmbed(commands.Cog):
             if not interaction.response.is_done(): await interaction.response.defer()
 
             # --- Willpower automation: before showing dashboard/actions, auto-perform if needed ---
-            if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu", "nav_actions"]:
+            if custom_id in ["toggle_stats", "toggle_inv", "main_menu", "show_actions"]:
                 await self.willpower_auto_actions(player, state, cooker_brain, db, interaction)
 
             view = None
             embed = None
-            if custom_id in ["nav_toggle_stats", "nav_toggle_inventory", "nav_main_menu"]:
-                if custom_id == "nav_toggle_stats":
+            if custom_id in ["toggle_stats", "toggle_inv", "main_menu"]:
+                if custom_id == "toggle_stats":
                     player.show_stats_in_view = not player.show_stats_in_view
                     if player.show_stats_in_view:
                         view = BrainStatsView(player, self)
                     else:
                         view = DashboardView(player)
-                elif custom_id == "nav_toggle_inventory":
+                elif custom_id == "toggle_inv":
                     player.show_inventory_in_view = not player.show_inventory_in_view
                     view = DashboardView(player)
-                elif custom_id == "nav_main_menu":
+                elif custom_id == "main_menu":
                     view = DashboardView(player)
-            elif custom_id == "nav_actions":
+            elif custom_id == "show_actions":
                 view = ActionsView(player, state)
                 embed = self.generate_dashboard_embed(player, state, interaction.guild)
-            elif custom_id == "nav_work":
+            elif custom_id == "show_work":
                 view = WorkView(player, state)
                 embed = self.generate_work_embed(player, state)
             elif custom_id in ["action_eat_menu", "action_drink_menu", "action_smoke_menu"]:
