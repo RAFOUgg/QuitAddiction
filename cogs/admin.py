@@ -682,32 +682,108 @@ class AdminCog(commands.Cog):
                             player = PlayerProfile(
                                 guild_id=self.guild_id,
                                 last_update=utc_now,
-                                # État Initial Positif
-                                willpower=85.0,           # Forte volonté initiale
-                                health=100.0,            # Pleine santé
-                                energy=100.0,            # Pleine énergie
+
+                                # === SECTION 1: PHYSICAL HEALTH CORE ===
+                                health=100.0,
+                                energy=100.0,
+                                stamina=100.0,
+                                pain=0.0,
+                                immune_system=100.0,
+                                toxicity=0.0,
+                                body_temperature=37.0,
+                                blood_pressure=120.0,
+                                heart_rate=70.0,
+
+                                # === SECTION 2: IMMEDIATE NEEDS ===
+                                hunger=0.0,
+                                thirst=0.0,
+                                bladder=0.0,
+                                fatigue=0.0,
+                                bowels=0.0,
+                                comfort=100.0,
+                                temperature_comfort=100.0,
+                                sleep_quality=100.0,
+
+                                # === SECTION 3: MENTAL & EMOTIONAL STATE ===
+                                # Core Mood Components
+                                emotional_stability=70.0,
+                                contentment=65.0,
+                                mood_volatility=30.0,
+                                emotional_resilience=75.0,
                                 
-                                # État Émotionnel Initial (début optimiste)
-                                emotional_stability=70.0,  # Assez stable
-                                contentment=65.0,         # Plutôt content
-                                mood_volatility=30.0,     # Peu volatile
-                                emotional_resilience=75.0, # Bonne résilience
+                                # Emotional States
+                                happiness=70.0,
+                                joy=65.0,
+                                satisfaction=60.0,
+                                enthusiasm=75.0,
+                                serenity=55.0,
+                                anxiety=20.0,
+                                depression=10.0,
+                                stress=25.0,
+                                anger=5.0,
+                                fear=15.0,
+                                frustration=20.0,
+                                irritability=15.0,
+
+                                # Cognitive States
+                                mental_clarity=100.0,
+                                concentration=100.0,
+                                memory_function=100.0,
+                                decision_making=100.0,
+                                creativity=50.0,
+                                cognitive_load=0.0,
+
+                                # Social States
+                                social_anxiety=20.0,
+                                social_energy=100.0,
+                                environmental_stress=0.0,
+                                sensory_overload=0.0,
+                                loneliness=0.0,
+
+                                # === SECTION 4: SYMPTOMS ===
+                                nausea=0.0,
+                                dizziness=0.0,
+                                headache=0.0,
+                                muscle_tension=0.0,
+                                joint_pain=0.0,
+                                back_pain=0.0,
+                                dry_mouth=0.0,
+                                sore_throat=0.0,
+                                chest_tightness=0.0,
+                                breathing_difficulty=0.0,
+                                tremors=0.0,
+                                cold_sweats=0.0,
+                                stomachache=0.0,
+                                nausea_intensity=0.0,
+                                appetite=100.0,
+                                digestion=100.0,
+
+                                # === SECTION 5: ADDICTION ===
+                                nicotine_addiction=0.0,
+                                alcohol_addiction=0.0,
+                                cannabis_addiction=0.0,
+                                caffeine_addiction=0.0,
+                                substance_tolerance=0.0,
+                                withdrawal_severity=0.0,
+                                physical_dependence=0.0,
+                                psychological_dependence=0.0,
+                                recovery_progress=0.0,
+                                relapse_risk=0.0,
+                                trigger_sensitivity=50.0,
+                                stress_trigger_level=0.0,
+                                social_trigger_level=0.0,
+                                craving_nicotine=0.0,
+                                craving_alcohol=0.0,
+                                craving_cannabis=0.0,
+                                guilt=0.0,
+                                shame=0.0,
+                                hopelessness=0.0,
+                                determination=100.0,
                                 
-                                # États Positifs
-                                happiness=70.0,           # Plutôt heureux
-                                joy=65.0,                 # Joyeux
-                                satisfaction=60.0,        # Satisfait
-                                enthusiasm=75.0,          # Enthousiaste pour le changement
-                                serenity=55.0,           # Modérément serein
-                                
-                                # États Négatifs (bas au début)
-                                anxiety=20.0,             # Un peu anxieux
-                                depression=10.0,          # Peu déprimé
-                                stress=25.0,              # Stress modéré
-                                anger=5.0,                # Peu en colère
-                                fear=15.0,                # Légère appréhension
-                                frustration=20.0,         # Légère frustration
-                                irritability=15.0         # Peu irritable
+                                # Game-specific stats
+                                willpower=85.0,
+                                hygiene=100.0,
+                                job_performance=100.0
                             )
                             db.add(player)
 

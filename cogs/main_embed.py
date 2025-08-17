@@ -468,23 +468,34 @@ class MainEmbed(commands.Cog):
             return asset_cog.get_url("leaving_for_work") or asset_cog.get_url("working")
 
         # États critiques physiologiques/mentaux
+        # États physiologiques critiques
         if player.bladder >= 99:
             return asset_cog.get_url("peed") or asset_cog.get_url("neutral")
-        if player.happiness < 10 and player.stress > 80:
-            return asset_cog.get_url("sob") or asset_cog.get_url("neutral")
         if player.bowels > 85 or player.bladder > 85:
             return asset_cog.get_url("need_pee") or asset_cog.get_url("pooping") or asset_cog.get_url("neutral")
-        if player.hunger > 85 or player.stomachache > 70:
-            return asset_cog.get_url("hand_stomach") or asset_cog.get_url("hungry") or asset_cog.get_url("neutral")
-        if player.fatigue > 90:
-            return asset_cog.get_url("sleep") or asset_cog.get_url("neutral")
-        if player.withdrawal_severity > 60:
-            return asset_cog.get_url("neutral_hold_e_cig") or asset_cog.get_url("smoke_ecigarette") or asset_cog.get_url("neutral")
-        if player.headache > 70:
-            return asset_cog.get_url("scratch_eye") or asset_cog.get_url("neutral")
-        if player.sanity < 40:
+            
+        # États mentaux critiques
+        if player.emotional_stability < 30 or (player.happiness < 10 and player.stress > 80):
+            return asset_cog.get_url("sob") or asset_cog.get_url("neutral")
+        if player.mental_clarity < 40 or (player.confusion > 70 and player.dizziness > 60):
             return asset_cog.get_url("confused") or asset_cog.get_url("neutral")
-        if player.stress > 70 or player.health < 40:
+            
+        # États physiques critiques
+        if (player.hunger > 85 and player.energy < 30) or player.stomachache > 70:
+            return asset_cog.get_url("hand_stomach") or asset_cog.get_url("hungry") or asset_cog.get_url("neutral")
+        if player.fatigue > 90 or player.energy < 20:
+            return asset_cog.get_url("sleep") or asset_cog.get_url("neutral")
+            
+        # États liés à l'addiction
+        if player.withdrawal_severity > 60 or player.craving_nicotine > 80:
+            return asset_cog.get_url("neutral_hold_e_cig") or asset_cog.get_url("smoke_ecigarette") or asset_cog.get_url("neutral")
+            
+        # Symptômes physiques
+        if player.headache > 70 or (player.cognitive_load > 80 and player.stress > 60):
+            return asset_cog.get_url("scratch_eye") or asset_cog.get_url("neutral")
+            
+        # États généraux
+        if (player.stress > 70 and player.emotional_resilience < 30) or player.health < 40:
             return asset_cog.get_url("sad") or asset_cog.get_url("neutral")
         if player.hygiene < 20:
             return asset_cog.get_url("shower") or asset_cog.get_url("neutral")
