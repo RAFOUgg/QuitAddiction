@@ -98,6 +98,19 @@ class PlayerProfile(Base):
     irritability: float = Column(Float, default=0.0)         # Irritabilité
 
     # État Mental et Cognitif
+    mental_clarity: float = Column(Float, default=100.0)    # Clarté mentale
+    concentration: float = Column(Float, default=100.0)     # Capacité de concentration
+    memory_function: float = Column(Float, default=100.0)   # Fonction mémorielle
+    decision_making: float = Column(Float, default=100.0)   # Prise de décision
+    creativity: float = Column(Float, default=50.0)         # Créativité
+    cognitive_load: float = Column(Float, default=0.0)      # Charge cognitive
+
+    # États Sociaux
+    social_anxiety: float = Column(Float, default=20.0)     # Anxiété sociale
+    social_energy: float = Column(Float, default=100.0)     # Énergie sociale
+    environmental_stress: float = Column(Float, default=0.0) # Stress environnemental
+    sensory_overload: float = Column(Float, default=0.0)    # Surcharge sensorielle
+    loneliness: float = Column(Float, default=0.0)          # Sentiment de solitude
     mental_clarity: float = Column(Float, default=100.0)     # Clarté mentale
     concentration: float = Column(Float, default=100.0)      # Concentration
     memory_function: float = Column(Float, default=100.0)    # Fonction mémorielle
