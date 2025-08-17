@@ -52,48 +52,104 @@ class PlayerProfile(Base):
     id: int = Column(Integer, primary_key=True)
     guild_id: str = Column(String, nullable=False, index=True, unique=True)
 
-    # === SECTION 1: SANTÉ PHYSIQUE DE BASE ===
+    # === SECTION 1: PHYSICAL HEALTH CORE ===
     health: float = Column(Float, default=100.0)
     energy: float = Column(Float, default=100.0)
+    stamina: float = Column(Float, default=100.0)
     pain: float = Column(Float, default=0.0)
-    tox: float = Column(Float, default=0.0)
+    immune_system: float = Column(Float, default=100.0)
+    toxicity: float = Column(Float, default=0.0)
+    body_temperature: float = Column(Float, default=37.0)  # In Celsius
+    blood_pressure: float = Column(Float, default=120.0)   # Systolic
+    heart_rate: float = Column(Float, default=70.0)       # BPM
 
-    # === SECTION 2: BESOINS IMMÉDIATS (0 = satisfait, 100 = critique) ===
+    # === SECTION 2: IMMEDIATE NEEDS (0 = satisfied, 100 = critical) ===
     hunger: float = Column(Float, default=0.0)
     thirst: float = Column(Float, default=0.0)
     bladder: float = Column(Float, default=0.0)
     fatigue: float = Column(Float, default=0.0)
     bowels: float = Column(Float, default=0.0)
-
-    # === SECTION 3: ÉTAT MENTAL & ÉMOTIONNEL ===
-    sanity: float = Column(Float, default=100.0)
-    stress: float = Column(Float, default=0.0)
-    mood: float = Column(Float, default=50.0, nullable=False)
-    boredom: float = Column(Float, default=0.0)
-    relaxation: float = Column(Float, default=50.0, nullable=False)
+    comfort: float = Column(Float, default=100.0)
+    temperature_comfort: float = Column(Float, default=100.0)
+    sleep_quality: float = Column(Float, default=100.0)
     
-    # === SECTION 4: SYMPTÔMES SPÉCIFIQUES ===
+    # === SECTION 3: MENTAL & EMOTIONAL STATE ===
+    # Core Emotional States (all 0-100)
+    happiness: float = Column(Float, default=50.0)
+    anxiety: float = Column(Float, default=0.0)
+    depression: float = Column(Float, default=0.0)
+    stress: float = Column(Float, default=0.0)
+    anger: float = Column(Float, default=0.0)
+    fear: float = Column(Float, default=0.0)
+    satisfaction: float = Column(Float, default=50.0)
+    confidence: float = Column(Float, default=50.0)
+    motivation: float = Column(Float, default=50.0)
+    loneliness: float = Column(Float, default=0.0)
+    
+    # Cognitive States
+    mental_clarity: float = Column(Float, default=100.0)
+    concentration: float = Column(Float, default=100.0)
+    memory_function: float = Column(Float, default=100.0)
+    decision_making: float = Column(Float, default=100.0)
+    creativity: float = Column(Float, default=50.0)
+    
+    # Social & Environmental Response
+    social_anxiety: float = Column(Float, default=0.0)
+    social_energy: float = Column(Float, default=100.0)
+    environmental_stress: float = Column(Float, default=0.0)
+    sensory_overload: float = Column(Float, default=0.0)
+    
+    # === SECTION 4: PHYSICAL SYMPTOMS ===
+    # General Discomfort
     nausea: float = Column(Float, default=0.0)
     dizziness: float = Column(Float, default=0.0)
     headache: float = Column(Float, default=0.0)
+    muscle_tension: float = Column(Float, default=0.0)
+    joint_pain: float = Column(Float, default=0.0)
+    back_pain: float = Column(Float, default=0.0)
+    
+    # Addiction-Related Symptoms
     dry_mouth: float = Column(Float, default=0.0)
     sore_throat: float = Column(Float, default=0.0)
-    stomachache: float = Column(Float, default=0.0)
+    chest_tightness: float = Column(Float, default=0.0)
+    breathing_difficulty: float = Column(Float, default=0.0)
+    tremors: float = Column(Float, default=0.0)
+    cold_sweats: float = Column(Float, default=0.0)
     
-    # === SECTION 5: ADDICTION & CONSOMMATION ===
+    # Digestive Issues
+    stomachache: float = Column(Float, default=0.0)
+    nausea_intensity: float = Column(Float, default=0.0)
+    appetite: float = Column(Float, default=100.0)
+    digestion: float = Column(Float, default=100.0)
+    
+    # === SECTION 5: ADDICTION & CONSUMPTION ===
+    # Substance Dependencies
     nicotine_addiction: float = Column(Float, default=0.0, nullable=False)
     alcohol_addiction: float = Column(Float, default=0.0, nullable=False)
     cannabis_addiction: float = Column(Float, default=0.0, nullable=False)
     caffeine_addiction: float = Column(Float, default=0.0, nullable=False)
-    substance_addiction_level: float = Column(Float, default=0.0)
+    
+    # Addiction Mechanics
     substance_tolerance: float = Column(Float, default=0.0)
     withdrawal_severity: float = Column(Float, default=0.0)
-    intoxication_level: float = Column(Float, default=0.0)
-    guilt: float = Column(Float, default=0.0)
+    physical_dependence: float = Column(Float, default=0.0)
+    psychological_dependence: float = Column(Float, default=0.0)
+    recovery_progress: float = Column(Float, default=0.0)
+    relapse_risk: float = Column(Float, default=0.0)
+    
+    # Cravings & Triggers
     craving_nicotine: float = Column(Float, default=0.0, nullable=False)
     craving_alcohol: float = Column(Float, default=0.0, nullable=False)
     craving_cannabis: float = Column(Float, default=0.0, nullable=False)
-    sex_drive: float = Column(Float, default=10.0, nullable=False)
+    trigger_sensitivity: float = Column(Float, default=50.0)
+    stress_trigger_level: float = Column(Float, default=0.0)
+    social_trigger_level: float = Column(Float, default=0.0)
+    
+    # Mental States Related to Addiction
+    guilt: float = Column(Float, default=0.0)
+    shame: float = Column(Float, default=0.0)
+    hopelessness: float = Column(Float, default=0.0)
+    determination: float = Column(Float, default=100.0)
 
     # === SECTION 6: STATS DE VIE ET LONG TERME ===
     willpower: float = Column(Float, default=80.0)
