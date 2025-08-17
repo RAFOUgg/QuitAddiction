@@ -74,24 +74,35 @@ class PlayerProfile(Base):
     sleep_quality: float = Column(Float, default=100.0)
     
     # === SECTION 3: MENTAL & EMOTIONAL STATE ===
-    # Core Emotional States (all 0-100)
-    happiness: float = Column(Float, default=50.0)
-    anxiety: float = Column(Float, default=0.0)
-    depression: float = Column(Float, default=0.0)
-    stress: float = Column(Float, default=0.0)
-    anger: float = Column(Float, default=0.0)
-    fear: float = Column(Float, default=0.0)
-    satisfaction: float = Column(Float, default=50.0)
-    confidence: float = Column(Float, default=50.0)
-    motivation: float = Column(Float, default=50.0)
-    loneliness: float = Column(Float, default=0.0)
-    
-    # Cognitive States
-    mental_clarity: float = Column(Float, default=100.0)
-    concentration: float = Column(Float, default=100.0)
-    memory_function: float = Column(Float, default=100.0)
-    decision_making: float = Column(Float, default=100.0)
-    creativity: float = Column(Float, default=50.0)
+    # Core Mood Components (ces composants forment l'humeur générale)
+    emotional_stability: float = Column(Float, default=50.0)  # Stabilité émotionnelle générale
+    contentment: float = Column(Float, default=50.0)         # Satisfaction/bien-être général
+    mood_volatility: float = Column(Float, default=25.0)     # Tendance aux changements d'humeur
+    emotional_resilience: float = Column(Float, default=50.0) # Capacité à gérer le stress
+
+    # États Émotionnels Positifs (0-100)
+    happiness: float = Column(Float, default=50.0)           # Bonheur immédiat
+    joy: float = Column(Float, default=50.0)                 # Joie profonde
+    satisfaction: float = Column(Float, default=50.0)        # Satisfaction personnelle
+    enthusiasm: float = Column(Float, default=50.0)          # Enthousiasme/motivation
+    serenity: float = Column(Float, default=50.0)            # Calme intérieur
+
+    # États Émotionnels Négatifs (0-100)
+    anxiety: float = Column(Float, default=0.0)              # Anxiété
+    depression: float = Column(Float, default=0.0)           # Dépression
+    stress: float = Column(Float, default=0.0)               # Stress
+    anger: float = Column(Float, default=0.0)                # Colère
+    fear: float = Column(Float, default=0.0)                 # Peur
+    frustration: float = Column(Float, default=0.0)          # Frustration
+    irritability: float = Column(Float, default=0.0)         # Irritabilité
+
+    # État Mental et Cognitif
+    mental_clarity: float = Column(Float, default=100.0)     # Clarté mentale
+    concentration: float = Column(Float, default=100.0)      # Concentration
+    memory_function: float = Column(Float, default=100.0)    # Fonction mémorielle
+    decision_making: float = Column(Float, default=100.0)    # Prise de décision
+    creativity: float = Column(Float, default=50.0)          # Créativité
+    cognitive_load: float = Column(Float, default=0.0)       # Charge cognitive
     
     # Social & Environmental Response
     social_anxiety: float = Column(Float, default=0.0)

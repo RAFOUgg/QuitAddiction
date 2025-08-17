@@ -3,6 +3,7 @@
 from .helpers import clamp
 from datetime import datetime
 from typing import Tuple
+import random  # Pour la variabilité de l'humeur
 
 def update_work_stats(player, game_time) -> Tuple[float, str]:
     """
@@ -37,6 +38,75 @@ def update_work_stats(player, game_time) -> Tuple[float, str]:
         perf_impact -= lost_productivity / 2
 
     return perf_impact, message
+
+def calculate_overall_mood(player) -> Tuple[float, str, str]:
+    """
+    Calcule l'humeur générale du personnage basée sur tous les facteurs émotionnels.
+    Retourne un tuple: (score_humeur, emoji_humeur, description_humeur)
+    """
+    # Facteurs positifs
+    positive_factors = [
+        player.happiness * 1.2,      # Plus fort impact
+        player.joy * 1.1,
+        player.satisfaction * 1.0,
+        player.enthusiasm * 0.9,
+        player.serenity * 0.8
+    ]
+    
+    # Facteurs négatifs
+    negative_factors = [
+        player.anxiety * 1.2,        # Plus fort impact
+        player.depression * 1.3,     # Impact très fort
+        player.stress * 1.1,
+        player.anger * 1.0,
+        player.fear * 0.9,
+        player.frustration * 0.8,
+        player.irritability * 0.7
+    ]
+
+    # Calculer les moyennes pondérées
+    positive_score = sum(positive_factors) / (5 * 1.2)  # Normalisé à 100
+    negative_score = sum(negative_factors) / (7 * 1.3)  # Normalisé à 100
+
+    # Facteurs de stabilité
+    stability_factor = (player.emotional_stability / 100) * 0.8
+    resilience_factor = (player.emotional_resilience / 100) * 0.2
+    stability_score = (stability_factor + resilience_factor) * 100
+
+    # Calcul du score final (0-100)
+    mood_score = (
+        (positive_score * 0.4) +         # 40% impact positif
+        ((100 - negative_score) * 0.4) + # 40% impact négatif (inversé)
+        (stability_score * 0.2)          # 20% stabilité
+    )
+
+    # Déterminer l'humeur basée sur le score et la volatilité
+    volatility = player.mood_volatility / 100
+    mood_variance = (100 - mood_score) * volatility
+
+    # Ajuster le score avec la variance
+    final_score = max(0, min(100, mood_score + ((-mood_variance/2) + (mood_variance * random.random()))))
+
+    # Définir l'emoji et la description
+    if final_score >= 90:
+        return final_score, "🤩", "Euphorique"
+    elif final_score >= 80:
+        return final_score, "😊", "Très Heureux"
+    elif final_score >= 70:
+        return final_score, "😌", "Content"
+    elif final_score >= 60:
+        return final_score, "🙂", "Plutôt Bien"
+    elif final_score >= 50:
+        return final_score, "😐", "Neutre"
+    elif final_score >= 40:
+        return final_score, "🙁", "Morose"
+    elif final_score >= 30:
+        return final_score, "😔", "Triste"
+    elif final_score >= 20:
+        return final_score, "😢", "Déprimé"
+    else:
+        return final_score, "😭", "Au plus bas"
+
 
 def chain_reactions(state_dict: dict, time_since_last_smoke) -> Tuple[dict, list]:
     """
