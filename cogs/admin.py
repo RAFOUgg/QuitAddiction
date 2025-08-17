@@ -682,10 +682,32 @@ class AdminCog(commands.Cog):
                             player = PlayerProfile(
                                 guild_id=self.guild_id,
                                 last_update=utc_now,
-                                willpower=85.0,  # Start with high willpower
-                                health=100.0,
-                                energy=100.0,
-                                mood=70.0
+                                # État Initial Positif
+                                willpower=85.0,           # Forte volonté initiale
+                                health=100.0,            # Pleine santé
+                                energy=100.0,            # Pleine énergie
+                                
+                                # État Émotionnel Initial (début optimiste)
+                                emotional_stability=70.0,  # Assez stable
+                                contentment=65.0,         # Plutôt content
+                                mood_volatility=30.0,     # Peu volatile
+                                emotional_resilience=75.0, # Bonne résilience
+                                
+                                # États Positifs
+                                happiness=70.0,           # Plutôt heureux
+                                joy=65.0,                 # Joyeux
+                                satisfaction=60.0,        # Satisfait
+                                enthusiasm=75.0,          # Enthousiaste pour le changement
+                                serenity=55.0,           # Modérément serein
+                                
+                                # États Négatifs (bas au début)
+                                anxiety=20.0,             # Un peu anxieux
+                                depression=10.0,          # Peu déprimé
+                                stress=25.0,              # Stress modéré
+                                anger=5.0,                # Peu en colère
+                                fear=15.0,                # Légère appréhension
+                                frustration=20.0,         # Légère frustration
+                                irritability=15.0         # Peu irritable
                             )
                             db.add(player)
 
