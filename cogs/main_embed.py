@@ -626,7 +626,7 @@ class MainEmbed(commands.Cog):
 
             for row in stats_layout:
                 for name, val, bad in row:
-                    embed.add_field(name=name, value=stat_value_and_bar(val, bad), inline=True)
+                    embed.add_field(name=name, value=generate_progress_bar(val, bad), inline=True)
 
         # Timing footer and timestamp
         elapsed = datetime.datetime.utcnow() - state.game_start_time if state.game_start_time else datetime.timedelta()
