@@ -240,5 +240,22 @@ class BrainStatsView(ui.View):
         if self.has_multiple_pages():
             embed.set_footer(text=f"Page {self.page + 1}/{self.get_max_pages()}")
 
-        return 
+        return embed
+
+
+class BrainStatsCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        print("Brain Stats cog is ready!")
+
+    def get_stats_view(self, player: PlayerProfile, main_embed_cog) -> BrainStatsView:
+        """Get a configured BrainStatsView instance."""
+        return BrainStatsView(player, main_embed_cog)
+
+
+async def setup(bot):
+    await bot.add_cog(BrainStatsCog(bot))
 
