@@ -99,4 +99,5 @@ class Brain(commands.Cog):
         self.bot = bot
 
 async def setup(bot):
-    await bot.add_cog(Brain(bot))
+    brain_cog = Brain(bot)
+    await bot.add_cog(brain_cog)

@@ -1,3 +1,5 @@
+import discord
+from discord.ext import commands
 from discord import ui, ButtonStyle
 from db.models import PlayerProfile
 from utils.helpers import clamp
@@ -54,4 +56,12 @@ class BrainStatsView(ui.View):
                 {"name": "😌 Relaxation", "value": f"{generate_progress_bar(p.relaxation)} {p.relaxation}/100"}
             ]
         }
+        return sections.get(self.current_section, sections["general"])
+
+class BrainViewCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+async def setup(bot):
+    await bot.add_cog(BrainViewCog(bot))
         return sections.get(self.current_section, sections["general"])
