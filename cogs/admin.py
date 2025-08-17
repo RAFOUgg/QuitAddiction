@@ -685,7 +685,7 @@ class AdminCog(commands.Cog):
                                 willpower=85.0,  # Start with high willpower
                                 health=100.0,
                                 energy=100.0,
-                                happiness=70.0
+                                mood=70.0
                             )
                             db.add(player)
 

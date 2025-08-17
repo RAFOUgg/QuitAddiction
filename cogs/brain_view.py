@@ -34,7 +34,7 @@ class BrainStatsView(ui.View):
                 {"name": "💪 Santé", "value": f"{generate_progress_bar(p.health)} {p.health}/100"},
                 {"name": "🏃‍♂️ Énergie", "value": f"{generate_progress_bar(p.energy)} {p.energy}/100"},
                 {"name": "😴 Fatigue", "value": f"{generate_progress_bar(p.fatigue, high_is_bad=True)} {p.fatigue}/100"},
-                {"name": "💰 Argent", "value": f"{p.money}€"},
+                {"name": "💰 Argent", "value": f"{p.wallet}€"},
                 {"name": "💪 Force Mentale", "value": f"{generate_progress_bar(p.willpower)} {p.willpower}/100"}
             ],
             "needs": [
