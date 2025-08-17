@@ -68,6 +68,7 @@ class PlayerProfile(Base):
     thirst: float = Column(Float, default=0.0)
     bladder: float = Column(Float, default=0.0)
     fatigue: float = Column(Float, default=0.0)
+    boredom: float = Column(Float, default=0.0)
     bowels: float = Column(Float, default=0.0)
     comfort: float = Column(Float, default=100.0)
     temperature_comfort: float = Column(Float, default=100.0)

@@ -602,7 +602,8 @@ class MainEmbed(commands.Cog):
                 # Colonne 2: Besoins Physiologiques
                 [('🍽️ Faim', getattr(player, 'hunger', 0), True), 
                  ('💧 Soif', getattr(player, 'thirst', 0), True),
-                 ('🚽 Vessie', getattr(player, 'bladder', 0), True)],
+                 ('🚽 Vessie', getattr(player, 'bladder', 0), True),
+                 ('🥱 Ennui', getattr(player, 'boredom', 0), True)],
                 
                 # Colonne 3: État Mental
                 [('🧠 Mental', getattr(player, 'sanity', 0), False),
