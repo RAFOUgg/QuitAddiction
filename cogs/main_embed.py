@@ -3,10 +3,52 @@ from discord.ext import commands
 from typing import Dict, Optional
 import asyncio
 
-
 from utils.view_manager import ViewManager
 from utils.embed_builder import generate_progress_bar
 from db.models import PlayerProfile, ServerState
+
+class GameEmbed(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+    
+    def generate_dashboard_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
+        """Generate the main dashboard embed for a player."""
+        embed = discord.Embed(
+            title="Tableau de bord",
+            color=discord.Color.blue()
+        )
+        
+        # Add basic info
+        embed.add_field(
+            name="État Vital",
+            value=f"❤️ Santé: {generate_progress_bar(player.health, 100)} {player.health}/100\n"
+                  f"⚡ Énergie: {generate_progress_bar(player.energy, 100)} {player.energy}/100\n"
+                  f"💪 Endurance: {generate_progress_bar(player.stamina, 100)} {player.stamina}/100",
+            inline=False
+        )
+        
+        # Add needs
+        embed.add_field(
+            name="Besoins",
+            value=f"🍽️ Faim: {generate_progress_bar(player.hunger, 100)} {player.hunger}/100\n"
+                  f"💧 Soif: {generate_progress_bar(player.thirst, 100)} {player.thirst}/100\n"
+                  f"🚽 Vessie: {generate_progress_bar(player.bladder, 100)} {player.bladder}/100",
+            inline=False
+        )
+        
+        # Add emotional state
+        embed.add_field(
+            name="État Émotionnel",
+            value=f"😊 Humeur: {getattr(player, 'mood_text', 'Normal')}\n"
+                  f"😰 Stress: {generate_progress_bar(player.stress, 75)} {player.stress}/75\n"
+                  f"😫 Fatigue: {generate_progress_bar(player.fatigue, 100)} {player.fatigue}/100",
+            inline=False
+        )
+        
+        # Add server info
+        embed.set_footer(text=f"Serveur: {guild.name}")
+        
+        return embed
 
 class DashboardView(discord.ui.View):
     """Main dashboard view with player controls.
@@ -28,59 +70,46 @@ class DashboardView(discord.ui.View):
         self.show_stats = show_stats
         self.show_inventory = show_inventory
         self._init_buttons()
+
+    @discord.ui.button(label="Statistiques", style=discord.ButtonStyle.primary, custom_id="stats", emoji="📊", row=0)
+    async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle stats button click."""
+        await interaction.response.defer()
+        self.show_stats = not self.show_stats
+        self.show_inventory = False
+        # The ViewHandler cog will pick up this interaction through the on_interaction event
+        await interaction.edit_original_response(view=self)
+
+    @discord.ui.button(label="Inventaire", style=discord.ButtonStyle.secondary, custom_id="inventory", emoji="🎒", row=0)
+    async def inventory_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle inventory button click."""
+        await interaction.response.defer()
+        self.show_inventory = not self.show_inventory
+        self.show_stats = False
+        await interaction.edit_original_response(view=self)
+
+    @discord.ui.button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="sleep", emoji="😴", row=1)
+    async def sleep_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle sleep button click."""
+        await interaction.response.defer()
+        await interaction.edit_original_response(view=self)
+
+    @discord.ui.button(label="Travailler", style=discord.ButtonStyle.success, custom_id="work", emoji="💼", row=1)
+    async def work_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle work button click."""
+        await interaction.response.defer()
+        await interaction.edit_original_response(view=self)
+
+    @discord.ui.button(label="Téléphone", style=discord.ButtonStyle.secondary, custom_id="phone", emoji="📱", row=2)
+    async def phone_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle phone button click."""
+        await interaction.response.defer()
+        await interaction.edit_original_response(view=self)
         
     def _init_buttons(self):
         """Initialize the view's buttons based on state."""
-        # Initialize button rows for organization
-        action_row = []
-        status_row = []
-        special_row = []
-        
-        # Status buttons (row 0)
-        status_row.append(discord.ui.Button(
-            label="Statistiques", 
-            style=discord.ButtonStyle.primary, 
-            custom_id="stats",
-            emoji="📊"
-        ))
-        status_row.append(discord.ui.Button(
-            label="Inventaire", 
-            style=discord.ButtonStyle.secondary, 
-            custom_id="inventory",
-            emoji="🎒"
-        ))
-        
-        # Action buttons (row 1)
-        if not getattr(self.player, 'is_sleeping', False):
-            action_row.append(discord.ui.Button(
-                label="Dormir", 
-                style=discord.ButtonStyle.secondary, 
-                custom_id="sleep",
-                emoji="😴"
-            ))
-        if not getattr(self.player, 'is_working', False):
-            action_row.append(discord.ui.Button(
-                label="Travailler", 
-                style=discord.ButtonStyle.success, 
-                custom_id="work",
-                emoji="💼"
-            ))
-        
-        # Special actions (row 2)
-        special_row.append(discord.ui.Button(
-            label="Téléphone", 
-            style=discord.ButtonStyle.secondary, 
-            custom_id="phone",
-            emoji="📱"
-        ))
-            
-        # Add all buttons in their respective rows
-        for button in status_row:
-            self.add_item(button)
-        for button in action_row:
-            self.add_item(button)
-        for button in special_row:
-            self.add_item(button)
+        # Buttons are now handled by decorators, no manual initialization needed
+        pass
 
 class ActionsView(discord.ui.View):
     """View for player actions (work, smoke, drink, etc).
