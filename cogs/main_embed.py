@@ -401,6 +401,8 @@ class MainEmbed(commands.Cog):
         embed = await self.generate_dashboard_embed(player, server_state, guild)
         await interaction.response.edit_message(embed=embed, view=view)
 
-def setup(bot):
+async def setup(bot):
     """Add the cog to the bot."""
-    bot.add_cog(MainEmbed(bot))
+    print(f"DEBUG: setup function called. Type of bot: {type(bot)}")
+    print(f"DEBUG: Is bot None? {bot is None}")
+    await bot.add_cog(MainEmbed(bot))
