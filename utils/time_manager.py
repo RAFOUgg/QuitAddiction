@@ -70,7 +70,7 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
             elapsed = now_utc - game_start
             return (base_time + elapsed).astimezone(TARGET_TIMEZONE)
         
-    return to_localized(now_utc)
+        return to_localized(now_utc)
     
     # Calculate time multiplier based on mode
     time_multipliers = {
@@ -99,21 +99,6 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
     game_time = game_start_time + datetime.timedelta(minutes=game_minutes)
     
     return to_localized(game_time)
-    elapsed_real_seconds = (now_utc - game_start_time).total_seconds()
-    
-    if state.duration_key == 'test':
-        # 84 minutes réelles = 7 jours = 168 heures
-        # Donc 1 minute réelle = 2 heures = 120 minutes de jeu
-        game_minutes_elapsed = elapsed_real_seconds / 60 * 120
-    else:
-        real_seconds_per_game_day = state.game_minutes_per_day * 60
-        game_minutes_elapsed = (elapsed_real_seconds / real_seconds_per_game_day) * (24 * 60)
-
-    start_hour = state.game_day_start_hour or 9 # Default to 9 AM
-    game_time_at_start_utc = state.game_start_time.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-    current_game_time_utc = game_time_at_start_utc + datetime.timedelta(minutes=game_minutes_elapsed)
-    
-    return to_localized(current_game_time_utc)
 
 # --- Time-based condition checks ---
 

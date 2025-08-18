@@ -21,3 +21,6 @@ pip-delete-this-directory.txt
 # Fichiers de l'IDE
 .idea/
 .vscode/
+
+# Logs
+data/logs/bot.log
