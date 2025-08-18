@@ -1,47 +1,47 @@
-# --- cogs/phone.py (REFACTORED FOR NEW UI) ---
+# --- cogs/phone.py ---
 import discord
-from discord.ext import commands
-import discord.ui as ui
 from discord.ext import commands
 from discord import ui
 from sqlalchemy.orm import Session
 from db.models import PlayerProfile, ServerState
-import json
-import datetime
-from utils.helpers import get_player_notif_settings, clamp
+from utils.helpers import get_player_notif_settings
+from utils.error_handler import GameError
+from utils.logger import get_logger
 from .smoke_shop import SmokeShopView
 
-# --- VUES ---
+logger = get_logger(__name__)
+
 class PhoneMainView(ui.View):
     def __init__(self, player: PlayerProfile):
         super().__init__(timeout=180)
-        self.add_item(ui.Button(label="SMS", style=discord.ButtonStyle.green, custom_id="phone_sms", emoji="💬"))
-        self.add_item(ui.Button(label="Uber Eats", style=discord.ButtonStyle.success, custom_id="phone_ubereats", emoji="🍔"))
-        self.add_item(ui.Button(label="Smoke-Shop", 
-                              style=discord.ButtonStyle.blurple, 
-                              custom_id="phone_shop", 
-                              disabled=(not player.has_unlocked_smokeshop), 
-                              emoji="🛍️"))
-        # Bouton de retour au jeu
-        self.add_item(ui.Button(label="Retour au jeu", 
-                              style=discord.ButtonStyle.grey, 
-                              custom_id="nav_main_menu", 
-                              row=1, 
-                              emoji="⬅️"))
-
-class SMSView(ui.View):
-    def __init__(self, player: PlayerProfile):
-        super().__init__(timeout=180)
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", emoji="⬅️"))
         
-class UberEatsView(ui.View):
-    def __init__(self, player: PlayerProfile):
-        super().__init__(timeout=180)
-        self.add_item(ui.Button(label="Tacos (6$)", emoji="🌮", style=discord.ButtonStyle.success, custom_id="ubereats_buy_tacos", disabled=(player.wallet < 6)))
-        self.add_item(ui.Button(label="Soda (2$)", emoji="🥤", style=discord.ButtonStyle.success, custom_id="ubereats_buy_soda", disabled=(player.wallet < 2)))
-        self.add_item(ui.Button(label="Salade (8$)", emoji="🥗", style=discord.ButtonStyle.success, custom_id="ubereats_buy_salad", disabled=(player.wallet < 8)))
-        self.add_item(ui.Button(label="Eau (1$)", emoji="💧", style=discord.ButtonStyle.success, custom_id="ubereats_buy_water", disabled=(player.wallet < 1)))
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", row=2, emoji="⬅️"))
+        # Shop Button - Only available if unlocked
+        self.add_item(ui.Button(
+            label="Boutique", 
+            style=discord.ButtonStyle.primary,
+            custom_id="phone_shop",
+            disabled=not getattr(player, 'has_unlocked_smokeshop', False),
+            emoji="🛍️",
+            row=0
+        ))
+        
+        # Settings Button
+        self.add_item(ui.Button(
+            label="Paramètres",
+            style=discord.ButtonStyle.secondary,
+            custom_id="phone_settings",
+            emoji="⚙️",
+            row=0
+        ))
+        
+        # Back Button
+        self.add_item(ui.Button(
+            label="Retour au jeu",
+            style=discord.ButtonStyle.grey,
+            custom_id="nav_main_menu",
+            row=1,
+            emoji="⬅️"
+        ))
 
 class NotificationsView(ui.View):
     def __init__(self, player: PlayerProfile):
@@ -103,11 +103,6 @@ class ShopCraftView(ui.View):
         self.add_item(ui.Button(label="Craft Joint (Hash)", emoji="🟫", style=discord.ButtonStyle.success, 
                               custom_id="shop_craft_hash_joint", disabled=not can_craft_hash_joint))
         self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="shop_main", row=2, emoji="⬅️"))
-
-class NotificationsView(ui.View):
-    def __init__(self, player: PlayerProfile):
-        super().__init__(timeout=180)
-        self.add_item(ui.Button(label="Retour", style=discord.ButtonStyle.grey, custom_id="phone_open", emoji="⬅️"))
 
 class SettingsView(ui.View):
     def __init__(self, player: PlayerProfile, settings: dict):
@@ -257,8 +252,6 @@ class Phone(commands.Cog):
         phone_screens = {
             "phone_open": (self.generate_phone_main_embed, PhoneMainView),
             "phone_shop": (self.generate_shop_embed, SmokeShopView),
-            "phone_ubereats": (self.generate_ubereats_embed, UberEatsView),
-            "phone_sms": (self.generate_sms_embed, SMSView),
             "phone_notifications": (self.generate_notifications_embed, NotificationsView),
             "phone_settings": (self.generate_settings_embed, SettingsView)
         }
