@@ -18,7 +18,7 @@ class ServerState(Base):
     last_urinated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_shower_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     sickness_end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    last_defecated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)rver_state'
+    last_defecated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # === Core Fields ===
     id: Mapped[int] = mapped_column(primary_key=True)
