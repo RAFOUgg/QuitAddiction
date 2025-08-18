@@ -835,7 +835,7 @@ class AdminCog(commands.Cog):
                         
                         game_channel = await self.cog.bot.fetch_channel(state.game_channel_id)
                         game_message = await game_channel.send(
-                            embed=main_embed_cog.generate_dashboard_embed(player, state, interaction.guild),
+                            embed=await main_embed_cog.generate_dashboard_embed(player, state, interaction.guild),
                             view=DashboardView(player)
                         )
                         state.game_message_id = game_message.id
