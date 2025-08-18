@@ -1,5 +1,6 @@
 # --- cogs/view_handler.py ---
-from typing import Tuple, Optional
+import os
+from typing import Tuple, Optional, Union
 import discord
 from discord.ext import commands
 from discord.ext.commands import Cog
@@ -69,7 +70,7 @@ class ViewHandler(commands.Cog):
         embed.set_footer(text=f"Serveur: {guild.name}")
         return embed
         
-    def process_button_action(self, interaction: discord.Interaction, player: PlayerProfile, state: ServerState, custom_id: str) -> Tuple[discord.ui.View, discord.Embed]:
+    async def process_button_action(self, interaction: discord.Interaction, player: PlayerProfile, state: ServerState, custom_id: str) -> Tuple[discord.ui.View, discord.Embed]:
         """Process a button action and return the appropriate view and embed"""
         if not interaction.guild:
             return self._create_view("main_menu", player, state), discord.Embed(
@@ -95,7 +96,32 @@ class ViewHandler(commands.Cog):
                 view_type = "phone"
                 
             view = self._create_view(view_type, player, state)
-            embed = self._create_embed(player, state, interaction.guild)
+            
+            # Create loading embed first
+            loading_embed = discord.Embed(
+                title="Chargement...",
+                description="Mise à jour en cours...",
+                color=discord.Color.blue()
+            )
+            
+            # Update with actual embed
+            try:
+                cog = self.bot.get_cog("GameEmbed")
+                if hasattr(cog, 'generate_dashboard_embed'):
+                    embed = await cog.generate_dashboard_embed(player=player, state=state, guild=interaction.guild)
+                else:
+                    embed = discord.Embed(
+                        title="État du joueur",
+                        description=f"Points de vie: {getattr(player, 'health', 0)}/100\nÉnergie: {getattr(player, 'energy', 0)}/100",
+                        color=discord.Color.blue()
+                    )
+            except Exception as e:
+                logger.error(f"Error generating embed: {e}")
+                embed = discord.Embed(
+                    title="Erreur",
+                    description="Une erreur est survenue lors de la génération de l'affichage.",
+                    color=discord.Color.red()
+                )
 
         except Exception as e:
             logger.error(f"Error processing button action: {e}")
@@ -137,17 +163,6 @@ class ViewHandler(commands.Cog):
                     )
                 return
 
-            # Process the button action
-            view, embed = self.process_button_action(interaction, player, state, custom_id)
-            
-            if not view or not embed:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "Une erreur est survenue lors du traitement de l'action.",
-                        ephemeral=True
-                    )
-                return
-
             # Handle navigation based on custom_id
             view_type = "main_menu"  # Default view type
             if custom_id.startswith("nav_"):
@@ -155,50 +170,126 @@ class ViewHandler(commands.Cog):
                 if nav_type == "back":
                     previous_view = view_manager.go_back(guild_id)
                     if previous_view:
-                        view = self._create_view(previous_view, player, state)
-                        view_manager.register_view(guild_id, view, previous_view)
+                        view_type = previous_view
                 else:
-                    view = self._create_view(nav_type, player, state)
-                    view_manager.register_view(guild_id, view, nav_type)
-                view_type = nav_type
+                    view_type = nav_type
 
             # Validate state for action-based interactions
             if custom_id.startswith("action_"):
                 check_valid_state(player, custom_id[7:])  # Remove "action_" prefix
 
-            # Update the message
-            try:
-                if isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
-                    if not interaction.response.is_done():
-                        await interaction.response.edit_message(view=view, embed=embed)
-                    elif interaction.message:
-                        await interaction.message.edit(view=view, embed=embed)
-                    else:
-                        await interaction.channel.send(embed=embed, view=view)
-                else:
-                    logger.error(f"Invalid channel type for interaction: {type(interaction.channel)}")
-                    if not interaction.response.is_done():
-                        await interaction.response.send_message(
-                            "Cette commande ne peut être utilisée que dans un canal de texte.",
-                            ephemeral=True
-                        )
+            # Show loading message
+            if not interaction.response.is_done():
+                loading_embed = discord.Embed(
+                    title="Chargement...",
+                    description="Mise à jour en cours...",
+                    color=discord.Color.blue()
+                )
+                await interaction.response.edit_message(
+                    embed=loading_embed
+                )
 
-                # Register the current view
+            # Process the button action
+            try:
+                # Process action effects
+                if custom_id == "sleep":
+                    player.is_sleeping = True
+                    self._db_session.commit()
+                elif custom_id == "work":
+                    player.is_working = True
+                    self._db_session.commit()
+
+                # Create view
+                view = self._create_view(view_type, player, state)
                 view_manager.register_view(guild_id, view, view_type)
+
+                # Generate embed using GameEmbed cog
+                from cogs.main_embed import GameEmbed
+                cog = self.bot.get_cog("GameEmbed")
+                
+                # Default embed in case anything fails
+                embed = discord.Embed(
+                    title="État du joueur",
+                    description=f"Points de vie: {getattr(player, 'health', 0)}/100\nÉnergie: {getattr(player, 'energy', 0)}/100",
+                    color=discord.Color.blue()
+                )
+                
+                if isinstance(cog, GameEmbed):
+                    try:
+                        # The generate_dashboard_embed method is not async
+                        new_embed = cog.generate_dashboard_embed(
+                            player=player, 
+                            state=state, 
+                            guild=interaction.guild
+                        )
+                        if isinstance(new_embed, discord.Embed):
+                            embed = new_embed
+                    except Exception as e:
+                        logger.error(f"Error generating dashboard embed: {e}")
+                else:
+                    logger.error("GameEmbed cog not found or not properly initialized")
+
+                # Update the message with new view and embed
+                if interaction.message:
+                    # Check if there's an image path in the footer
+                    footer = embed.footer
+                    footer_text = footer.text if footer else None
+                    if footer_text and "|" in footer_text:
+                        parts = footer_text.split("|")
+                        if len(parts) > 1:
+                            server_name = parts[0].strip()
+                            image_path = parts[1].strip()
+                            if os.path.exists(image_path):
+                                file = discord.File(image_path, filename=os.path.basename(image_path))
+                                # Update footer to remove path
+                                embed.set_footer(text=server_name)
+                                await interaction.message.edit(attachments=[file], embed=embed, view=view)
+                                return
+                            
+                    # If no image or error, just update embed and view
+                    await interaction.message.edit(embed=embed, view=view)
+                    
+                elif isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+                    # Check if there's an image path in the footer
+                    footer = embed.footer
+                    footer_text = footer.text if footer else None
+                    if footer_text and "|" in footer_text:
+                        parts = footer_text.split("|")
+                        if len(parts) > 1:
+                            server_name = parts[0].strip()
+                            image_path = parts[1].strip()
+                            if os.path.exists(image_path):
+                                file = discord.File(image_path, filename=os.path.basename(image_path))
+                                # Update footer to remove path
+                                embed.set_footer(text=server_name)
+                                await interaction.channel.send(file=file, embed=embed, view=view)
+                                return
+                            
+                    # If no image or error, just send embed and view
+                    await interaction.channel.send(embed=embed, view=view)
 
             except discord.errors.NotFound:
                 logger.warning("Message not found, might have been deleted")
             except Exception as e:
                 logger.error(f"Error updating message: {e}", exc_info=True)
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "Une erreur est survenue lors de la mise à jour du message.",
-                        ephemeral=True
+                if interaction.message:
+                    error_embed = discord.Embed(
+                        title="Erreur",
+                        description="Une erreur est survenue lors de la mise à jour du message.",
+                        color=discord.Color.red()
                     )
+                    await interaction.message.edit(embed=error_embed)
             
         except Exception as e:
             logger.error(f"Error in interaction handler: {e}", exc_info=True)
-            await handle_interaction_error(interaction, e)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "Une erreur inattendue est survenue.",
+                        ephemeral=True
+                    )
+            except:
+                pass
             self._db_session.rollback()
             
     def _create_view(self, view_type: str, player: PlayerProfile, state: ServerState) -> discord.ui.View:
@@ -215,7 +306,7 @@ class ViewHandler(commands.Cog):
         else:
             return DashboardView(player, state)  # Default to dashboard
             
-    def _create_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
+    async def _create_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
         """Create the appropriate embed for the current view"""
         from cogs.main_embed import GameEmbed
         
@@ -228,7 +319,11 @@ class ViewHandler(commands.Cog):
             )
 
         try:
-            return cog.generate_dashboard_embed(player=player, state=state, guild=guild)
+            return discord.Embed(
+                title="Chargement...",
+                description="Génération de l'affichage en cours...",
+                color=discord.Color.blue()
+            )
         except Exception as e:
             logger.error(f"Error generating dashboard embed: {e}")
             return discord.Embed(

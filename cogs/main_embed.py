@@ -2,10 +2,14 @@ import discord
 from discord.ext import commands
 from typing import Dict, Optional
 import asyncio
+import os
 
 from utils.view_manager import ViewManager
 from utils.embed_builder import generate_progress_bar
+from utils.logger import get_logger
 from db.models import PlayerProfile, ServerState
+
+logger = get_logger(__name__)
 
 class GameEmbed(commands.Cog):
     def __init__(self, bot):
@@ -17,6 +21,32 @@ class GameEmbed(commands.Cog):
             title="Tableau de bord",
             color=discord.Color.blue()
         )
+
+        # Set image based on player state
+        try:
+            image_name = "neutral.png"  # Default image
+            
+            # Determine image based on state
+            if player.is_sleeping:
+                image_name = "sleep.png"
+            elif player.is_working:
+                image_name = "working.png"
+            elif player.energy < 20:
+                image_name = "tired.png"
+            elif player.hunger > 80:
+                image_name = "hungry.png"
+            
+            # Set the image
+            image_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cooker', image_name)
+            if os.path.exists(image_path):
+                file = discord.File(image_path, filename=image_name)
+                embed.set_image(url=f"attachment://{image_name}")
+                # Store the file in embed's data for later use
+                embed.set_footer(text=f"Serveur: {guild.name} | {image_path}")
+            else:
+                logger.error(f"Image not found: {image_path}")
+        except Exception as e:
+            logger.error(f"Error setting image: {e}")
         
         # Add basic info
         embed.add_field(
