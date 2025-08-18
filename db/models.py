@@ -11,7 +11,14 @@ from sqlalchemy import DateTime, Integer, String, Boolean, Float, BigInteger, Te
 from db.database import Base
 
 class ServerState(Base):
-    __tablename__ = 'server_state'
+    __tablename    last_worked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_drank_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_slept_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_smoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_urinated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_shower_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    sickness_end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_defecated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)rver_state'
 
     # === Core Fields ===
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -133,11 +140,11 @@ class PlayerProfile(Base):
     guild_id: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
 
     # === SYSTEM STATE ===
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
-    last_tick: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
-    last_save: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
-    last_autonomous_action: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    willpower_last_check: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_tick: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_save: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_autonomous_action: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    willpower_last_check: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     game_version: Mapped[str] = mapped_column(String, default="1.0.0")
     tutorial_stage: Mapped[int] = mapped_column(Integer, default=0)
     flags: Mapped[str] = mapped_column(String, default="")  # JSON string for various flags
@@ -294,7 +301,7 @@ class PlayerProfile(Base):
     is_on_break: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_sleeping: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     missed_work_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_worked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    last_worked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     first_day_reward_given: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     lateness_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     has_completed_first_work_day: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -303,7 +310,7 @@ class PlayerProfile(Base):
     sleep_quality: Mapped[float] = mapped_column(Float, default=100.0)  # Qualité du sommeil (affecte la récupération)
     sleep_minutes_today: Mapped[int] = mapped_column(Integer, default=0)  # Minutes de sommeil aujourd'hui
     sleep_quota_needed: Mapped[int] = mapped_column(Integer, default=480)  # Minutes de sommeil nécessaires (8h par défaut)
-    last_sleep_check: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)  # Pour le calcul du quota
+    last_sleep_check: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # Pour le calcul du quota
     insomnia: Mapped[float] = mapped_column(Float, default=0.0)  # Difficulté à dormir (augmente avec stress/santé mentale basse)
     
     # --- INVENTAIRE BASE ---
@@ -341,20 +348,20 @@ class PlayerProfile(Base):
     notification_history: Mapped[str] = mapped_column(Text, default="")
 
     # --- Timestamps & Cooldowns ---
-    last_update: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
-    last_action_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    last_update: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_action_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_action: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    last_action_time: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    action_cooldown_end_time: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    last_action_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    action_cooldown_end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     #... (autres timestamps)
-    last_eaten_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    last_drank_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    last_slept_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    last_smoked_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    last_urinated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    last_shower_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    sickness_end_time: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    last_defecated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    last_eaten_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_drank_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_slept_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_smoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_urinated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_shower_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    sickness_end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_defecated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # --- Flags Narratifs ---
     has_unlocked_smokeshop: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -363,7 +370,7 @@ class PlayerProfile(Base):
     
     # --- Téléphone ---
     phone_uses_today: Mapped[int] = mapped_column(Integer, default=0)
-    last_phone_reset_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    last_phone_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (UniqueConstraint('guild_id', name='uq_guild_player'),)
 
@@ -374,4 +381,4 @@ class ActionLog(Base):
     user_id: Mapped[str] = mapped_column(String, index=True)
     action: Mapped[str] = mapped_column(String)
     effect: Mapped[str] = mapped_column(String)
-    timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
