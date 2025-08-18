@@ -223,12 +223,17 @@ class MainEmbed(commands.Cog):
     async def generate_dashboard_embed(self, player: PlayerProfile, server_state: ServerState, guild: discord.Guild) -> discord.Embed:
         """Generate the dashboard embed."""
         # Determine the base color based on player state
-        if player.health < 30:
+        if not hasattr(player, 'health'):
+            color = discord.Color.blue()
+        elif player.health < 30:
             color = discord.Color.red()
         elif player.health < 60:
             color = discord.Color.orange()
         else:
             color = discord.Color.green()
+
+        # Calculate current mood
+        mood_score, mood_emoji, mood_text = self._calculate_mood(player)
 
         embed = discord.Embed(
             title="Tableau de bord",
@@ -236,42 +241,43 @@ class MainEmbed(commands.Cog):
             description=self._get_status_emoji(player)
         )
 
-        # Current Time
-        embed.add_field(
-            name="⏰ Heure actuelle",
-            value=server_state.get_current_time_str(),
-            inline=True
-        )
-
         # Core Stats
-        vitals = (
-            f"❤️ Santé: {generate_progress_bar(player.health, 100.0, length=10)}\n"
-            f"⚡ Énergie: {generate_progress_bar(player.energy, 100.0, length=10)}\n"
-            f"💪 Endurance: {generate_progress_bar(player.stamina, 100.0, length=10)}"
-        )
-        embed.add_field(name="État Vital", value=vitals, inline=False)
+        vitals = []
+        if hasattr(player, 'health'):
+            vitals.append(f"❤️ Santé: {generate_progress_bar(player.health, 100.0, length=10)}")
+        if hasattr(player, 'energy'):
+            vitals.append(f"⚡ Énergie: {generate_progress_bar(player.energy, 100.0, length=10)}")
+        if hasattr(player, 'stamina'):
+            vitals.append(f"💪 Endurance: {generate_progress_bar(player.stamina, 100.0, length=10)}")
+        
+        if vitals:
+            embed.add_field(name="État Vital", value="\n".join(vitals), inline=False)
 
         # Needs
-        needs = (
-            f"🍽️ Faim: {generate_progress_bar(100.0 - player.hunger, 100.0, length=10)}\n"
-            f"💧 Soif: {generate_progress_bar(100.0 - player.thirst, 100.0, length=10)}\n"
-            f"🚽 Vessie: {generate_progress_bar(100.0 - player.bladder, 100.0, length=10)}"
-        )
-        embed.add_field(name="Besoins", value=needs, inline=False)
+        needs = []
+        if hasattr(player, 'hunger'):
+            needs.append(f"🍽️ Faim: {generate_progress_bar(100.0 - player.hunger, 100.0, length=10)}")
+        if hasattr(player, 'thirst'):
+            needs.append(f"💧 Soif: {generate_progress_bar(100.0 - player.thirst, 100.0, length=10)}")
+        if hasattr(player, 'bladder'):
+            needs.append(f"🚽 Vessie: {generate_progress_bar(100.0 - player.bladder, 100.0, length=10)}")
+        
+        if needs:
+            embed.add_field(name="Besoins", value="\n".join(needs), inline=False)
 
         # Emotional State
-        mood_score, mood_emoji, mood_text = self._calculate_mood(player)
-        emotions = (
-            f"{mood_emoji} Humeur: {mood_text}\n"
-            f"😰 Stress: {generate_progress_bar(100.0 - player.stress, 100.0, length=10)}\n"
-            f"😴 Fatigue: {generate_progress_bar(100.0 - player.fatigue, 100.0, length=10)}"
-        )
-        embed.add_field(name="État Émotionnel", value=emotions, inline=False)
+        emotions = [f"{mood_emoji} Humeur: {mood_text}"]
+        if hasattr(player, 'stress'):
+            emotions.append(f"😰 Stress: {generate_progress_bar(100.0 - player.stress, 100.0, length=10)}")
+        if hasattr(player, 'fatigue'):
+            emotions.append(f"😴 Fatigue: {generate_progress_bar(100.0 - player.fatigue, 100.0, length=10)}")
+        
+        embed.add_field(name="État Émotionnel", value="\n".join(emotions), inline=False)
 
         # Work Status if working
-        if player.is_working:
+        if getattr(player, 'is_working', False):
             work_status = "🏢 Au travail"
-            if player.is_on_break:
+            if getattr(player, 'is_on_break', False):
                 work_status += " (En pause)"
             embed.add_field(name="Travail", value=work_status, inline=True)
 
@@ -283,7 +289,7 @@ class MainEmbed(commands.Cog):
         if getattr(player, 'show_inventory_in_view', False):
             embed.add_field(name="Inventaire", value=self._get_player_inventory(player), inline=False)
 
-        # Set footer with server info and time
+        # Set footer with server info
         embed.set_footer(text=f"Serveur: {guild.name}")
         return embed
 
@@ -312,25 +318,34 @@ class MainEmbed(commands.Cog):
 
     def _get_status_emoji(self, player: PlayerProfile) -> str:
         """Get the emoji representing the player's current state."""
+        # Calculate current mood
+        mood_score = (
+            (100 - player.stress) * 0.3 +
+            (100 - player.fatigue) * 0.2 +
+            player.happiness * 0.2 +
+            player.emotional_stability * 0.15 +
+            (100 - player.anxiety) * 0.15
+        ) if all(hasattr(player, attr) for attr in ['stress', 'fatigue', 'happiness', 'emotional_stability', 'anxiety']) else 50.0
+
         if player.is_sleeping:
             return "😴 En train de dormir..."
         elif player.is_working:
             if player.is_on_break:
                 return "☕ En pause"
             return "💼 Au travail"
-        elif player.stress > 75:
+        elif getattr(player, 'stress', 0) > 75:
             return "😰 Très stressé"
-        elif player.fatigue > 75:
+        elif getattr(player, 'fatigue', 0) > 75:
             return "😫 Épuisé"
-        elif player.hunger > 75:
+        elif getattr(player, 'hunger', 0) > 75:
             return "🍽️ Affamé"
-        elif player.thirst > 75:
+        elif getattr(player, 'thirst', 0) > 75:
             return "💧 Très soif"
-        elif player.health < 30:
+        elif getattr(player, 'health', 100) < 30:
             return "🤒 En mauvaise santé"
-        elif player.mood_score < 30:
+        elif mood_score < 30:
             return "😢 Déprimé"
-        elif player.mood_score > 70:
+        elif mood_score > 70:
             return "😊 De bonne humeur"
         return "😐 Normal"
             

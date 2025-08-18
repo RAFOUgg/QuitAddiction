@@ -36,6 +36,7 @@ class DevStatsCog(commands.Cog):
         
         headers = {"Authorization": f"token {GITHUB_TOKEN}"}
         api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/commits"
+        repo_url = f"https://github.com/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}" # NEW: Repo URL for linking
         
         all_commits = []
         page = 1
@@ -78,7 +79,7 @@ class DevStatsCog(commands.Cog):
             if (now - commit_date).days < 30:
                 commits_last_30_days += 1
             
-            if commit.get('author'):
+            if commit.get('author') and commit['author'].get('login'):
                 contributors[commit['author']['login']] += 1
 
             daily_sessions[commit_date.date()].append(commit_date)
@@ -99,7 +100,8 @@ class DevStatsCog(commands.Cog):
             "estimated_duration": total_duration,
             "commits_last_7_days": commits_last_7_days,
             "commits_last_30_days": commits_last_30_days,
-            "top_contributors": sorted_contributors
+            "top_contributors": sorted_contributors,
+            "repo_url": repo_url # NEW: Pass the repo URL
         }
 
     def get_loc_stats(self) -> dict:
@@ -144,9 +146,11 @@ class DevStatsCog(commands.Cog):
                 await interaction.followup.send(f"❌ " + "\n".join(errors), ephemeral=True)
                 return
 
+            # --- MODIFIED: Added URL to embed and improved description ---
             embed = create_styled_embed(
                 title=f"📊 Project Stats - {GITHUB_REPO_NAME}",
-                description=f"An overview of the entire development history.",
+                description="A deep dive into the development activity and codebase of the project.",
+                url=commit_data["repo_url"], # The title is now a link
                 color=discord.Color.from_rgb(4, 30, 66) # Une couleur bleu nuit
             )
 
@@ -154,14 +158,19 @@ class DevStatsCog(commands.Cog):
             codebase_value = f"**{loc_data['total_lines']:,}** Lines of Code\n**{loc_data['total_files']}** Python Files"
             embed.add_field(name="<:python:1186326476140511313> Codebase", value=codebase_value, inline=True)
 
-            timeline_value = f"**{commit_data['total_commits']}** Total Commits\n**{format_time_delta(commit_data['estimated_duration'])}** Dev Time"
-            embed.add_field(name="<:github:1186326473212874833> Workload", value=timeline_value, inline=True)
+            # --- MODIFIED: Display dev time in hours ---
+            estimated_hours = commit_data['estimated_duration'].total_seconds() / 3600
+            activity_value = (
+                f"**{commit_data['total_commits']}** Total Commits\n"
+                f"**{estimated_hours:.1f}** Hours of Coding (Est.)"
+            )
+            embed.add_field(name="<:github:1186326473212874833> Development Activity", value=activity_value, inline=True)
             
-            project_age = datetime.now().astimezone() - commit_data['first_commit_date']
             pace_value = f"**{commit_data['commits_last_30_days']}** in 30 days\n**{commit_data['commits_last_7_days']}** in 7 days"
-            embed.add_field(name="📈 Pace", value=pace_value, inline=True)
+            embed.add_field(name="📈 Recent Pace", value=pace_value, inline=True)
             
             # --- Section 2: Timeline ---
+            project_age = datetime.now().astimezone() - commit_data['first_commit_date']
             timeline_str = (
                 f"**Project Age:** {format_time_delta(project_age)}\n"
                 f"**First Commit:** <t:{int(commit_data['first_commit_date'].timestamp())}:D>\n"

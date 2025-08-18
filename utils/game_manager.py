@@ -65,6 +65,36 @@ class GameStateManager:
                                 server_state: ServerState,
                                 view: discord.ui.View,
                                 embed: discord.Embed) -> bool:
+        """Update the game message with new view and embed."""
+        try:
+            # First try to edit the original response if this was from an interaction
+            try:
+                await interaction.edit_original_response(view=view, embed=embed)
+                return True
+            except (discord.NotFound, discord.HTTPException, AttributeError):
+                pass
+            
+            # If that fails, try to edit the stored game message
+            if not server_state.game_channel_id or not server_state.game_message_id or not interaction.guild:
+                return False
+
+            try:
+                channel = interaction.guild.get_channel(server_state.game_channel_id)
+                if not channel or not isinstance(channel, discord.TextChannel):
+                    logger.error(f"Invalid channel ID {server_state.game_channel_id}")
+                    return False
+                    
+                message = await channel.fetch_message(server_state.game_message_id)
+                await message.edit(view=view, embed=embed)
+                return True
+                
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                logger.error(f"Failed to update game message: {str(e)}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error updating game message: {str(e)}")
+            return False
         """Update the game message with new state"""
         if not interaction.guild or not isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
             return False

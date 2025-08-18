@@ -2,6 +2,7 @@
 import discord
 from discord.ext import commands
 from db.models import PlayerProfile, ServerState
+from db.database import SessionLocal
 from utils.game_manager import game_manager
 from utils.view_manager import view_manager
 from utils.error_handler import handle_interaction_error, check_valid_state, GameError
@@ -12,6 +13,36 @@ logger = get_logger(__name__)
 class ViewHandler(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._db_session = SessionLocal()
+        
+    def _create_view(self, view_type: str, player: PlayerProfile, state: ServerState) -> discord.ui.View:
+        """Create the appropriate view based on type"""
+        from cogs.main_embed import DashboardView, ActionsView
+        from cogs.phone import PhoneMainView
+        
+        if view_type == "main_menu":
+            return DashboardView(player)
+        elif view_type == "actions":
+            return ActionsView(player, state)
+        elif view_type == "phone":
+            return PhoneMainView(player)
+        else:
+            return DashboardView(player)
+            
+    async def _create_embed(self, player: PlayerProfile, state: ServerState, guild: discord.Guild) -> discord.Embed:
+        """Create the appropriate embed for the current view"""
+        # Get the MainEmbed cog to use its embed generation
+        main_embed_cog = self.bot.get_cog("MainEmbed")
+        if not main_embed_cog:
+            # Fallback basic embed if cog not found
+            embed = discord.Embed(
+                title="Tableau de bord",
+                description="Erreur: MainEmbed cog non trouvé",
+                color=discord.Color.red()
+            )
+            return embed
+            
+        return await main_embed_cog.generate_dashboard_embed(player, state, guild)
         
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
@@ -44,10 +75,17 @@ class ViewHandler(commands.Cog):
                     view = self._create_view(view_type, player, state)
                     view_manager.register_view(guild_id, view, view_type)
                     
+            # Create view and embed
+            view = self._create_view(view_type, player, state)
+            embed = await self._create_embed(player, state, interaction.guild)
+            
             # Update game message
             await game_manager.update_game_message(
                 interaction,
                 player,
+                state,
+                view,
+                embed)
                 state,
                 view_manager.get_active_view(guild_id),
                 self._create_embed(player, state, interaction.guild)
