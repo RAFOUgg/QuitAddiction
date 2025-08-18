@@ -3,7 +3,7 @@ from discord.ext import commands
 from typing import Dict, Optional
 import asyncio
 
-from utils.game_manager import GameManager
+
 from utils.view_manager import ViewManager
 from utils.embed_builder import generate_progress_bar
 from db.models import PlayerProfile, ServerState
