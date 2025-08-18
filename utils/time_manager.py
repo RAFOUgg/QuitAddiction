@@ -36,13 +36,42 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
     Calculates the current in-game time based on the game mode.
     Returns a timezone-aware datetime object in the TARGET_TIMEZONE.
     
-    Test Mode: 84 minutes real time = 7 days game time (1 minute real = 2 hours game)
-    Real Time: Game time = Real time
+    Modes:
+    - real_time: Game time matches real time
+    - fast: 1 real minute = 24 game minutes (1 real hour = 1 game day)
+    - medium: 1 real minute = 12 game minutes (2 real hours = 1 game day)
+    - slow: 1 real minute = 6 game minutes (4 real hours = 1 game day)
     """
     now_utc = get_utc_now()
 
-    # Vérifier si le jeu a démarré
-    if not state.game_start_time:
+    # Always use real time if:
+    # 1. real_time mode is set
+    # 2. game hasn't started
+    # 3. no duration_key is set
+    if (state.duration_key == 'real_time' or 
+        not state.game_start_time or 
+        not state.duration_key):
+        return to_localized(now_utc)
+        
+    # Calculate time multiplier based on mode
+    time_multipliers = {
+        'fast': 24,    # 1 real minute = 24 game minutes
+        'medium': 12,  # 1 real minute = 12 game minutes
+        'slow': 6      # 1 real minute = 6 game minutes
+    }
+    
+    multiplier = time_multipliers.get(state.duration_key, 12)  # Default to medium
+    
+    # Calculate elapsed real minutes since game start
+    elapsed_minutes = (now_utc - state.game_start_time).total_seconds() / 60
+    
+    # Calculate game minutes
+    game_minutes = elapsed_minutes * multiplier
+    
+    # Calculate the game time
+    game_time = state.game_start_time + datetime.timedelta(minutes=game_minutes)
+    
+    return to_localized(game_time)
         return now_utc.astimezone(TARGET_TIMEZONE)
 
     # Pour le mode temps réel

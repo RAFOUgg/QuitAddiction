@@ -1,4 +1,12 @@
 # --- cogs/main_embed.py (REVISED) ---
+from discord.ext import commands
+from discord import ui
+from db.database import SessionLocal
+from db.models import ServerState, PlayerProfile
+from utils.time_manager import get_utc_now, get_current_game_time, is_work_time, is_night
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Configuration des durées d'actions (en secondes)
 ACTION_DURATIONS = {
@@ -85,16 +93,19 @@ def generate_progress_bar(value: float, max_value: float = 100.0, length: int = 
     return f"{bar_filled * filled_blocks}{bar_empty * (length - filled_blocks)}"
 
 class DashboardView(ui.View):
-    def __init__(self, player: PlayerProfile):
+    def __init__(self, player: PlayerProfile, server_state: ServerState):
         super().__init__(timeout=None)
         
-        # Vérifier si le joueur est initialisé correctement
+        # Get current game time for proper state initialization
+        game_time = get_current_game_time(server_state)
+        
+        # Initialize base states if needed
         if not hasattr(player, 'is_at_home'):
-            player.is_at_home = True
+            player.is_at_home = not (is_work_time(game_time) and not getattr(player, 'is_on_break', False))
         if not hasattr(player, 'is_working'):
-            player.is_working = False
+            player.is_working = is_work_time(game_time) and not getattr(player, 'is_on_break', False)
         if not hasattr(player, 'is_sleeping'):
-            player.is_sleeping = False
+            player.is_sleeping = is_night(game_time)
             
         # Actions de base toujours disponibles
         self.add_item(ui.Button(label="📱 Téléphone", style=discord.ButtonStyle.blurple, custom_id="phone_menu", row=0))
@@ -281,6 +292,72 @@ class SmokeView(ui.View):
 class MainEmbed(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.active_views = {}  # Track active views per guild
+        
+    def get_view_for_player(self, player: PlayerProfile, server_state: ServerState, force_new: bool = False) -> ui.View:
+        """Get the appropriate view for a player's current state"""
+        guild_id = player.guild_id
+        
+        if force_new or guild_id not in self.active_views:
+            if player.is_working and not player.is_sleeping:
+                view = ActionsView(player, server_state)
+            else:
+                view = DashboardView(player, server_state)
+            self.active_views[guild_id] = view
+            return view
+        return self.active_views[guild_id]
+        
+    async def update_game_message(self, interaction: discord.Interaction, player: PlayerProfile, server_state: ServerState):
+        """Update the game message with current state"""
+        if not interaction.channel or not server_state.game_message_id:
+            await interaction.response.send_message("Error: Game message not properly configured.", ephemeral=True)
+            return
+            
+        if not interaction.guild:
+            await interaction.response.send_message("Error: This command must be used in a server.", ephemeral=True)
+            return
+            
+        try:
+            game_message = await interaction.channel.fetch_message(server_state.game_message_id)
+            if not game_message:
+                return
+                
+            view = self.get_view_for_player(player, server_state, force_new=True)
+            embed = self.generate_dashboard_embed(player, server_state, interaction.guild)
+            await game_message.edit(embed=embed, view=view)
+        except discord.NotFound:
+            logger.error(f"Game message not found for guild {server_state.guild_id}")
+        except Exception as e:
+            logger.error(f"Error updating game message: {e}")
+    
+    async def cleanup_views(self, guild_id: str):
+        """Clean up views for a guild"""
+        if guild_id in self.active_views:
+            del self.active_views[guild_id]
+        
+    async def initialize_cook_state(self, player: PlayerProfile, server_state: ServerState):
+        """Initialize the cook's state based on the current game time"""
+        from utils.time_manager import get_current_game_time, is_work_time, is_night
+        
+        game_time = get_current_game_time(server_state)
+        
+        # Reset active states
+        player.is_sleeping = False
+        player.is_working = False
+        player.is_on_break = False
+        player.is_at_home = True
+        
+        # Initialize based on time of day
+        if is_night(server_state):
+            player.is_sleeping = True
+            player.is_at_home = True
+        elif is_work_time(server_state):
+            player.is_working = True
+            player.is_at_home = False
+            
+        # Ensure we're using real time if that's the setting
+        if server_state.duration_key == 'real_time':
+            server_state.game_start_time = None  # This forces real-time mode
 
     async def force_refresh_on_cooldown_end(self, interaction: discord.Interaction, duration: int):
         await asyncio.sleep(duration + 1)
