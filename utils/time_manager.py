@@ -44,15 +44,34 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
     """
     now_utc = get_utc_now()
 
+    # If no state is provided, return current time
+    if not state:
+        return to_localized(now_utc)
+
     # Always use real time if:
     # 1. real_time mode is set
     # 2. game hasn't started
     # 3. no duration_key is set
-    if (state.duration_key == 'real_time' or 
-        not state.game_start_time or 
-        not state.duration_key):
-        return to_localized(now_utc)
+    if (getattr(state, 'duration_key', 'real_time') == 'real_time' or 
+        not getattr(state, 'game_start_time', None) or 
+        not getattr(state, 'duration_key', None)):
         
+        # Pour le mode temps réel
+        game_start = getattr(state, 'game_start_time', None)
+        if game_start:
+            if game_start.tzinfo is None:
+                game_start = pytz.utc.localize(game_start)
+            
+            # On commence à l'heure de début configurée
+            start_hour = getattr(state, 'game_day_start_hour', 9)
+            base_time = game_start.astimezone(TARGET_TIMEZONE).replace(
+                hour=start_hour, minute=0, second=0, microsecond=0
+            )
+            elapsed = now_utc - game_start
+            return (base_time + elapsed).astimezone(TARGET_TIMEZONE)
+        
+    return to_localized(now_utc)
+    
     # Calculate time multiplier based on mode
     time_multipliers = {
         'fast': 24,    # 1 real minute = 24 game minutes
@@ -60,44 +79,26 @@ def get_current_game_time(state: 'ServerState') -> datetime.datetime:
         'slow': 6      # 1 real minute = 6 game minutes
     }
     
-    multiplier = time_multipliers.get(state.duration_key, 12)  # Default to medium
+    duration_key = getattr(state, 'duration_key', 'medium')
+    multiplier = time_multipliers.get(duration_key, 12)  # Default to medium
     
     # Calculate elapsed real minutes since game start
-    elapsed_minutes = (now_utc - state.game_start_time).total_seconds() / 60
+    game_start_time = getattr(state, 'game_start_time', None)
+    if not game_start_time:
+        return to_localized(now_utc)
+    
+    if game_start_time.tzinfo is None:
+        game_start_time = pytz.utc.localize(game_start_time)
+    
+    elapsed_minutes = (now_utc - game_start_time).total_seconds() / 60
     
     # Calculate game minutes
     game_minutes = elapsed_minutes * multiplier
     
     # Calculate the game time
-    game_time = state.game_start_time + datetime.timedelta(minutes=game_minutes)
+    game_time = game_start_time + datetime.timedelta(minutes=game_minutes)
     
     return to_localized(game_time)
-        return now_utc.astimezone(TARGET_TIMEZONE)
-
-    # Pour le mode temps réel
-    if state.duration_key == 'real_time' or not state.game_minutes_per_day:
-        # Calculer le temps écoulé depuis le début du jeu
-        game_start = state.game_start_time
-        if game_start.tzinfo is None:
-            game_start = pytz.utc.localize(game_start)
-        
-        # Si on est en temps réel, on garde le même temps que la réalité
-        # mais on commence à l'heure de début configurée
-        start_hour = state.game_day_start_hour or 9
-        base_time = game_start.astimezone(TARGET_TIMEZONE).replace(
-            hour=start_hour, minute=0, second=0, microsecond=0
-        )
-        elapsed = now_utc - game_start
-        return (base_time + elapsed).astimezone(TARGET_TIMEZONE)
-
-    # Assurer que game_start_time a un timezone
-    game_start_time = state.game_start_time
-    if game_start_time.tzinfo is None:
-        game_start_time = pytz.utc.localize(game_start_time)
-
-    # En mode test :
-    # - 84 minutes réelles = 1 semaine de jeu (7 jours)
-    # - 1 minute réelle = 2 heures de jeu (120 minutes)
     elapsed_real_seconds = (now_utc - game_start_time).total_seconds()
     
     if state.duration_key == 'test':

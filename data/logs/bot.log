@@ -1,0 +1,4 @@
+2025-08-18 14:17:01 - db.database - INFO - Database path set to: C:\Users\Rafi\Documents\.0AATAF\.Projet\Dev\BOT DISCORD\QuitAddiction\data\quit_addiction.db
+2025-08-18 14:17:01 - __main__ - INFO - --- Initializing Database Schema ---
+2025-08-18 14:17:01 - __main__ - INFO - --- Database Schema Initialized/Checked ---
+2025-08-18 14:17:01 - __main__ - CRITICAL - BOT_TOKEN is not set in the environment variables.
