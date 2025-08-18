@@ -5,18 +5,21 @@ from discord.ext import commands
 import os
 import asyncio
 import traceback
+from typing import Optional
+from sqlalchemy import text
 from dotenv import load_dotenv
 
 from utils.logger import get_logger
-from db.database import Base, engine
+from db.database import Base, engine, SessionLocal
+from db.models import ServerState, PlayerProfile  # Import models for DB initialization
 
 # --- Setup ---
 load_dotenv()
 logger = get_logger(__name__)
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
 # Optionnel: Pour un développement plus rapide, mettez l'ID de votre serveur de test dans le .env
 # En production, laissez cette variable vide.
-DEV_GUILD_ID = os.getenv("DEV_GUILD_ID", None) 
+DEV_GUILD_ID = os.getenv("GUILD_ID", None) 
 COGS_DIR = "cogs"
 
 # --- Define Intents ---
@@ -53,6 +56,10 @@ class QuitAddictionBot(commands.Bot):
                     logger.error(f"❌ Failed to load cog {filename}: {e}", exc_info=True)
 
     async def on_ready(self):
+        if self.user is None:
+            logger.error("Bot user is None in on_ready!")
+            return
+        
         logger.info(f"🚀 Logged in as {self.user} (ID: {self.user.id})")
         logger.info("--------------------------------------------------")
 
@@ -82,19 +89,46 @@ class QuitAddictionBot(commands.Bot):
 
 
 def init_db():
-    logger.info("--- Initializing Database Schema ---")
-    Base.metadata.create_all(bind=engine)
-    logger.info("--- Database Schema Initialized/Checked ---")
+    """Initialize database schema and verify connection"""
+    try:
+        logger.info("--- Initializing Database Schema ---")
+        Base.metadata.create_all(bind=engine)
+        # Verify database connection
+        with SessionLocal() as session:
+            session.execute(text("SELECT 1"))
+            session.commit()
+        logger.info("✅ Database Schema Initialized/Checked Successfully")
+    except Exception as e:
+        logger.critical(f"❌ Database initialization failed: {e}", exc_info=True)
+        raise
+
+async def cleanup():
+    """Cleanup function to properly close resources"""
+    try:
+        engine.dispose()
+        logger.info("✅ Database connections closed")
+    except Exception as e:
+        logger.error(f"❌ Error during cleanup: {e}", exc_info=True)
 
 if __name__ == '__main__':
-    init_db()
+    init_db()  # Initialize database
     bot = QuitAddictionBot(command_prefix="!", intents=intents)
     
     async def main():
         if not TOKEN:
-            logger.critical("BOT_TOKEN is not set in the environment variables.")
+            logger.critical("❌ BOT_TOKEN is not set in the environment variables.")
             return
-        async with bot:
-            await bot.start(TOKEN)
+        try:
+            async with bot:
+                await bot.start(TOKEN)
+        except KeyboardInterrupt:
+            logger.info("Bot shutdown requested...")
+        except Exception as e:
+            logger.error(f"❌ Bot crashed: {e}", exc_info=True)
+        finally:
+            await cleanup()
+
+    # Run the bot
+    asyncio.run(main())
 
     asyncio.run(main())

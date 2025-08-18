@@ -6,12 +6,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import DateTime, Integer, String, Boolean, Float, BigInteger, Text
+from sqlalchemy import DateTime, Integer, String, Boolean, Float, BigInteger, Text, UniqueConstraint
 
 from db.database import Base
 
 class ServerState(Base):
-    __tablename    last_worked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    __tablename__ = "server_state"
+    last_worked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_drank_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_slept_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_smoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -47,23 +48,13 @@ class ServerState(Base):
     degradation_rate_boredom: Mapped[float] = mapped_column(Float, default=7.0)
     degradation_rate_hygiene: Mapped[float] = mapped_column(Float, default=4.0)
     
-    # Game State
-    is_test_mode: Mapped[bool] = mapped_column(Boolean, default=False)
-    
     # === Notification Configuration ===
-    # Role IDs
-    notify_vital_low_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_critical_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_craving_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_friend_message_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_shop_promo_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-
     # Notification Toggles
-    notify_on_low_vital_stat: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_critical_event: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_craving: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_friend_message: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_shop_promo: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_on_low_vital_stat: Mapped[bool] = mapped_column("notify_on_low_vital_stat", Boolean, default=True)
+    notify_on_critical_event: Mapped[bool] = mapped_column("notify_on_critical_event", Boolean, default=True)
+    notify_on_craving: Mapped[bool] = mapped_column("notify_on_craving", Boolean, default=True)
+    notify_on_friend_message: Mapped[bool] = mapped_column("notify_on_friend_message", Boolean, default=True)
+    notify_on_shop_promo: Mapped[bool] = mapped_column("notify_on_shop_promo", Boolean, default=True)
     
     # Core fields
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True)
@@ -107,31 +98,8 @@ class ServerState(Base):
     notify_on_shop_promo: Mapped[bool] = mapped_column(Boolean, default=True)
     game_minutes_per_day: Mapped[int] = mapped_column(Integer, default=720)
     
-    # Game time settings
-    game_tick_interval_minutes: Mapped[int] = mapped_column(Integer, default=30)
-    
-    degradation_rate_hunger: Mapped[float] = mapped_column(Float, default=10.0)
-    degradation_rate_thirst: Mapped[float] = mapped_column(Float, default=8.0)
-    degradation_rate_bladder: Mapped[float] = mapped_column(Float, default=15.0)
-    degradation_rate_energy: Mapped[float] = mapped_column(Float, default=5.0)
-    degradation_rate_stress: Mapped[float] = mapped_column(Float, default=3.0)
-    degradation_rate_boredom: Mapped[float] = mapped_column(Float, default=7.0)
-    degradation_rate_hygiene: Mapped[float] = mapped_column(Float, default=4.0)
-    is_test_mode: Mapped[bool] = mapped_column(Boolean, default=False)
-
     # Notification Role IDs
-    notify_vital_low_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_critical_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_craving_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_friend_message_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    notify_shop_promo_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-
-    # Notification Toggles
-    notify_on_low_vital_stat: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_critical_event: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_craving: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_friend_message: Mapped[bool] = mapped_column(Boolean, default=True)
-    notify_on_shop_promo: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_shop_promo_role_id: Mapped[Optional[int]] = mapped_column("notify_shop_promo_role_id", BigInteger, nullable=True)
 
 
 class PlayerProfile(Base):
@@ -140,23 +108,14 @@ class PlayerProfile(Base):
     guild_id: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
 
     # === SYSTEM STATE ===
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_tick: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_save: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_autonomous_action: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    willpower_last_check: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    game_version: Mapped[str] = mapped_column(String, default="1.0.0")
-    tutorial_stage: Mapped[int] = mapped_column(Integer, default=0)
-    flags: Mapped[str] = mapped_column(String, default="")  # JSON string for various flags
-
-    # === SYSTEM STATE ===
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_tick: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_save: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_autonomous_action: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    willpower_last_check: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    game_version: Mapped[str] = mapped_column(String, default="1.0.0")
-    tutorial_stage: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column("created_at", DateTime, default=datetime.utcnow)
+    last_tick: Mapped[datetime] = mapped_column("last_tick", DateTime, default=datetime.utcnow)
+    last_save: Mapped[datetime] = mapped_column("last_save", DateTime, default=datetime.utcnow)
+    last_autonomous_action: Mapped[Optional[datetime]] = mapped_column("last_autonomous_action", DateTime, nullable=True)
+    willpower_last_check: Mapped[Optional[datetime]] = mapped_column("willpower_last_check", DateTime, nullable=True)
+    game_version: Mapped[str] = mapped_column("game_version", String, default="1.0.0")
+    tutorial_stage: Mapped[int] = mapped_column("tutorial_stage", Integer, default=0)
+    flags: Mapped[str] = mapped_column("flags", String, default="")  # JSON string for various flags
     flags: Mapped[str] = mapped_column(String, default="")  # JSON string for various flags
 
     # === SECTION 1: PHYSICAL HEALTH CORE ===
