@@ -688,7 +688,6 @@ class AdminCog(commands.Cog):
                             player = PlayerProfile(
                                 guild_id=self.guild_id,
                                 last_update=utc_now,
-                                is_at_home=True,  # Le joueur commence chez lui
                                 is_working=False,
                                 is_sleeping=False,
                                 is_on_break=False,
