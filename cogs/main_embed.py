@@ -31,15 +31,56 @@ class DashboardView(discord.ui.View):
         
     def _init_buttons(self):
         """Initialize the view's buttons based on state."""
-        # Add base buttons that are always available
-        self.add_item(discord.ui.Button(label="Statistiques", style=discord.ButtonStyle.primary, custom_id="stats"))
-        self.add_item(discord.ui.Button(label="Inventaire", style=discord.ButtonStyle.secondary, custom_id="inventory"))
+        # Initialize button rows for organization
+        action_row = []
+        status_row = []
+        special_row = []
         
-        # Add conditional buttons based on player state
+        # Status buttons (row 0)
+        status_row.append(discord.ui.Button(
+            label="Statistiques", 
+            style=discord.ButtonStyle.primary, 
+            custom_id="stats",
+            emoji="📊"
+        ))
+        status_row.append(discord.ui.Button(
+            label="Inventaire", 
+            style=discord.ButtonStyle.secondary, 
+            custom_id="inventory",
+            emoji="🎒"
+        ))
+        
+        # Action buttons (row 1)
         if not getattr(self.player, 'is_sleeping', False):
-            self.add_item(discord.ui.Button(label="Dormir", style=discord.ButtonStyle.secondary, custom_id="sleep"))
+            action_row.append(discord.ui.Button(
+                label="Dormir", 
+                style=discord.ButtonStyle.secondary, 
+                custom_id="sleep",
+                emoji="😴"
+            ))
         if not getattr(self.player, 'is_working', False):
-            self.add_item(discord.ui.Button(label="Travailler", style=discord.ButtonStyle.success, custom_id="work"))
+            action_row.append(discord.ui.Button(
+                label="Travailler", 
+                style=discord.ButtonStyle.success, 
+                custom_id="work",
+                emoji="💼"
+            ))
+        
+        # Special actions (row 2)
+        special_row.append(discord.ui.Button(
+            label="Téléphone", 
+            style=discord.ButtonStyle.secondary, 
+            custom_id="phone",
+            emoji="📱"
+        ))
+            
+        # Add all buttons in their respective rows
+        for button in status_row:
+            self.add_item(button)
+        for button in action_row:
+            self.add_item(button)
+        for button in special_row:
+            self.add_item(button)
 
 class ActionsView(discord.ui.View):
     """View for player actions (work, smoke, drink, etc).
@@ -181,13 +222,68 @@ class MainEmbed(commands.Cog):
 
     async def generate_dashboard_embed(self, player: PlayerProfile, server_state: ServerState, guild: discord.Guild) -> discord.Embed:
         """Generate the dashboard embed."""
-        embed = discord.Embed(title="Tableau de bord", color=discord.Color.blue())
-        # Add embed fields based on player state
-        embed.add_field(name="Status", value=self._get_player_status(player), inline=False)
+        # Determine the base color based on player state
+        if player.health < 30:
+            color = discord.Color.red()
+        elif player.health < 60:
+            color = discord.Color.orange()
+        else:
+            color = discord.Color.green()
+
+        embed = discord.Embed(
+            title="Tableau de bord",
+            color=color,
+            description=self._get_status_emoji(player)
+        )
+
+        # Current Time
+        embed.add_field(
+            name="⏰ Heure actuelle",
+            value=server_state.get_current_time_str(),
+            inline=True
+        )
+
+        # Core Stats
+        vitals = (
+            f"❤️ Santé: {generate_progress_bar(player.health, 100.0, length=10)}\n"
+            f"⚡ Énergie: {generate_progress_bar(player.energy, 100.0, length=10)}\n"
+            f"💪 Endurance: {generate_progress_bar(player.stamina, 100.0, length=10)}"
+        )
+        embed.add_field(name="État Vital", value=vitals, inline=False)
+
+        # Needs
+        needs = (
+            f"🍽️ Faim: {generate_progress_bar(100.0 - player.hunger, 100.0, length=10)}\n"
+            f"💧 Soif: {generate_progress_bar(100.0 - player.thirst, 100.0, length=10)}\n"
+            f"🚽 Vessie: {generate_progress_bar(100.0 - player.bladder, 100.0, length=10)}"
+        )
+        embed.add_field(name="Besoins", value=needs, inline=False)
+
+        # Emotional State
+        mood_score, mood_emoji, mood_text = self._calculate_mood(player)
+        emotions = (
+            f"{mood_emoji} Humeur: {mood_text}\n"
+            f"😰 Stress: {generate_progress_bar(100.0 - player.stress, 100.0, length=10)}\n"
+            f"😴 Fatigue: {generate_progress_bar(100.0 - player.fatigue, 100.0, length=10)}"
+        )
+        embed.add_field(name="État Émotionnel", value=emotions, inline=False)
+
+        # Work Status if working
+        if player.is_working:
+            work_status = "🏢 Au travail"
+            if player.is_on_break:
+                work_status += " (En pause)"
+            embed.add_field(name="Travail", value=work_status, inline=True)
+
+        # Show detailed stats if requested
         if getattr(player, 'show_stats_in_view', False):
-            embed.add_field(name="Statistiques", value=self._get_player_stats(player), inline=False)
+            embed.add_field(name="Statistiques Détaillées", value=self._get_player_stats(player), inline=False)
+        
+        # Show inventory if requested
         if getattr(player, 'show_inventory_in_view', False):
             embed.add_field(name="Inventaire", value=self._get_player_inventory(player), inline=False)
+
+        # Set footer with server info and time
         embed.set_footer(text=f"Serveur: {guild.name}")
         return embed
 
@@ -214,6 +310,53 @@ class MainEmbed(commands.Cog):
         ]
         return "\n".join(stats)
 
+    def _get_status_emoji(self, player: PlayerProfile) -> str:
+        """Get the emoji representing the player's current state."""
+        if player.is_sleeping:
+            return "😴 En train de dormir..."
+        elif player.is_working:
+            if player.is_on_break:
+                return "☕ En pause"
+            return "💼 Au travail"
+        elif player.stress > 75:
+            return "😰 Très stressé"
+        elif player.fatigue > 75:
+            return "😫 Épuisé"
+        elif player.hunger > 75:
+            return "🍽️ Affamé"
+        elif player.thirst > 75:
+            return "💧 Très soif"
+        elif player.health < 30:
+            return "🤒 En mauvaise santé"
+        elif player.mood_score < 30:
+            return "😢 Déprimé"
+        elif player.mood_score > 70:
+            return "😊 De bonne humeur"
+        return "😐 Normal"
+            
+    def _calculate_mood(self, player: PlayerProfile) -> tuple[float, str, str]:
+        """Calculate overall mood score and return appropriate emoji and text."""
+        # Base mood calculation
+        mood_score = (
+            (100 - player.stress) * 0.3 +
+            (100 - player.fatigue) * 0.2 +
+            player.happiness * 0.2 +
+            player.emotional_stability * 0.15 +
+            (100 - player.anxiety) * 0.15
+        )
+        
+        # Determine emoji and text based on score
+        if mood_score >= 80:
+            return mood_score, "😊", "Excellent"
+        elif mood_score >= 60:
+            return mood_score, "🙂", "Bien"
+        elif mood_score >= 40:
+            return mood_score, "😐", "Normal"
+        elif mood_score >= 20:
+            return mood_score, "😕", "Pas bien"
+        else:
+            return mood_score, "😢", "Déprimé"
+            
     def _get_player_inventory(self, player: PlayerProfile) -> str:
         """Get a formatted string of player inventory."""
         inv = []
@@ -235,28 +378,43 @@ class MainEmbed(commands.Cog):
         """Handle button interactions."""
         if not interaction.guild_id:
             return
-        
+            
         guild = interaction.guild
         if not guild or not isinstance(guild, discord.Guild):
             return
-        
-        # Get the custom ID from the interaction
-        data = getattr(interaction, 'data', {})
-        if isinstance(data, dict):
+            
+        try:
+            # Get interaction data
+            data = getattr(interaction, 'data', {})
+            if not isinstance(data, dict):
+                return
+                
             custom_id = data.get('custom_id')
             if not isinstance(custom_id, str):
                 return
-        else:
-            return
-            
-        await self.acquire_view_lock(str(interaction.guild_id))
-        try:
+                
+            # Always defer the response first to prevent timeouts
+            await interaction.response.defer(ephemeral=False)
+                
+            # Get or create player profile
+            player = await PlayerProfile.get(interaction.user.id)
+            if not player:
+                await interaction.followup.send("Error: Player profile not found", ephemeral=True)
+                return
+                
+            # Get server state
+            server_state = await ServerState.get(interaction.guild_id)
+            if not server_state:
+                await interaction.followup.send("Error: Server not configured", ephemeral=True)
+                return
+                
             # Process the interaction based on the custom_id
             handlers = {
                 'stats': lambda i: self._handle_stats_button(i, guild),
                 'inventory': lambda i: self._handle_inventory_button(i, guild),
                 'sleep': lambda i: self._handle_sleep_button(i, guild),
                 'work': lambda i: self._handle_work_button(i, guild),
+                'phone': lambda i: self._handle_phone_button(i, guild),
                 'break': lambda i: self._handle_break_button(i, guild),
                 'quit_work': lambda i: self._handle_quit_work_button(i, guild),
                 'smoke_cigarette': lambda i: self._handle_smoke_button(i, guild),
@@ -400,6 +558,23 @@ class MainEmbed(commands.Cog):
         view = self.get_view_for_player(player, server_state, force_new=True)
         embed = await self.generate_dashboard_embed(player, server_state, guild)
         await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _handle_phone_button(self, interaction: discord.Interaction, guild: discord.Guild):
+        """Handle phone button click."""
+        player = await PlayerProfile.get(interaction.user.id)
+        server_state = await ServerState.get(interaction.guild_id)
+
+        # Toggle phone view
+        phone_cog = self.bot.get_cog('PhoneCog')
+        if phone_cog:
+            view = await phone_cog.get_phone_view(player)
+            embed = await phone_cog.generate_phone_embed(player)
+            await interaction.response.edit_message(embed=embed, view=view)
+        else:
+            # Fallback if phone cog not loaded
+            view = self.get_view_for_player(player, server_state, force_new=True)
+            embed = await self.generate_dashboard_embed(player, server_state, guild)
+            await interaction.response.edit_message(embed=embed, view=view)
 
 async def setup(bot):
     """Add the cog to the bot."""
